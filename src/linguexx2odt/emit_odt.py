@@ -1,3 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Gerhard Schaden
+#
+# This file is part of pandoc-linguexx.
+#
+# pandoc-linguexx is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the
+# Free Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# pandoc-linguexx is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 """Stage 2 — IR -> one opaque ``opendocument`` block per example.
 
 Every example becomes one borderless *table*, as plan.md specified.
@@ -155,7 +173,7 @@ class Emitter:
         self._warn = self.warnings.append
 
     def prepare(self, examples) -> None:
-        """Document-level decisions, taken before the first example is emitted.
+        r"""Document-level decisions, taken before the first example is emitted.
 
         Sizes the number, letter and judgment columns from what the document
         actually contains, so that ``(100)`` and ``viii.`` fit and a lone
