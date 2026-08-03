@@ -74,9 +74,12 @@ Each example becomes one borderless table, so the columns line up:
 - the free translation occupies a final row of merged cells;
 - `\label`/`\ref` become cross-reference fields that track renumbering,
   including forward references and references to sub-examples — `(9a)`;
-- judgment marks (`*`, `??`, `\#`, `\jdg{…}`) sit in their own column, so
-  they never shift the text block. A judged and an unjudged example start
-  at exactly the same x, which is the invariant linguexx itself enforces.
+- judgment marks (`*`, `??`, `\#`, `\jdg{…}`) **hang to the left of the
+  text**, in a column carved out of the one before them rather than
+  inserted, so they consume no horizontal space in the text block. A
+  judged and an unjudged example begin at exactly the same x, and a
+  sub-example letter sits where a main example's text begins — linguexx's
+  own geometry, measured from a pdflatex build.
 
 Nothing uses direct formatting: everything is a **named style**
 (`LxLeipzig`, `LxItalic`, `LxJudgment`, `LxExampleCell`, …), so you can
@@ -186,3 +189,17 @@ src/linguexx2odt/
   postprocess.py  zip surgery on the .odt pandoc produced
   cli.py
 ```
+
+## License
+
+Copyright © 2026 Gerhard Schaden.
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version. See [LICENSE](LICENSE).
+
+Note that [linguexx](../linguexx) itself is under the LaTeX Project
+Public License 1.3c — a different licence for a different kind of work.
+This converter only reads linguexx documents; it includes none of the
+package's code.
