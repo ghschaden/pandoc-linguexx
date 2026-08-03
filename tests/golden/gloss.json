@@ -1,0 +1,196 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Dies",
+              "ist",
+              "ein",
+              "kleines",
+              "Beispiel"
+            ]
+          },
+          {
+            "cells": [
+              "this",
+              "is",
+              "a",
+              "small",
+              "example"
+            ]
+          }
+        ],
+        "translation": "`This is a small example.'",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\gll Dies ist ein kleines Beispiel \\\\\n     this is a small example \\\\\n\\glt `This is a small example.'",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Das",
+              "kleine Kind",
+              "schl\\\"aft"
+            ]
+          },
+          {
+            "cells": [
+              "the",
+              "little child",
+              "sleeps"
+            ]
+          }
+        ],
+        "translation": "`The little child sleeps.'",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\gll Das {kleine Kind} schl\\\"aft \\\\\n     the {little child} sleeps \\\\\n\\glt `The little child sleeps.'",
+      "line": 7
+    },
+    {
+      "index": 2,
+      "placeholder": "⟨⟨LINGUEXX-0002⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Eins",
+              "zwei",
+              "drei",
+              "vier"
+            ]
+          },
+          {
+            "cells": [
+              "one",
+              "two"
+            ]
+          }
+        ],
+        "translation": "Unequal lines: empty gloss cells.",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\gll Eins zwei drei vier \\\\\n     one two \\\\\n\\glt Unequal lines: empty gloss cells.",
+      "line": 11
+    },
+    {
+      "index": 3,
+      "placeholder": "⟨⟨LINGUEXX-0003⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Ich",
+              "habe",
+              "geschlafen"
+            ]
+          },
+          {
+            "cells": [
+              "ich",
+              "hab-e",
+              "schlaf-en"
+            ]
+          },
+          {
+            "cells": [
+              "\\lpzg{1sg}",
+              "have-\\lpzg{1sg}",
+              "sleep-\\lpzg{ptcp}"
+            ]
+          }
+        ],
+        "translation": "`I slept.'",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\glll Ich habe geschlafen \\\\\n      ich hab-e schlaf-en \\\\\n      \\lpzg{1sg} have-\\lpzg{1sg} sleep-\\lpzg{ptcp} \\\\\n\\glt `I slept.'",
+      "line": 15
+    },
+    {
+      "index": 4,
+      "placeholder": "⟨⟨LINGUEXX-0004⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Der",
+              "Hund",
+              "schl\\\"aft"
+            ]
+          },
+          {
+            "cells": [
+              "der",
+              "Hund",
+              "schlaf-t"
+            ]
+          },
+          {
+            "cells": [
+              "\\lpzg{def.nom.sg.m}",
+              "dog",
+              "sleep-\\lpzg{3sg}"
+            ]
+          },
+          {
+            "cells": [
+              "D",
+              "N",
+              "V"
+            ]
+          }
+        ],
+        "translation": "`The dog sleeps.'",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\gl Der Hund schl\\\"aft \\\\\n     der Hund schlaf-t \\\\\n     \\lpzg{def.nom.sg.m} dog sleep-\\lpzg{3sg} \\\\\n     D N V \\\\ \\endgl\n\\glt `The dog sleeps.'\n",
+      "line": 20
+    }
+  ],
+  "labels": {},
+  "warnings": []
+}

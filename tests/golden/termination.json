@@ -1,0 +1,161 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "AAA ends by blank line.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. AAA ends by blank line.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "BBB ends by z.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. BBB ends by z. ",
+      "line": 5
+    },
+    {
+      "index": 2,
+      "placeholder": "⟨⟨LINGUEXX-0002⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "DDD after no blank line.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. DDD after no blank line.",
+      "line": 6
+    },
+    {
+      "index": 3,
+      "placeholder": "⟨⟨LINGUEXX-0003⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "EEE ends at the environment boundary.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. EEE ends at the environment boundary.",
+      "line": 9
+    },
+    {
+      "index": 4,
+      "placeholder": "⟨⟨LINGUEXX-0004⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "FFF with \\begin{tabular}{ll} a & b \\end{tabular} inside is not cut short.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [
+        "line 11: nested tabular inside the example is kept as raw LaTeX, not aligned"
+      ],
+      "src": "\\ex. FFF with \\begin{tabular}{ll} a & b \\end{tabular} inside is not cut short.",
+      "line": 11
+    },
+    {
+      "index": 5,
+      "placeholder": "⟨⟨LINGUEXX-0005⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "GGG ends at a group close.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. GGG ends at a group close.",
+      "line": 13
+    },
+    {
+      "index": 6,
+      "placeholder": "⟨⟨LINGUEXX-0006⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "HHH sub-item, then a forgotten blank line:",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\n\\a. HHH sub-item, then a forgotten blank line:\n",
+      "line": 15
+    },
+    {
+      "index": 7,
+      "placeholder": "⟨⟨LINGUEXX-0007⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "III must be set at top level.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. III must be set at top level.\n",
+      "line": 17
+    }
+  ],
+  "labels": {},
+  "warnings": [
+    "line 11: nested tabular inside the example is kept as raw LaTeX, not aligned"
+  ]
+}

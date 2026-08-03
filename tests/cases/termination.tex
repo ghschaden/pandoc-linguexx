@@ -1,0 +1,18 @@
+\input{_preamble}
+\begin{document}
+\ex. AAA ends by blank line.
+
+\ex. BBB ends by z. \z.CCC is prose.
+\ex. DDD after no blank line.
+
+\begin{minipage}{0.9\textwidth}
+\ex. EEE ends at the environment boundary.\end{minipage}
+
+\ex. FFF with \begin{tabular}{ll} a & b \end{tabular} inside is not cut short.
+
+{\ex. GGG ends at a group close.}
+
+\ex.
+\a. HHH sub-item, then a forgotten blank line:
+\ex. III must be set at top level.
+\end{document}

@@ -1,0 +1,154 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "First sub.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "Second sub.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 2,
+          "ordinal": 1,
+          "marker": "i.",
+          "body": {
+            "judgment": "",
+            "text": "Sub-sub roman one.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 2,
+          "ordinal": 2,
+          "marker": "ii.",
+          "body": {
+            "judgment": "",
+            "text": "Sub-sub roman two.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [
+        "line 3: second sub-example level rendered as roman numerals, indented"
+      ],
+      "src": "\\ex.\n\\a. First sub.\n\\b. Second sub.\n\\a. Sub-sub roman one.\n\\b. Sub-sub roman two.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "First",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "Second",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 2,
+          "ordinal": 1,
+          "marker": "i.",
+          "body": {
+            "judgment": "",
+            "text": "Second a",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 2,
+          "ordinal": 2,
+          "marker": "ii.",
+          "body": {
+            "judgment": "",
+            "text": "Second b",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 3,
+          "marker": "c.",
+          "body": {
+            "judgment": "",
+            "text": "z popped one level, so this is item c.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [
+        "line 9: second sub-example level rendered as roman numerals, indented"
+      ],
+      "src": "\\ex.\n\\a. First\n\\b. Second\n\\a. Second a\n\\b. Second b\n\\z.\n\\b. z popped one level, so this is item c.\n",
+      "line": 9
+    }
+  ],
+  "labels": {},
+  "warnings": [
+    "line 3: second sub-example level rendered as roman numerals, indented",
+    "line 9: second sub-example level rendered as roman numerals, indented"
+  ]
+}

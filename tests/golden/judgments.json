@@ -1,0 +1,152 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "*",
+        "text": "Auto-detected star.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. *Auto-detected star.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "??",
+        "text": "Doubly questionable.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. ??Doubly questionable.",
+      "line": 5
+    },
+    {
+      "index": 2,
+      "placeholder": "⟨⟨LINGUEXX-0002⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "?*",
+        "text": "Mixed marks.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. ?*Mixed marks.",
+      "line": 7
+    },
+    {
+      "index": 3,
+      "placeholder": "⟨⟨LINGUEXX-0003⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "\\#",
+        "text": "Hash via control sequence.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\#Hash via control sequence.",
+      "line": 9
+    },
+    {
+      "index": 4,
+      "placeholder": "⟨⟨LINGUEXX-0004⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "\\%\\#",
+        "text": "Percent-hash combination.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\%\\#Percent-hash combination.",
+      "line": 11
+    },
+    {
+      "index": 5,
+      "placeholder": "⟨⟨LINGUEXX-0005⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "\\jdg{\\dag}",
+        "text": "Explicit arbitrary mark.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\jdg{\\dag}Explicit arbitrary mark.",
+      "line": 13
+    },
+    {
+      "index": 6,
+      "placeholder": "⟨⟨LINGUEXX-0006⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "*",
+            "text": "Starred sub-example,",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "plain sub-example: texts must align.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\n\\a. *Starred sub-example,\n\\b. plain sub-example: texts must align.\n",
+      "line": 15
+    }
+  ],
+  "labels": {},
+  "warnings": []
+}

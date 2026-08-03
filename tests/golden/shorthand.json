@@ -1,0 +1,107 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "*",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Das",
+              "Beispiel",
+              "funktionieren"
+            ]
+          },
+          {
+            "cells": [
+              "the",
+              "example",
+              "work.\\lpzg{inf}"
+            ]
+          }
+        ],
+        "translation": "Judged glossed shorthand.",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\exg. *Das Beispiel funktionieren \\\\\n      the example work.\\lpzg{inf} \\\\\n\\glt Judged glossed shorthand.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "",
+            "tiers": [
+              {
+                "cells": [
+                  "Erstes",
+                  "Unterbeispiel",
+                  "mit",
+                  "Glosse"
+                ]
+              },
+              {
+                "cells": [
+                  "first",
+                  "sub.example",
+                  "with",
+                  "gloss"
+                ]
+              }
+            ],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "",
+            "tiers": [
+              {
+                "cells": [
+                  "Zweites",
+                  "auch"
+                ]
+              },
+              {
+                "cells": [
+                  "second",
+                  "too"
+                ]
+              }
+            ],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\n\\ag. Erstes Unterbeispiel mit Glosse \\\\\n     first sub.example with gloss \\\\\n\\bg. Zweites auch \\\\\n     second too \\\\\n",
+      "line": 7
+    }
+  ],
+  "labels": {},
+  "warnings": []
+}

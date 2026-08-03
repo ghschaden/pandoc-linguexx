@@ -1,0 +1,42 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "A first plain example.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. A first plain example.",
+      "line": 4
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "A second one, with \\emph{emphasis} and \\textbf{bold}.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. A second one, with \\emph{emphasis} and \\textbf{bold}.\n",
+      "line": 8
+    }
+  ],
+  "labels": {},
+  "warnings": []
+}

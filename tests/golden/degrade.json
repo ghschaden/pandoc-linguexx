@@ -1,0 +1,52 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "(4$'$)",
+      "body": {
+        "judgment": "",
+        "text": "Custom label, counter not stepped.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [
+        "line 3: custom label \"(4$'$)\" printed literally; the NumEx counter is not stepped"
+      ],
+      "src": "\\ex.[(4$'$)] Custom label, counter not stepped.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "With a source.",
+        "tiers": [],
+        "translation": "",
+        "source": "(Schaden 2020: 45)",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [
+        "line 5: \\exsource rendered inline at the end of the example, not flush right"
+      ],
+      "src": "\\ex. With a source. \\exsource{(Schaden 2020: 45)}",
+      "line": 5
+    }
+  ],
+  "labels": {},
+  "warnings": [
+    "line 3: custom label \"(4$'$)\" printed literally; the NumEx counter is not stepped",
+    "line 5: \\exsource rendered inline at the end of the example, not flush right",
+    "line 8: example inside itemize left untouched (nested examples are out of scope v1)",
+    "line 11: example inside a footnote left untouched (nested examples are out of scope v1)",
+    "line 13: stray \\a. outside any example, left untouched (linguexx itself raises a package error here)"
+  ]
+}

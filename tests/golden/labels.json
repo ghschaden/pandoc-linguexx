@@ -1,0 +1,92 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "ex:one",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "A labelled example.",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex.\\label{ex:one} A labelled example.",
+      "line": 3
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "ex:para",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "Premier.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": "ex:a"
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "Deuxi\\`eme.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 3,
+          "marker": "c.",
+          "body": {
+            "judgment": "",
+            "text": "Troisi\\`eme.",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "label": "ex:c"
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\\label{ex:para}\n\\a.\\sublabel{ex:a} Premier.\n\\b. Deuxi\\`eme.\n\\c.\\sublabel{ex:c} Troisi\\`eme.",
+      "line": 5
+    }
+  ],
+  "labels": {
+    "ex:one": [
+      0,
+      ""
+    ],
+    "ex:para": [
+      1,
+      ""
+    ],
+    "ex:a": [
+      1,
+      "a"
+    ],
+    "ex:c": [
+      1,
+      "c"
+    ]
+  },
+  "warnings": []
+}
