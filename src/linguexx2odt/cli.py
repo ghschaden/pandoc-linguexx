@@ -68,13 +68,26 @@ def build_parser() -> argparse.ArgumentParser:
         description="Convert a LaTeX document with linguexx examples to .odt, "
                     "rendering every example with live number-range fields.",
     )
-    p.add_argument("input", type=Path, help="the .tex file")
+    p.add_argument("input", type=Path, nargs="?", help="the .tex file")
+    p.add_argument("--print-macro", action="store_true",
+                   help="print the LibreOffice Writer macro (LinguExx.bas) to "
+                        "stdout and exit; see docs/macro.md for how to install it")
     p.add_argument("-o", "--output", type=Path, help="output .odt (default: input with .odt)")
     p.add_argument("--text-width", type=float, default=17.0, metavar="CM",
                    help="width of the text block in cm (default: 17, i.e. A4 with 2cm margins)")
     p.add_argument("--no-split", action="store_true",
                    help="do not break an overlong glossed example into stacked "
                         "bands; squeeze it into one instead")
+    p.add_argument("--example-spacing", type=float, default=0.18, metavar="CM",
+                   help="space above and below each example in cm (default: 0.18); "
+                        "afterwards editable in Writer as the LxExampleSpace "
+                        "paragraph style")
+    p.add_argument("--space-above", type=float, metavar="CM",
+                   help="space above each example, overriding --example-spacing "
+                        "(style LxExampleSpaceAbove)")
+    p.add_argument("--space-below", type=float, metavar="CM",
+                   help="space below each example, overriding --example-spacing "
+                        "(style LxExampleSpaceBelow)")
     p.add_argument("--font-pt", type=float, default=12.0, metavar="PT",
                    help="body font size assumed when estimating column widths "
                         "(default: 12)")
@@ -91,7 +104,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.print_macro:
+        from . import writermacro
+        print(writermacro.source(), end="")
+        return 0
+    if args.input is None:
+        parser.error("the .tex file is required (or use --print-macro)")
+
     version = _check_pandoc_version()
 
     src_path: Path = args.input
@@ -106,7 +128,18 @@ def main(argv: list[str] | None = None) -> int:
     source = src_path.read_text(encoding="utf-8")
     parsed = parse(source)
 
-    layout = Layout(text_width_cm=args.text_width, font_pt=args.font_pt)
+    for name in ("example_spacing", "space_above", "space_below"):
+        value = getattr(args, name)
+        if value is not None and value < 0:
+            sys.exit(f"linguexx2odt: --{name.replace('_', '-')} cannot be negative")
+
+    layout = Layout(
+        text_width_cm=args.text_width,
+        font_pt=args.font_pt,
+        space_cm=args.example_spacing,
+        space_above_cm=args.space_above,
+        space_below_cm=args.space_below,
+    )
     emitter = Emitter(layout=layout, split=not args.no_split)
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}

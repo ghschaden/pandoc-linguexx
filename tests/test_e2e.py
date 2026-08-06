@@ -35,6 +35,7 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+import pdfwords
 from linguexx2odt import postprocess
 from linguexx2odt.cli import main
 
@@ -130,21 +131,7 @@ def test_tables_fit_the_text_block(converted: Path) -> None:
 
 # -- what LibreOffice actually renders -------------------------------------
 
-def _words(pdf: Path):
-    """(text, x, y) for every word in the document, in reading order.
-
-    y is offset per page so that sorting by y keeps pages in order — the
-    demo spills onto a second page and assertions must not stop at the
-    first one."""
-    xml = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"],
-                         check=True, capture_output=True, text=True).stdout
-    ns = {"x": "http://www.w3.org/1999/xhtml"}
-    out = []
-    for n, page in enumerate(ET.fromstring(xml).findall(".//x:page", ns)):
-        offset = n * (float(page.get("height")) + 1)
-        out += [(w.text, float(w.get("xMin")), float(w.get("yMin")) + offset)
-                for w in page.findall(".//x:word", ns)]
-    return out
+_words = pdfwords.words
 
 
 @soffice
@@ -332,6 +319,113 @@ def test_judgment_marks_are_right_aligned_in_their_column(converted: Path) -> No
         r'<style:style style:name="LxJudgmentCell".*?</style:style>', styles, re.S
     )
     assert style and 'fo:text-align="end"' in style.group(0)
+
+
+@pandoc
+def test_example_spacing_is_a_named_style_not_a_table_margin(converted: Path) -> None:
+    """LibreOffice ignores style:parent-style-name on table styles, so a
+    table margin can only ever be per-example direct formatting.  The
+    spacing therefore lives on spacer rows driven by named paragraph
+    styles — and the two per-side styles must stay *empty*, or they stop
+    tracking their parent and editing it no longer moves both gaps."""
+    content = postprocess.read(converted, "content.xml")
+    styles = postprocess.read(converted, "styles.xml")
+
+    for m in re.finditer(r'style:name="LxExTable\d+".*?</style:style>', content, re.S):
+        assert 'fo:margin-top="0cm"' in m.group(0), "spacing crept back onto the table"
+        assert 'fo:margin-bottom="0cm"' in m.group(0)
+
+    parent = re.search(
+        r'<style:style style:name="LxExampleSpace" .*?</style:style>', styles, re.S
+    )
+    assert parent and re.search(r'fo:line-height="[\d.]+cm"', parent.group(0)), (
+        "LxExampleSpace must carry a *fixed* line height — that is what makes "
+        "the gap exact, with no font-size floor"
+    )
+    for side in ("Above", "Below"):
+        child = re.search(
+            rf'<style:style style:name="LxExampleSpace{side}"[^>]*?(/>|>.*?</style:style>)',
+            styles, re.S,
+        )
+        assert child, f"LxExampleSpace{side} is not defined"
+        assert 'style:parent-style-name="LxExampleSpace"' in child.group(0)
+        assert "fo:line-height" not in child.group(0), (
+            f"LxExampleSpace{side} declares its own height, so editing "
+            f"LxExampleSpace would no longer move both gaps"
+        )
+
+    tables = re.findall(r"<table:table .*?</table:table>", content, re.S)
+    assert len(tables) == 12
+    for t in tables:
+        rows = re.findall(r"<table:table-row>.*?</table:table-row>", t, re.S)
+        assert 'text:style-name="LxExampleSpaceAbove"' in rows[0]
+        assert 'text:style-name="LxExampleSpaceBelow"' in rows[-1]
+
+
+def _gaps(pdf: Path) -> tuple[float, float]:
+    """(gap above, gap below) example (1), in pt, from the rendered page.
+
+    Measured to the neighbouring body text: 'Plain examples' is the heading
+    before it and 'We can refer back to …' the paragraph after it.
+    """
+    xml = subprocess.run(["pdftotext", "-bbox", str(pdf), "-"],
+                         check=True, capture_output=True, text=True).stdout
+    ns = {"x": "http://www.w3.org/1999/xhtml"}
+    first: dict[str, tuple[float, float]] = {}
+    for page in ET.fromstring(xml).findall(".//x:page", ns):
+        for w in page.findall(".//x:word", ns):
+            first.setdefault(w.text, (float(w.get("yMin")), float(w.get("yMax"))))
+        break  # example (1) is on page 1
+    return (first["This"][0] - first["examples"][1],
+            first["We"][0] - first["example."][1])
+
+
+def _rendered(odt: Path, tmp_path: Path, name: str) -> Path:
+    subprocess.run(
+        ["soffice", "--headless", f"-env:UserInstallation=file://{tmp_path}/.lo-{name}",
+         "--convert-to", "pdf", "--outdir", str(tmp_path), str(odt)],
+        check=True, capture_output=True, timeout=240,
+    )
+    return tmp_path / f"{odt.stem}.pdf"
+
+
+@soffice
+def test_editing_the_spacing_style_moves_every_example(
+    converted: Path, pdf: Path, tmp_path: Path
+) -> None:
+    """The claim the whole design exists to support: a Writer user edits
+    one style and the spacing of every example follows — both gaps from
+    the parent, one gap from a child.  Editing styles.xml is exactly what
+    the sidebar does, so this is that edit, rendered."""
+    base_above, base_below = _gaps(pdf)
+    styles = postprocess.read(converted, "styles.xml")
+    grown = 0.60 * 72 / 2.54  # 0.6cm in pt
+
+    both = re.sub(
+        r'(style:name="LxExampleSpace" [^>]*>'
+        r'<style:paragraph-properties fo:line-height=")[\d.]+cm',
+        r"\g<1>0.780cm", styles,  # 0.18 + 0.60
+    )
+    assert both != styles, "the parent style's line height was not found"
+    odt = tmp_path / "both.odt"
+    postprocess.rewrite(converted, odt, {"styles.xml": both})
+    above, below = _gaps(_rendered(odt, tmp_path, "both"))
+    assert abs((above - base_above) - grown) < 1.5, "the gap above did not follow"
+    assert abs((below - base_below) - grown) < 1.5, "the gap below did not follow"
+
+    one = styles.replace(
+        '<style:style style:name="LxExampleSpaceAbove" style:family="paragraph"'
+        ' style:parent-style-name="LxExampleSpace">',
+        '<style:style style:name="LxExampleSpaceAbove" style:family="paragraph"'
+        ' style:parent-style-name="LxExampleSpace">'
+        '<style:paragraph-properties fo:line-height="0.780cm"/>',
+    )
+    assert one != styles, "LxExampleSpaceAbove was not found to override"
+    odt = tmp_path / "one.odt"
+    postprocess.rewrite(converted, odt, {"styles.xml": one})
+    above, below = _gaps(_rendered(odt, tmp_path, "one"))
+    assert abs((above - base_above) - grown) < 1.5, "the gap above did not follow"
+    assert abs(below - base_below) < 1.5, "overriding one side moved the other"
 
 
 @soffice

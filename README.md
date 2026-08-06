@@ -12,6 +12,11 @@ citations — is converted by pandoc as usual.
 linguexx2odt paper.tex -o paper.odt
 ```
 
+**Documentation en français :** [`docs/guide-fr.md`](docs/guide-fr.md)
+couvre les deux outils ; [`docs/manuel-extension-fr.md`](docs/manuel-extension-fr.md)
+est un manuel autonome pour la seule extension LibreOffice, avec les
+instructions d'installation sous Windows, macOS et Linux.
+
 ## Requirements
 
 - **pandoc ≥ 3.0** (developed and tested against 3.6.1)
@@ -85,6 +90,28 @@ Nothing uses direct formatting: everything is a **named style**
 (`LxLeipzig`, `LxItalic`, `LxJudgment`, `LxExampleCell`, …), so you can
 restyle every example in the document from the Writer sidebar.
 
+### The space above and below an example
+
+That includes the vertical spacing, which is set at conversion time with
+`--example-spacing` / `--space-above` / `--space-below` and is afterwards
+adjustable from the sidebar through three paragraph styles:
+
+| style | what it does |
+|---|---|
+| `LxExampleSpace` | the height of both gaps — **edit this to move both at once** |
+| `LxExampleSpaceAbove` | inherits it; give it a line spacing of its own to change only the gap above |
+| `LxExampleSpaceBelow` | likewise, for the gap below |
+
+Change the height under *Indents & Spacing ▸ Line spacing ▸ Fixed*: the
+gap is the height of an empty spacer row at the top and bottom of each
+example table, and a fixed line spacing sets it exactly (0 cm really is
+0). Every example in the document follows immediately.
+
+It is done this way rather than with a table margin because a table
+margin cannot be a named style at all — LibreOffice ignores
+`style:parent-style-name` on table styles, so table spacing can only ever
+be per-table direct formatting. See `notes/findings.md`.
+
 ## Options
 
 ```
@@ -93,6 +120,11 @@ linguexx2odt input.tex [-o out.odt]
                                    text block (default 17, = A4/2cm margins)
              [--font-pt PT]        body font size assumed when estimating
                                    column widths (default 12)
+             [--example-spacing CM]  space above and below each example
+                                   (default 0.18); later editable as the
+                                   LxExampleSpace paragraph style
+             [--space-above CM]    override it above only
+             [--space-below CM]    override it below only
              [--no-split]          do not break overlong examples into bands
              [--page a4|a4-wide|letter|keep]
                                    page geometry written into the ODT
@@ -140,7 +172,8 @@ Two of these are inherent to the table method, not defects:
    the converter, so widths are estimated from per-character advance
    widths for a Times-like face at 12 pt, erring slightly wide. Drag the
    column edges in Writer if a column looks wrong, or set `--font-pt` if
-   your body text is not 12 pt.
+   your body text is not 12 pt. The Writer macro below does not have this
+   limitation — it measures.
 
 2. **Tables do not reflow.** Where a band breaks is computed from
    `--text-width` at conversion time and then frozen — the reference
@@ -148,7 +181,42 @@ Two of these are inherent to the table method, not defects:
    change the page geometry later, reconvert from the `.tex` with the new
    `--text-width` rather than fighting the existing file. (Thanks to
    `table:align="margins"`, a squeezed table rescales and wraps internally
-   instead of running off the page — ugly, never wrong.)
+   instead of running off the page — ugly, never wrong.) The Writer macro
+   below can re-band against the current page at any time.
+
+## Writing examples in Writer
+
+The Writer macro (`linguexx2odt --print-macro`) turns selected
+lines into an aligned example without going through LaTeX at all. Select
+
+```
+Esto es un ejemplo glosado
+this is a example glossed
+'This is a glossed example.'
+```
+
+press your shortcut, and get the same object this converter emits — same
+named styles, same `NumEx` field, same hanging judgment marks.
+
+It exists because a macro can do two things the converter cannot: it
+**measures the real font** instead of estimating column widths (the
+estimate is off by −7% to +28%), and it reads the **actual page style**
+instead of taking `--text-width` on trust. Since it shares the style
+names, it also works as a post-processor on converted documents.
+
+Sub-example paradigms (`a. … b. …`) work too, glossed or not, with the
+letters in their own column and one number for the paradigm.
+
+Install it as a LibreOffice extension:
+
+```
+python3 tools/build_oxt.py && unopkg add dist/linguexx-0.1.0.oxt
+```
+
+or paste the source in by hand — it ships with the package, so
+`linguexx2odt --print-macro` prints it.
+
+See [`docs/macro.md`](docs/macro.md) for the details and the trade-offs.
 
 ## Checking the renumbering
 
@@ -184,11 +252,28 @@ src/linguexx2odt/
   latexutil.py    brace/comment/verbatim-aware scanning
   emit_odt.py     IR   -> raw opendocument tables
   inline.py       LaTeX inline fragments -> ODT spans (pandoc fallback)
-  styles.py       named styles and all layout constants
+  styles.py       named styles, all layout constants, and the subset the
+                  Writer macro must agree with
   inject.py       placeholder Paras -> raw blocks; \ref -> fields
   postprocess.py  zip surgery on the .odt pandoc produced
   cli.py
+  writermacro/    the Writer macro, shipped as package data
+    LinguExx.bas
+tools/
+  sync_macro.py      regenerate/check the constants shared with the macro
+  build_oxt.py       package the macro as a LibreOffice extension
+  run_macro_test.py  drive the macro in a real LibreOffice and measure it
+docs/
+  macro.md        the Writer macro
+  guide-fr.md     guide complet en français
 ```
+
+The converter and the macro live in one repository on purpose: what they
+share is a *specification* — six style names, seven layout lengths, the
+`NumEx` sequence, and the geometry rules — not code. Splitting them would
+make that contract implicit, and it had already started to drift.
+`tools/sync_macro.py` and `tests/test_macro_sync.py` make it explicit
+instead.
 
 ## License
 

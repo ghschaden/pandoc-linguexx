@@ -22,6 +22,16 @@ Everything the converter applies is a *named* style, never one-off direct
 formatting, so a LibreOffice user can restyle every example in the
 document from the sidebar — the whole point of converting to ODT rather
 than to a picture of a PDF.
+
+That rule is why the space above and below an example is a *paragraph*
+style on an empty spacer row rather than the obvious ``fo:margin-top`` /
+``fo:margin-bottom`` on the table.  Table margins work, but they can only
+ever live in a per-example automatic style: LibreOffice ignores
+``style:parent-style-name`` on ``style:family="table"``, so a named table
+style in ``office:styles`` contributes nothing and never appears in the
+sidebar (measured — see notes/findings.md).  A spacer row whose height is
+a fixed ``fo:line-height`` on a named paragraph style reproduces the
+geometry exactly and *is* editable, so that is what we emit.
 """
 
 from __future__ import annotations
@@ -33,8 +43,59 @@ CELL_PARA = "LxExampleCell"
 TRANSLATION_PARA = "LxTranslation"
 JUDGMENT_PARA = "LxJudgmentCell"
 
+#: The space around an example.  SPACE_PARA carries the height and the two
+#: others inherit it unchanged, so editing the parent in the sidebar moves
+#: both sides at once and editing a child moves one side only.
+SPACE_PARA = "LxExampleSpace"
+SPACE_ABOVE_PARA = "LxExampleSpaceAbove"
+SPACE_BELOW_PARA = "LxExampleSpaceBelow"
+
 #: table-cell automatic style
 CELL = "LxExCell"
+
+#: The number-range sequence every example number is a field of.  The Writer
+#: macro writes into the same one, so a converted document and an example
+#: added by hand afterwards renumber together.
+SEQ_NAME = "NumEx"
+
+
+# -- what the Writer macro has to agree with -------------------------------
+#
+# The macro is Basic and cannot import any of this, so the values live twice:
+# here, and as literal Const declarations in the generated block of
+# writermacro/LinguExx.bas.  tools/sync_macro.py writes that block and
+# tests/test_macro_sync.py fails when the two drift apart — which they had
+# already begun to do (the macro was missing max_col_cm) before this existed.
+
+#: Basic constant name -> the string it must hold.
+MACRO_NAMES: dict[str, str] = {
+    "CELL_PARA": CELL_PARA,
+    "TRANS_PARA": TRANSLATION_PARA,
+    "JUDG_PARA": JUDGMENT_PARA,
+    "SPACE_PARA": SPACE_PARA,
+    "SPACE_ABOVE": SPACE_ABOVE_PARA,
+    "SPACE_BELOW": SPACE_BELOW_PARA,
+    "SEQ_NAME": SEQ_NAME,
+}
+
+#: Basic constant name -> the Layout field it must equal, in cm.
+MACRO_LENGTHS: dict[str, str] = {
+    "PAD_CM": "pad_cm",
+    "MIN_COL_CM": "min_col_cm",
+    "MAX_COL_CM": "max_col_cm",
+    "NUMBER_CM": "number_cm",
+    "MARKER_CM": "marker_cm",
+    "JUDG_GAP_CM": "judgment_gap_cm",
+    "SPACE_CM": "space_cm",
+}
+
+#: Deliberately *not* shared, with the reason — so that a value missing from
+#: the macro is a decision on the record rather than an oversight.
+MACRO_NOT_SHARED: dict[str, str] = {
+    "text_width_cm": "the macro reads the real page style instead",
+    "font_pt": "the macro reads the real font instead",
+    "width_safety": "the macro measures, so it needs no margin for error",
+}
 
 
 @dataclass(frozen=True)
@@ -74,9 +135,40 @@ class Layout:
     min_col_cm: float = 0.55
     max_col_cm: float = 6.0
 
+    space_cm: float = 0.18
+    """Space above *and* below an example, unless overridden per side.
+
+    linguexx's own \\Extopsep defaults to .66\\baselineskip; this is not
+    derived from it, because nothing in the LaTeX source reaches us."""
+
+    space_above_cm: float | None = None
+    """Overrides space_cm above the example.  None means 'follow it'."""
+
+    space_below_cm: float | None = None
+    """Overrides space_cm below the example.  None means 'follow it'."""
+
     @property
     def em_cm(self) -> float:
         return self.font_pt / 72 * 2.54
+
+
+def _space_side(name: str, override: float | None) -> str:
+    """One side's spacing style.
+
+    With no override it declares nothing of its own, so it tracks
+    SPACE_PARA and a single sidebar edit there moves both sides.  Giving it
+    a height of its own — from the CLI, or by editing it in Writer — breaks
+    that side away without touching the other.
+    """
+    props = (
+        f'<style:paragraph-properties fo:line-height="{override:.3f}cm"/>'
+        if override is not None
+        else ""
+    )
+    return (
+        f'<style:style style:name="{name}" style:family="paragraph"'
+        f' style:parent-style-name="{SPACE_PARA}">{props}</style:style>'
+    )
 
 
 def named_styles(layout: Layout) -> str:
@@ -109,6 +201,19 @@ def named_styles(layout: Layout) -> str:
             f'<style:paragraph-properties fo:text-align="end"'
             f' style:justify-single-word="false"/>'
             f"</style:style>",
+            # The space around an example.  A *fixed* fo:line-height is what
+            # makes this exact: it clamps the empty spacer paragraph to the
+            # requested height with no font-size floor, so 0cm really is 0
+            # and 0.18cm really is 5.1pt (measured).  The 1pt font is only
+            # belt and braces for the case where a user switches the style
+            # back to single line spacing.
+            f'<style:style style:name="{SPACE_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}">'
+            f'<style:paragraph-properties fo:line-height="{layout.space_cm:.3f}cm"/>'
+            f'<style:text-properties fo:font-size="1pt"/>'
+            f"</style:style>",
+            _space_side(SPACE_ABOVE_PARA, layout.space_above_cm),
+            _space_side(SPACE_BELOW_PARA, layout.space_below_cm),
             char("LxLeipzig", 'fo:font-variant="small-caps"'),
             char("LxItalic", 'fo:font-style="italic"'),
             char("LxBold", 'fo:font-weight="bold"'),

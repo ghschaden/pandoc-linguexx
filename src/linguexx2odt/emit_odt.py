@@ -38,10 +38,9 @@ from dataclasses import dataclass, field, replace
 from .inline import InlineRenderer, esc
 from .ir import Body, Example, Item
 from .styles import (
-    CELL, CELL_PARA, JUDGMENT_PARA, Layout, TRANSLATION_PARA, cell_style,
+    CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME, SPACE_ABOVE_PARA,
+    SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
 )
-
-SEQ_NAME = "NumEx"
 
 
 def ref_name(index: int) -> str:
@@ -287,12 +286,27 @@ class Emitter:
                                     has_marker, has_judgment)
             first = False
 
+        span = len(widths)
+        rows = (
+            [self._spacer_row(SPACE_ABOVE_PARA, span)]
+            + rows
+            + [self._spacer_row(SPACE_BELOW_PARA, span)]
+        )
+
         return (
             f'<table:table table:name="LxEx{ex.index}"'
             f' table:style-name="LxExTable{ex.index}">{cols}'
             + "".join(rows)
             + "</table:table>"
         )
+
+    def _spacer_row(self, style: str, span: int) -> str:
+        """An empty full-width row whose only job is to be *style*'s height.
+
+        This is where the space above and below an example lives, so that a
+        Writer user can change it for the whole document from the Styles
+        sidebar — which a table margin can never offer.  See styles.py."""
+        return "<table:table-row>" + self._cell("", span=span, style=style) + "</table:table-row>"
 
     # -- banding -----------------------------------------------------------
     def _bands(self, word_w: list[float], available: float, ex: Example):
@@ -459,9 +473,12 @@ class Emitter:
         total = sum(widths)
         out = [
             f'<style:style style:name="LxExTable{index}" style:family="table">'
+            # No margins here: the spacer rows carry the spacing, and a
+            # margin as well would add to them.  Stated rather than omitted
+            # so an inherited default from a --reference-doc cannot creep in.
             f'<style:table-properties style:width="{total:.3f}cm"'
             f' style:rel-width="100%" table:align="margins"'
-            f' fo:margin-top="0.18cm" fo:margin-bottom="0.18cm"/></style:style>'
+            f' fo:margin-top="0cm" fo:margin-bottom="0cm"/></style:style>'
         ]
         for i, w in enumerate(widths):
             rel = round(w / total * 10000)
