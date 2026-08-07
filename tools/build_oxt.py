@@ -154,8 +154,8 @@ ADDONS_XCU = """<?xml version="1.0" encoding="UTF-8"?>
               <value>vnd.sun.star.script:{library}.{module}.TreeSelection?language=Basic&amp;location=application</value>
             </prop>
             <prop oor:name="Title" oor:type="xs:string">
-              <value xml:lang="en-US">Typeset tree</value>
-              <value xml:lang="fr">Composer l'arbre</value>
+              <value xml:lang="en-US">Typeset numbered tree</value>
+              <value xml:lang="fr">Composer l'arbre numéroté</value>
             </prop>
             <prop oor:name="Target" oor:type="xs:string">
               <value>_self</value>
@@ -169,8 +169,8 @@ ADDONS_XCU = """<?xml version="1.0" encoding="UTF-8"?>
               <value>vnd.sun.star.script:{library}.{module}.TreeSelectionBare?language=Basic&amp;location=application</value>
             </prop>
             <prop oor:name="Title" oor:type="xs:string">
-              <value xml:lang="en-US">Typeset tree (no number)</value>
-              <value xml:lang="fr">Composer l'arbre (sans numéro)</value>
+              <value xml:lang="en-US">Typeset unnumbered tree</value>
+              <value xml:lang="fr">Composer l'arbre sans numéro</value>
             </prop>
             <prop oor:name="Target" oor:type="xs:string">
               <value>_self</value>

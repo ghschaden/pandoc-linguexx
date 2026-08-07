@@ -1213,3 +1213,88 @@ The end-to-end test converts the same example twice, with and without
 `\lpzg` on one gloss, and requires exactly one column to differ and that
 one to be the wider — the same shape as `check_small_caps` in the macro
 harness.
+
+## 2026-08-07 — trees as items of a paradigm
+
+Called "not cheap" twice, on the grounds that `LxEmitTable` would have to
+accept a tree where it expects text tiers.  Looking properly, it does not:
+an unglossed item is *already* one merged wide cell, and a tree is the same
+row with a drawing in the cell instead of a string.  The whole change is
+`IT_TREE` on the item, one branch in the emitter, and `LxWideCellTree`.
+
+`IT_NTIERS = 0` means "tree", and every place that reads it already does
+the right thing with a zero: `LxItemWords` loops `0 To -1`, `LxItemRows`
+falls to `n = 1`, and the width pass skips it exactly as it skips an
+unglossed item.  That is a sign the item model was the right shape to
+begin with.
+
+**Trees are parsed twice, deliberately.**  The node store is one tree wide
+and a paradigm has several.  Rather than make the store re-entrant, an
+item is parsed once during `LxMakeItem` to find out whether it *is* a tree,
+and again in `LxWideCellTree` to draw it.  Parsing is string work with no
+UNO in it, and doing the test early means a paradigm cannot fail half-built.
+
+**Recognising a tree was the interesting part, and the first answer was
+wrong.**  The attempt was to detect bracket notation: a body that parses as
+a tree whose root has at least one child.  That is narrow enough to keep
+`[ˈkæt]` a transcription and `[the] cat sat` a sentence with an optional
+element — and not nearly narrow enough, because it swallows
+
+    [TP [DP John] [VP left]]
+    [CP [C that] [TP she left]]
+
+which is labelled bracketing, how constituent structure is shown inside an
+ordinary example.  Reported immediately, and rightly.  There is nothing in
+the string that separates "draw this" from "show this", and no amount of
+narrowing finds it, because the two notations *are* the same notation.
+
+The first fix was a `tree` keyword on the item.  It worked, and it was
+still the wrong shape: it put the signal in the *text* when the signal
+belongs in the *command*.  Three commands instead, which is what shipped:
+
+    Typeset example           GlossSelection      never a tree, ever
+    Typeset numbered tree     TreeSelection       a tree, or a paradigm of them
+    Typeset unnumbered tree   TreeSelectionBare   one tree, no table
+
+`LxTreeOnly` is the whole mechanism: set by the tree command, read by
+`LxMakeItem`, never inferred.  Under it every item of the selection is a
+tree, so a paradigm needs no per-item marking at all and an item that is
+not a tree is refused *by letter* — "Sub-example b. is not a tree" — before
+anything is built.
+
+This also deleted code.  `LxEmitTree` existed to build a one-tree table;
+routing numbered trees through `LxParseItems` and `LxEmitTable` gives the
+same geometry from the machinery examples already use, so a single tree is
+just the one-item case and there is one table builder instead of two.
+
+Worth recording as a general point: "recognise it from the content" looked
+cheap and was the second guess-from-context idea to fail here, after the
+rejected notion of deciding numbered-versus-bare trees from the
+surroundings.  Both times the answer was to make the user say which they
+meant — and the second time, saying it by *choosing a command* beat saying
+it in a keyword, because it costs the user nothing to type and cannot be
+confused with their data.
+
+`LxBodyFont`/`LxBodyPt` are read in `LxLayOut` while the selection still
+exists, because a tree item is drawn long after the table absorbed
+oRange — the same trap fixed in `LxEmitTree` earlier today, avoided here
+by construction rather than by luck.
+
+### Verification
+
+`check_tree_items`: six paradigms — two trees, three trees, judged, with
+translations, with movement, and a single tree with no letter — each pinned
+for the number of trees drawn, the number of letters, and exactly one
+number.
+
+Seven bracketings pinned to stay text under Typeset example, four of them
+the ones the guessing got wrong: labelled bracketing alone and with prose
+after it, two bare constituents, a partial bracketing, the transcription,
+the optional element, and a genuine tree typed into the wrong command.
+Three more pin that a non-tree item is refused by letter, including a
+paradigm that mixes a tree with a glossed example.
+
+One bug the refusal tests found: `LxSplitMoves` clears `LxTErr`, so the
+*next* item's processing erased the error the previous item had raised.
+`LxParseItems` now takes the error the moment it is raised rather than
+collecting it at the end.

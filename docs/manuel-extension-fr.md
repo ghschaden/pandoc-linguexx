@@ -50,8 +50,8 @@ arrive surtout sous Linux) :
 Une fois installée, l'extension ajoute un menu à trois entrées :
 
 > **LinguExx ▸ Composer l'exemple**
-> **LinguExx ▸ Composer l'arbre**
-> **LinguExx ▸ Composer l'arbre (sans numéro)**
+> **LinguExx ▸ Composer l'arbre numéroté**
+> **LinguExx ▸ Composer l'arbre sans numéro**
 
 ### 2.2 En ligne de commande
 
@@ -166,9 +166,9 @@ Le menu fonctionne, mais un raccourci est bien plus rapide à l'usage.
 > compatibilité, alors que l'entrée de menu s'appelle « Composer
 > l'exemple ». C'est le même traitement.
 
-Pour les arbres syntaxiques (§ 4.9), répétez l'opération en choisissant
-**`TreeSelection`** et une autre combinaison, par exemple **Ctrl+Maj+T** —
-et **`TreeSelectionBare`** pour un arbre sans numéro.
+Pour les arbres (§ 4.9), répétez l'opération avec **`TreeSelection`**
+(arbre numéroté) et **`TreeSelectionBare`** (sans numéro) — par exemple
+**Ctrl+Maj+T** et **Ctrl+Maj+U**.
 
 Sous macOS, pensez à vérifier dans **LibreOffice ▸ Préférences** que la
 combinaison choisie n'est pas déjà prise par le système.
@@ -315,7 +315,7 @@ déborderait du bloc de texte.
 
 ### 4.9 Arbres syntaxiques
 
-**LinguExx ▸ Composer l'arbre** transforme une notation entre crochets en
+**LinguExx ▸ Composer l'arbre numéroté** transforme une notation entre crochets en
 un arbre dessiné. Sélectionnez
 
 ```
@@ -373,11 +373,37 @@ sous-ensemble de TikZ serait un piège : la limite du sous-ensemble
 passerait pour un bug. Tout ce qui contient une barre oblique inverse reste
 refusé, et le message renvoie ici.
 
+#### Un arbre dans un paradigme
+
+Un arbre peut être un item d'un paradigme `a. … b. …`, à côté d'items
+glosés ou de simple texte. Sélectionnez l'ensemble et lancez **Composer
+l'exemple** — pas *Composer l'arbre*, puisque c'est le paradigme qui est
+l'exemple :
+
+```
+a. [DP [D le] [NP [N arbre]]]
+b. [DP [D un] [NP [N chat]]]
+c. [VP [V chantait] [AdvP [Adv fort]]]
+```
+
+Un seul numéro, les lettres dans leur colonne, chaque arbre dans la cellule
+fusionnée qu'aurait prise un item non glosé.
+
+**C'est la commande qui décide, jamais le texte.** *Composer l'exemple* ne
+dessine jamais d'arbre : les crochets seuls ne signifient rien, car c'est
+ainsi qu'on indique la structure constituante dans un exemple ordinaire —
+`[TP [DP Jean] [VP est parti]]` reste tel quel.
+
+Sous *Composer l'arbre numéroté*, chaque item est un arbre. Un item qui
+n'en est pas un est refusé **avec sa lettre** (« Sub-example b. is not a
+tree »), avant toute construction. Pour mettre un arbre à côté d'un exemple
+glosé, faites-en deux exemples.
+
 #### Un arbre sans numéro
 
 Tous les arbres ne doivent pas consommer un numéro d'exemple : celui d'une
 note de bas de page, d'une figure ou d'une diapositive, non.
-**LinguExx ▸ Composer l'arbre (sans numéro)** dessine le même arbre sans
+**LinguExx ▸ Composer l'arbre sans numéro** dessine le même arbre sans
 tableau, sans numéro et sans styles d'exemple : les formes remplacent les
 crochets là où ils se trouvent.
 

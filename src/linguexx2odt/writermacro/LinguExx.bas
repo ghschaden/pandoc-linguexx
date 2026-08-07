@@ -140,6 +140,12 @@ Dim LxNdW(TREE_MAX)     As Double
 Dim LxNdN               As Integer
 Dim LxFree(TREE_DEPTH)  As Double         ' leftmost free x on each tier
 
+' The body font, kept for anything that has to be *drawn* rather than
+' typed.  A tree in a sub-example is built long after the range it came
+' from was absorbed by the table, so the font cannot be read off it there.
+Dim LxBodyFont As String
+Dim LxBodyPt   As Double
+
 Dim LxTSrc As String                      ' the parser's input and cursor
 Dim LxTPos As Integer
 Dim LxTErr As String
@@ -171,12 +177,33 @@ Public LxLastMessage As String
 
 ' ---------------------------------------------------------------- entry ---
 
+' An example: glossed, unglossed, or a paradigm of either.  Never a tree,
+' whatever brackets are in it — see LxTreeOnly.
 Sub GlossSelection
+    Call LxExampleCommand(False, "Typeset example")
+End Sub
+
+
+' A numbered tree, or a paradigm of them:
+'
+'     a. [DP [D the] [NP [N tree]]]
+'     b. [DP [D a] [NP [N cat]]]
+'
+' The same table an example gets, so it numbers and aligns with them; each
+' item is a tree because the command says so, and nothing is inferred from
+' the brackets.  One tree with no letter is just the one-item case.
+Sub TreeSelection
+    Call LxExampleCommand(True, "Typeset tree")
+End Sub
+
+
+Sub LxExampleCommand(bTreeOnly As Boolean, sUndo As String)
     Dim oDoc As Object, oSel As Object, oRange As Object
     Dim aLines As Variant
     Dim nLines As Integer
     Dim oUndo As Object
 
+    LxTreeOnly = bTreeOnly
     oDoc = ThisComponent
     If IsNull(oDoc) Then
         Call LxSay("Run this in a Writer document.")
@@ -208,7 +235,7 @@ Sub GlossSelection
     ' One undo context, so Ctrl+Z takes the whole example back in one go
     ' rather than unwinding it row by row.
     oUndo = oDoc.getUndoManager()
-    oUndo.enterUndoContext("Typeset example")
+    oUndo.enterUndoContext(sUndo)
     On Error Goto Cleanup
     Call LxBuildExample(oDoc, oRange, aLines, nLines)
 Cleanup:
@@ -249,8 +276,9 @@ Const IT_MARKER As Integer = 0     ' "a.", "(b)", "iii." — "" for a plain exam
 Const IT_JUDG   As Integer = 1     ' judgment mark pulled off the object line
 Const IT_TRANS  As Integer = 2     ' free translation, or ""
 Const IT_TIERS  As Integer = 3     ' array of word-arrays; tier 0 is the object
-Const IT_NTIERS As Integer = 4     ' 1 means unglossed
-Const IT_SIZE   As Integer = 5
+Const IT_NTIERS As Integer = 4     ' 1 means unglossed, 0 means a tree
+Const IT_TREE   As Integer = 5     ' the item's own lines, when it is a tree
+Const IT_SIZE   As Integer = 6
 
 
 Sub LxBuildExample(oDoc As Object, oRange As Object, aLines As Variant, nLines As Integer)
@@ -272,6 +300,8 @@ End Sub
 ' sub-example marker starts a new one; everything up to the next marker
 ' belongs to it.  A marker may stand alone on its line or lead the object
 ' language, which is how people actually type them.
+' A tree item reports its trouble through LxTErr, which is checked once
+' here rather than threaded back out of LxMakeItem.
 Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As String) As Variant
     Dim aItems() As Variant
     Dim aBody() As String
@@ -280,6 +310,7 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
     Dim sMarker As String, sRest As String, sLine As String
 
     sError = ""
+    LxTErr = ""
 
     bAny = False
     For i = 0 To nLines - 1
@@ -293,6 +324,7 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
             aBody(i) = aLines(i)
         Next i
         aItems(0) = LxMakeItem("", aBody(), nLines)
+        If Len(LxTErr) > 0 Then sError = LxTErr
         LxParseItems = aItems()
         Exit Function
     End If
@@ -313,6 +345,11 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
         If LxLooksLikeMarker(aLines(i)) Then
             If nBody > 0 Then
                 aItems(n) = LxMakeItem(sMarker, aBody(), nBody)
+                If Len(LxTErr) > 0 Then       ' taken now: the next item's
+                    sError = LxTErr           ' LxSplitMoves would clear it
+                    LxParseItems = Array()
+                    Exit Function
+                End If
                 n = n + 1
             End If
             sLine = LxTrimTagged(aLines(i))
@@ -330,6 +367,11 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
     Next i
     If nBody > 0 Then
         aItems(n) = LxMakeItem(sMarker, aBody(), nBody)
+        If Len(LxTErr) > 0 Then
+            sError = LxTErr
+            LxParseItems = Array()
+            Exit Function
+        End If
         n = n + 1
     End If
 
@@ -344,6 +386,37 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
 End Function
 
 
+' Every item of this selection is a tree.
+'
+' Set by the tree commands and never inferred.  Bracket notation cannot be
+' recognised from the text: labelled bracketing is how constituent
+' structure is shown inside an ordinary example — [TP [DP John] [VP left]]
+' — and nothing in the string separates "draw this" from "show this".  So
+' the command the user chose is the whole of the signal, and Typeset
+' example never draws a tree.
+Dim LxTreeOnly As Boolean
+
+' The width left for content beside the number, so a tree can say when it
+' will not fit.  Set in LxLayOut, where the page is still in view.
+Dim LxWideCm As Double
+
+
+' The item's own lines, as an array the tree reader can take.
+Function LxBodyLines(aBody() As String, nBody As Integer) As Variant
+    Dim aOut() As String
+    Dim i As Integer
+    If nBody < 1 Then
+        LxBodyLines = Array()
+        Exit Function
+    End If
+    ReDim aOut(nBody - 1)
+    For i = 0 To nBody - 1
+        aOut(i) = aBody(i)
+    Next i
+    LxBodyLines = aOut()
+End Function
+
+
 ' One item from its own lines: object language, gloss tiers, translation.
 '
 ' A quoted last line is the translation whenever the item has more than one
@@ -352,8 +425,8 @@ End Function
 Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As Variant
     Dim aItem(IT_SIZE - 1) As Variant
     Dim aTiers() As Variant
-    Dim aWords As Variant
-    Dim sTrans As String, sMark As String, sFirst As String
+    Dim aWords As Variant, aLines As Variant
+    Dim sTrans As String, sMark As String, sFirst As String, sSrc As String
     Dim i As Integer, nTiers As Integer
 
     sTrans = ""
@@ -362,6 +435,36 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
             sTrans = aBody(nBody - 1)
             nBody = nBody - 1
         End If
+    End If
+
+    ' A tree is an item like any other: one row, one merged cell, its own
+    ' letter and its own judgment mark.  Only what goes in the cell differs.
+    aLines = LxBodyLines(aBody(), nBody)
+    If LxTreeOnly Then
+        ' The command said trees, so a body that will not parse is an error
+        ' rather than a quiet fall back to text.  LxParseItems passes
+        ' LxTErr on to the caller before anything is built.
+        sMark = ""
+        sSrc = LxSplitMoves(aLines)
+        sSrc = LxPullJudgment(sSrc, sMark)
+        If LxTreeParse(sSrc) >= 0 Then
+            Call LxResolveMoves()
+        ElseIf Len(sMarker) > 0 Then
+            ' Say which item.  In a paradigm "a tree has to start with a
+            ' bracket" on its own leaves the reader counting brackets.
+            LxTErr = "Sub-example " & LxStrip(sMarker) & " is not a tree." & _
+                     Chr(10) & Chr(10) & LxTErr & Chr(10) & Chr(10) & _
+                     "Every item of a numbered tree is a tree.  To put a " & _
+                     "tree beside a glossed example, make them two examples."
+        End If
+        aItem(IT_MARKER) = sMarker
+        aItem(IT_JUDG) = sMark
+        aItem(IT_TRANS) = sTrans
+        aItem(IT_TIERS) = Array()
+        aItem(IT_NTIERS) = 0
+        aItem(IT_TREE) = aLines
+        LxMakeItem = aItem()
+        Exit Function
     End If
 
     ReDim aTiers(LxMaxI(nBody - 1, 0))
@@ -417,6 +520,16 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
 
     oFont = LxFontForRange(oDoc, oRange, dPxPerCm)
 
+    ' Read while the selection still exists: a tree item is drawn after the
+    ' table has absorbed oRange, and cannot ask it anything by then.
+    LxBodyFont = "" : LxBodyPt = 0
+    On Error Resume Next
+    LxBodyFont = oRange.CharFontName
+    LxBodyPt = oRange.CharHeight
+    On Error Goto 0
+    If Len(LxBodyFont) = 0 Then LxBodyFont = "Liberation Serif"
+    If LxBodyPt <= 0 Then LxBodyPt = 12
+
     ' The text block comes from the page in front of us, not from a flag.
     dAvail = LxTextWidthCm(oDoc)
 
@@ -462,6 +575,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     nLead = 2
     If bSub Then nLead = 3
     dAvail = dAvail - dNumber - dMarker
+    LxWideCm = dAvail                         ' what a drawn item has to fit
 
     ' Column widths come from the glossed items only.  An unglossed item is
     ' one merged cell of running text, so its words must not drag a column
@@ -652,11 +766,17 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
         Else
             ' Unglossed: running text in one merged cell, not one word per
             ' column.  Splitting it into columns would align words that have
-            ' nothing to do with each other.
+            ' nothing to do with each other.  A tree takes the same row and
+            ' the same merged cell; only its contents are drawn.
             Call LxHead(oDoc, oTable, nRow, aItem, bFirstOfAll, nLead)
             bFirstOfAll = False
-            Call LxWideCell(oTable, nRow, nLead, nCols + nFill, _
-                            LxJoinWords(aTiers(0)), CELL_PARA)
+            If aItem(IT_NTIERS) = 0 Then
+                Call LxWideCellTree(oDoc, oTable, nRow, nLead, nCols + nFill, _
+                                    aItem(IT_TREE))
+            Else
+                Call LxWideCell(oTable, nRow, nLead, nCols + nFill, _
+                                LxJoinWords(aTiers(0)), CELL_PARA)
+            End If
             nRow = nRow + 1
         End If
 
@@ -696,6 +816,53 @@ Sub LxWideCell(oTable As Object, nRow As Integer, nLead As Integer, _
         oCur.mergeRange()
     End If
     Call LxPut(oTable.getCellByName(LxCell(nLead, nRow)), sText)
+End Sub
+
+
+' A tree in a sub-example: the merged cell an unglossed item would get,
+' with a drawing anchored in it instead of text.
+'
+' Parsed again here rather than carried over from LxMakeItem, because the
+' node store is one tree wide and a paradigm has several.  Parsing is
+' string work, and the item was only accepted as a tree because it parsed,
+' so this cannot start failing at build time.
+Sub LxWideCellTree(oDoc As Object, oTable As Object, nRow As Integer, _
+                   nLead As Integer, nSpan As Integer, aLines As Variant)
+    Dim oCur As Object, oCell As Object, oText As Object, oGroup As Object
+    Dim sSrc As String, sMark As String
+    Dim nRoot As Integer
+    Dim dWidth As Double
+
+    Call LxSetCellStyle(oTable, LxCell(nLead, nRow), CELL_PARA)
+    If nSpan > 1 Then
+        oCur = oTable.createCursorByCellName(LxCell(nLead, nRow))
+        oCur.goRight(nSpan - 1, True)
+        oCur.mergeRange()
+    End If
+
+    sSrc = LxSplitMoves(aLines)
+    sSrc = LxPullJudgment(sSrc, sMark)
+    nRoot = LxTreeParse(sSrc)
+    If nRoot < 0 Then Exit Sub
+    If Not LxResolveMoves() Then Exit Sub
+
+    oCell = oTable.getCellByName(LxCell(nLead, nRow))
+    oText = oCell.getText()
+    oText.setString("")
+    oCur = oText.createTextCursor()
+    oCur.gotoEnd(False)
+    oGroup = LxTreeDraw(oDoc, oText, oCur, nRoot, LxBodyFont, LxBodyPt)
+
+    ' Said, not silently produced: a tree wider than its cell hangs off the
+    ' page, and shortening a label is the user's call.
+    dWidth = LxTreeWidth(nRoot) / 1000.0
+    If dWidth > LxWideCm Then
+        Call LxSay("A tree is " & Format(dWidth, "0.0") & " cm wide but " & _
+                   "only " & Format(LxWideCm, "0.0") & " cm is left beside " & _
+                   "the number, so it will stick out." & Chr(10) & Chr(10) & _
+                   "Shorten a label, or group words with {braces} so they " & _
+                   "share one node.")
+    End If
 End Sub
 
 
@@ -1774,24 +1941,18 @@ End Function
 ' ---------------------------------------------------------------- entry ---
 
 ' A numbered tree: an example whose content happens to be a tree.
-Sub TreeSelection
-    Call LxTreeCommand(True)
-End Sub
-
-
 ' A bare tree: the same drawing, anchored where the brackets were, with no
 ' table, no number and no example styles.  For a tree in a footnote, a
 ' figure or a slide — anywhere it should not spend an example number.
 '
-' Deliberately its own command rather than one that works out whether a
-' number is wanted.  Guessing from context is the kind of inference this
-' macro refuses everywhere else, and it would be wrong in silence.
+' One tree only: a paradigm needs letters, and letters need the table that
+' the numbered command builds.
 Sub TreeSelectionBare
-    Call LxTreeCommand(False)
+    Call LxBareTreeCommand()
 End Sub
 
 
-Sub LxTreeCommand(bNumbered As Boolean)
+Sub LxBareTreeCommand()
     Dim oDoc As Object, oSel As Object, oRange As Object
     Dim oUndo As Object
     Dim aLines As Variant
@@ -1836,7 +1997,14 @@ Sub LxTreeCommand(bNumbered As Boolean)
 
     nRoot = LxTreeParse(sSrc)
     If nRoot < 0 Then
-        Call LxSay(LxTErr)
+        If LxLooksLikeMarker(aLines(0)) Then
+            Call LxSay("That looks like a paradigm.  A tree without a " & _
+                       "number cannot carry a letter, because the letters " & _
+                       "live in the table only the numbered command builds." & _
+                       Chr(10) & Chr(10) & "Use Typeset numbered tree.")
+        Else
+            Call LxSay(LxTErr)
+        End If
         Exit Sub
     End If
 
@@ -1845,20 +2013,12 @@ Sub LxTreeCommand(bNumbered As Boolean)
         Exit Sub
     End If
 
+    ' No LxEnsureStyles: a bare tree has no business creating example
+    ' styles in a document that never asked for one.
     oUndo = oDoc.getUndoManager()
     oUndo.enterUndoContext("Typeset tree")
     On Error Goto Cleanup
-    If bNumbered Then
-        ' Inside the context, or the first tree in a document leaves one
-        ' undo entry per style created and Ctrl+Z unwinds them one at a
-        ' time — the very thing the context exists to stop.  Only the
-        ' numbered form needs them: a bare tree has no business creating
-        ' example styles in a document that never asked for one.
-        Call LxEnsureStyles(oDoc)
-        Call LxEmitTree(oDoc, oRange, nRoot, sMark)
-    Else
-        Call LxEmitBareTree(oDoc, oRange, nRoot, sMark)
-    End If
+    Call LxEmitBareTree(oDoc, oRange, nRoot, sMark)
 Cleanup:
     oUndo.leaveUndoContext()
     If Err <> 0 Then Call LxSay(Error$ & " (line " & Erl & ")")
@@ -2485,87 +2645,6 @@ End Sub
 
 
 ' ------------------------------------------------------------- the table ---
-
-' The same object GlossSelection builds — number column, hanging judgment
-' column, one wide cell — with the tree in the wide cell instead of text.
-' Sharing the table is what makes a tree line up with the examples around
-' it and renumber with them.
-Sub LxEmitTree(oDoc As Object, oRange As Object, nRoot As Integer, sMark As String)
-    Dim oTable As Object, oCell As Object, oText As Object
-    Dim oCur As Object, oFont As Object, oGroup As Object
-    Dim dPxPerCm As Double, dJudg As Double, dNumber As Double
-    Dim dAvail As Double, dWidth As Double
-    Dim dPt As Double
-    Dim sFont As String
-    Dim aWidths(2) As Double
-    Dim dSum As Double
-    Dim i As Integer
-
-    oFont = LxFontForRange(oDoc, oRange, dPxPerCm)
-    dAvail = LxTextWidthCm(oDoc)
-
-    ' Before anything else: inserting the table below absorbs oRange, and
-    ' asking a consumed range what font it is in is a question about text
-    ' that is no longer there.  It answered plausibly, which is worse than
-    ' failing.  The bare form reads it first for the same reason.
-    sFont = "" : dPt = 0
-    On Error Resume Next
-    sFont = oRange.CharFontName
-    dPt = oRange.CharHeight
-    On Error Goto 0
-    If Len(sFont) = 0 Then sFont = "Liberation Serif"
-    If dPt <= 0 Then dPt = 12
-
-    dJudg = LxWidth(oFont, dPxPerCm, "*")
-    If Len(sMark) > 0 Then dJudg = LxMax(dJudg, LxWidth(oFont, dPxPerCm, sMark))
-    dJudg = dJudg + JUDG_GAP_CM
-    dNumber = LxMax(NUMBER_CM, LxWidth(oFont, dPxPerCm, "(00)") + PAD_CM) + dJudg
-
-    oTable = oDoc.createInstance("com.sun.star.text.TextTable")
-    oTable.initialize(3, 3)                   ' spacer, the tree, spacer
-    oDoc.getText().insertTextContent(oRange, oTable, True)
-    Call LxPlainTable(oTable)
-
-    For i = 0 To 2
-        Call LxSetCellStyle(oTable, LxCell(i, 1), SPACE_ABOVE)
-        Call LxSetCellStyle(oTable, LxCell(i, 2), CELL_PARA)
-        Call LxSetCellStyle(oTable, LxCell(i, 3), SPACE_BELOW)
-    Next i
-    Call LxSetCellStyle(oTable, LxCell(1, 2), JUDG_PARA)
-
-    aWidths(0) = dNumber - dJudg
-    aWidths(1) = dJudg
-    aWidths(2) = LxMax(dAvail - dNumber, MIN_COL_CM)
-    dSum = aWidths(0) + aWidths(1) + aWidths(2)
-    Call LxSetColumns(oTable, aWidths(), 3, dSum)
-
-    Call LxInsertNumber(oDoc, oTable.getCellByName(LxCell(0, 2)))
-    If Len(sMark) > 0 Then _
-        oTable.getCellByName(LxCell(1, 2)).setString(sMark)
-
-    oCell = oTable.getCellByName(LxCell(2, 2))
-    oText = oCell.getText()
-
-    oCur = oText.createTextCursor()
-    oCur.gotoEnd(False)
-    oGroup = LxTreeDraw(oDoc, oText, oCur, nRoot, sFont, dPt)
-    If IsNull(oGroup) Then
-        Call LxSay(LxTErr)
-        Exit Sub
-    End If
-
-    ' Said, not silently produced: a tree wider than the text block will
-    ' hang off the page, and shortening a label is the user's call.
-    dWidth = LxTreeWidth(nRoot) / 1000.0
-    If dWidth > aWidths(2) Then
-        Call LxSay("The tree is " & Format(dWidth, "0.0") & " cm wide but " & _
-                   "only " & Format(aWidths(2), "0.0") & " cm is left beside " & _
-                   "the number, so it will stick out." & Chr(10) & Chr(10) & _
-                   "Shorten a label, or group words with {braces} so they " & _
-                   "share one node.")
-    End If
-End Sub
-
 
 ' Probe, measure, lay out, draw.  Everything the two forms of tree share;
 ' they differ only in what they anchor it into.  Nothing on failure, with

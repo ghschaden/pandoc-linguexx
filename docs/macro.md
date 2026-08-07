@@ -37,7 +37,9 @@ python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt
 ```
 
-It appears as a **LinguExx ▸ Typeset example** menu entry in Writer. An installed extension raises
+It appears as a **LinguExx** menu in Writer, with three entries:
+*Typeset example*, *Typeset numbered tree* and *Typeset unnumbered
+tree*. An installed extension raises
 no macro-security warning, and it is the only sensible thing to hand to
 someone who is not going to paste Basic into an IDE.
 
@@ -129,8 +131,15 @@ line under it and that becomes the translation.
 
 ## Trees
 
-`TreeSelection` (**LinguExx ▸ Typeset tree**) turns bracket notation into a
-drawn syntax tree. Select
+Three commands, and which one you run is the whole of the decision:
+
+| menu entry | Basic | what it makes |
+|---|---|---|
+| **Typeset example** | `GlossSelection` | an example — **never** a tree, whatever brackets are in it |
+| **Typeset numbered tree** | `TreeSelection` | a numbered tree, or a paradigm of them |
+| **Typeset unnumbered tree** | `TreeSelectionBare` | one tree, no table and no number |
+
+`TreeSelection` turns bracket notation into a drawn syntax tree. Select
 
 ```
 [DP [D the] [NP [N tree]]]
@@ -194,10 +203,49 @@ moving to itself, and move lines with no tree above them.
 
 Arrows above the tree, edge labels and custom routing are out of scope.
 
+### Trees in a paradigm
+
+**Typeset numbered tree** takes a paradigm too:
+
+```
+a. [DP [D the] [NP [N tree]]]
+b. [DP [D a] [NP [N cat]]]
+c. [VP [V sang] [AdvP [Adv loudly]]]
+```
+
+One number, the letters in their own column, and each tree in the merged
+cell an unglossed item would have taken. Judgment marks, translations and
+`move` lines all belong to their own item.
+
+Every item is a tree, because that is what the command means. An item that
+is not one is refused **by letter** — "Sub-example b. is not a tree" — so a
+paradigm never builds half-drawn. To put a tree beside a glossed example,
+make them two examples.
+
+**Typeset example never draws a tree.** Bracket notation is not a signal
+and is not treated as one, because labelled bracketing is how constituent
+structure is shown inside an ordinary example:
+
+```
+[TP [DP John] [VP left]]
+[CP [C that] [TP she left]] is grammatical
+Mary saw [DP the [AP very big] cat]
+```
+
+Every one of those stays exactly as typed. There is nothing in the string
+that separates "draw this" from "show this", so the macro does not try to
+tell — and narrowing the guess does not rescue it: requiring the root to
+have children keeps `[ˈkæt]` safe and still swallows every fully bracketed
+sentence.
+
+A real tree typed into *Typeset example* stays text too. An earlier attempt
+to guess narrowly — requiring the root to have children — kept `[ˈkæt]`
+safe and still swallowed every fully bracketed sentence.
+
 ### Trees without a number
 
 Not every tree should spend an example number — one in a footnote, a figure
-or a slide should not. **LinguExx ▸ Typeset tree (no number)**
+or a slide should not. **LinguExx ▸ Typeset unnumbered tree**
 (`TreeSelectionBare`) draws the same tree with no table, no number and no
 example styles: the shapes replace the brackets where they stand, anchored
 as a character in that paragraph.
@@ -281,9 +329,11 @@ language as above or stand alone on its line.
 - **A sub-example letter sits exactly where a main example's text
   begins** — linguexx's own geometry. That is why the judgment column is
   carved out of the column to its left rather than inserted after it.
-- **Items may be glossed or not, in the same paradigm.** An unglossed item
-  is running text in one merged cell, not one word per column: splitting it
-  would align words that have nothing to do with each other.
+- **Items may be glossed or not, in the same paradigm** — or be trees. An
+  unglossed item is running text in one merged cell, not one word per
+  column: splitting it would align words that have nothing to do with each
+  other. Under *Typeset numbered tree* every item is a tree instead, each
+  in that same merged cell.
 - **Each item may carry its own judgment mark**, which hangs left as usual.
 - A translation belongs to its own item.
 
@@ -377,6 +427,14 @@ names a Sub that exists, installs it with `unopkg` into a throwaway profile
 and drives all three commands *from the package* rather than from the loose
 `.bas`. Everything else in the suite loads the macro straight into a Basic
 library, which skips the package — and that has hidden a real bug before.
+
+`check_tree_items` covers trees inside a paradigm — beside a glossed item,
+beside a plain one, judged, with movement — and pins that each keeps its
+own letter while the paradigm keeps one number. Seven bracketings are
+pinned to stay text under *Typeset example* — labelled bracketing with and
+without prose around it, two bare constituents, a partial bracketing, a
+transcription, an optional element, and a genuine tree typed into the wrong
+command. Three more pin that a non-tree item is refused by letter.
 
 `check_moves` and `check_move_geometry` cover movement. The geometry one
 tells the shapes apart by type rather than by order — a branch is a

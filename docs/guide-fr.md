@@ -192,10 +192,12 @@ faire :
 Elle sait aussi **dessiner des arbres syntaxiques** à partir d'une notation
 entre crochets — `[DP [D le] [NP [N arbre]]]` — sous forme d'un groupe de
 formes de dessin ancré dans le même tableau qu'un exemple ordinaire, donc
-numéroté et aligné comme lui — ou, avec une seconde commande, sans numéro
-du tout, pour une note de bas de page ou une figure. Les flèches de
-mouvement s'écrivent en nommant deux nœuds et en ajoutant `move t -> wh`
-sous l'arbre. Voir
+numéroté et aligné comme lui — ou, avec une autre commande, sans numéro du
+tout. Trois commandes distinctes : *Composer l'exemple* ne dessine jamais
+d'arbre, *Composer l'arbre numéroté* en dessine un ou tout un paradigme, et
+*Composer l'arbre sans numéro* en dessine un seul. Les flèches de mouvement
+s'écrivent en nommant deux nœuds et en ajoutant `move t -> wh` sous
+l'arbre. Voir
 [`manuel-extension-fr.md`](manuel-extension-fr.md) § 4.9.
 
 Le **formatage que vous avez appliqué à la main est conservé** : petites

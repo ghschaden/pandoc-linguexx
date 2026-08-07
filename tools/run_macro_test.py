@@ -1418,6 +1418,121 @@ def check_guards(ctx) -> int:
     return bad
 
 
+# A paradigm of trees, built by the numbered-tree command.  Every item is
+# a tree because the command says so — nothing is read out of the brackets.
+# (lines, trees drawn, markers)
+TREE_ITEM_CASES = {
+    "two_trees": (["a. [DP [D the] [NP [N tree]]]",
+                   "b. [DP [D a] [NP [N cat]]]"], 2, 2),
+    "three_trees": (["a. [DP [D the] [NP [N tree]]]",
+                     "b. [DP [D a] [NP [N cat]]]",
+                     "c. [VP [V sang] [AdvP [Adv loudly]]]"], 3, 3),
+    "judged": (["a. *[S [NP him] [VP [V left]]]",
+                "b. [S [NP he] [VP [V left]]]"], 2, 2),
+    "with_translations": (["a. [DP [D the] [NP [N tree]]]", "'the tree'",
+                           "b. [DP [D a] [NP [N cat]]]", "'a cat'"], 2, 2),
+    "with_movement": (
+        ["a. [CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
+         "move t -> w", "b. [CP [DP who] [TP [V left]]]"], 2, 2),
+    "single_tree": (["[DP [D the] [NP [N tree]]]"], 1, 0),
+}
+
+# Typeset example must never draw a tree, whatever brackets are in it.
+# Labelled bracketing is how constituent structure is shown inside an
+# ordinary example, and it is not distinguishable from tree notation by
+# looking at it — which is why the command, not the text, decides.
+NOT_TREES = {
+    "labelled_bracketing": ["[TP [DP John] [VP left]]"],
+    "labelled_with_prose": ["[CP [C that] [TP she left]] is grammatical"],
+    "two_constituents": ["[DP the cat] [VP sat on the mat]"],
+    "partly_bracketed": ["Mary saw [DP the [AP very big] cat]"],
+    "transcription": ["a. [ˈkæt]", "b. [ˈdɔɡ]"],
+    "optional_element": ["a. [the] cat sat", "b. the cat sat"],
+    "a_tree_typed_as_an_example": ["a. [DP [D the] [NP [N tree]]]",
+                                   "b. [DP [D a] [NP [N cat]]]"],
+}
+
+# The numbered-tree command promises trees, so anything that is not one is
+# an error naming the item — not a quiet fall back to text.
+TREE_ITEM_REFUSE = {
+    "unclosed": ["a. [DP [D the]", "b. [DP [D a] [NP [N cat]]]"],
+    "not_brackets": ["a. just some words", "b. [DP [D a] [NP [N cat]]]"],
+    "mixed_with_gloss": ["a. [DP [D the] [NP [N tree]]]",
+                         "b. Esto es un ejemplo", "this is a example"],
+}
+
+
+def check_tree_items(ctx) -> int:
+    "A paradigm of trees: one number, a letter each, and no guessing."
+    # A tree item gets the row an unglossed item gets — one merged cell —
+    # so it carries its own letter, judgment mark and translation, and the
+    # paradigm still has exactly one number.  Which items are trees comes
+    # from the command, never from the brackets.
+    print("--- tree_items")
+    bad = 0
+    for name, (lines, groups, markers) in TREE_ITEM_CASES.items():
+        doc = make_doc(ctx, lines)
+        try:
+            msg = run(ctx, "TreeSelectionQuiet")
+        except Exception as exc:
+            print(f"    FAIL: {name}: macro error {exc}")
+            doc.dispose()
+            bad += 1
+            continue
+        tables = doc.getTextTables().getCount()
+        drawn = doc.getDrawPage().getCount()
+        cells = []
+        if tables:
+            table = doc.getTextTables().getByIndex(0)
+            cells = [table.getCellByName(n).getString().strip()
+                     for n in table.getCellNames()
+                     if table.getCellByName(n).getString().strip()]
+        doc.dispose()
+        found = len([c for c in cells if MARKER.match(c)])
+        numbers = len([c for c in cells if c.startswith("(") and c.endswith(")")])
+        if msg:
+            print(f"    FAIL: {name}: macro said {msg!r}")
+            bad += 1
+        elif tables != 1 or drawn != groups:
+            print(f"    FAIL: {name}: {tables} table(s), {drawn} tree(s), "
+                  f"expected 1 and {groups}")
+            bad += 1
+        elif found != markers:
+            print(f"    FAIL: {name}: {found} marker(s), expected {markers}")
+            bad += 1
+        elif numbers != 1:
+            print(f"    FAIL: {name}: {numbers} numbers, a paradigm has one")
+            bad += 1
+        else:
+            print(f"    ok — {name}: {groups} tree(s), {markers} marker(s), "
+                  "one number")
+
+    for name, lines in NOT_TREES.items():
+        doc = make_doc(ctx, lines)
+        msg = run(ctx)                        # Typeset example
+        drawn = doc.getDrawPage().getCount()
+        doc.dispose()
+        if msg or drawn:
+            print(f"    FAIL: {name}: Typeset example drew {drawn} tree(s), "
+                  f"said {msg!r}")
+            bad += 1
+        else:
+            print(f"    ok — {name}: left as text")
+
+    for name, lines in TREE_ITEM_REFUSE.items():
+        doc = make_doc(ctx, lines)
+        msg = run(ctx, "TreeSelectionQuiet")
+        made = doc.getTextTables().getCount() + doc.getDrawPage().getCount()
+        doc.dispose()
+        if not msg or made:
+            print(f"    FAIL: {name}: built {made} where there is no tree "
+                  f"to draw, said {msg!r}")
+            bad += 1
+        else:
+            print(f"    ok — {name}: refused, {msg.splitlines()[0][:44]!r}")
+    return bad
+
+
 def check_undo(ctx) -> int:
     "One Ctrl+Z takes the whole thing back, whatever was built."
     # Promised in the docs and pinned by nothing until now.  The specific
@@ -1628,6 +1743,7 @@ def main() -> int:
     else:
         failures += check_bands("banded", odt, render(profile, odt))
     failures += check_guards(ctx)
+    failures += check_tree_items(ctx)
     failures += check_undo(ctx)
     failures += check_extension(out)
     print("\nOK" if not failures else f"\n{failures} FAILURE(S)")

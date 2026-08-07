@@ -220,8 +220,11 @@ same table as any other example, so trees and glossed examples line up and
 renumber together. `{braced}` labels, `, roof` triangles, judgment marks and
 movement arrows all work — movement is written by naming two nodes and
 adding `move t -> wh` under the tree, and the arrow is routed in a gutter
-below it. A second
-command draws the tree with no number at all, for a footnote or a figure.
+below it. *Typeset numbered tree* takes a whole `a. … b. …` paradigm of them, and
+*Typeset unnumbered tree* draws one with no number at all. Which command
+you run is the whole of the decision: *Typeset example* never draws a tree,
+so labelled bracketing like `[TP [DP John] [VP left]]` stays the text you
+typed.
 
 Formatting you applied by hand comes through — small caps on a Leipzig
 gloss, italics, bold, superscripts — and each run is measured in the font
