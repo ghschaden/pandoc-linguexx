@@ -920,6 +920,102 @@ def cuts_through(seg, box, tol: int = 25) -> bool:
     return False
 
 
+def segments_cross(first, second) -> bool:
+    """Do two segments properly cross — not merely touch at an endpoint?
+
+    Branches are diagonal, so this cannot be the axis-aligned test
+    cuts_through uses; an arrow meeting a branch exactly at a node's
+    underside is contact, not a crossing.
+    """
+    def side(origin, a, b):
+        return ((a[0] - origin[0]) * (b[1] - origin[1])
+                - (a[1] - origin[1]) * (b[0] - origin[0]))
+
+    p, q = first
+    r, t = second
+    d1, d2 = side(r, t, p), side(r, t, q)
+    d3, d4 = side(p, q, r), side(p, q, t)
+    eps = 1e-9
+    return (((d1 > eps and d2 < -eps) or (d1 < -eps and d2 > eps))
+            and ((d3 > eps and d4 < -eps) or (d3 < -eps and d4 > eps)))
+
+
+# Tree shapes chosen to make an arrow work for its clearance: a landing
+# site in the middle of the tree, a target whose sibling is far deeper,
+# rightward movement, two arrows whose spans overlap, a roof in the way,
+# and a target that dominates its own source.
+CLEARANCE_CASES = {
+    "from_the_right_edge": [
+        "[CP [DP,name=w what] [C' [C did] [TP [DP John] "
+        "[VP [V see] [DP,name=t __]]]]]", "move t -> w"],
+    "landing_in_the_middle": [
+        "[CP [C that] [TP [DP,name=s __] [VP [V left] [DP,name=t __]]]]",
+        "move t -> s"],
+    "target_with_a_deep_sibling": [
+        "[S [A,name=a x] [B [C [D [E [F,name=f deep]]]]]]", "move f -> a"],
+    "rightward": ["[S [A,name=a x] [B [C y] [D,name=d z]]]", "move a -> d"],
+    "overlapping_spans": [
+        "[S [A,name=p 1] [B,name=q 2] [C,name=r 3] [D,name=s 4]]",
+        "move r -> p", "move s -> q"],
+    "under_a_roof": [
+        "[S [NP {the big tree, roof}] [VP [V,name=v left] [DP,name=t __]]]",
+        "move t -> v"],
+    "target_is_an_ancestor": [
+        "[CP,name=top [C that] [TP [VP [V see] [DP,name=t __]]]]",
+        "move t -> top"],
+}
+
+
+def check_arrow_clearance(ctx) -> int:
+    """No arrow crosses anything — node, branch or roof.
+
+    check_move_geometry tests arrows against node *boxes*; a branch is a
+    diagonal and would slip through that.  The property holds for a
+    structural reason rather than by luck: an arrow leaves and arrives at
+    the underside of a whole subtree, so it never enters one, and sibling
+    subtrees are laid out horizontally disjoint, so nothing else — node or
+    branch — sits at a riser's x over the span it travels.  Structural or
+    not, it is worth pinning: it was *not* true before arrows were moved
+    off node baselines onto subtree undersides.
+    """
+    print("--- arrow_clearance")
+    bad = 0
+    for name, lines in CLEARANCE_CASES.items():
+        doc = make_doc(ctx, lines)
+        msg = run(ctx, "TreeSelectionQuiet")
+        if msg:
+            print(f"    FAIL: {name}: macro said {msg.splitlines()[0]!r}")
+            doc.dispose()
+            bad += 1
+            continue
+        group = doc.getDrawPage().getByIndex(0)
+        parts = shapes_of(group)
+        obstacles = []
+        for i in range(group.getCount()):
+            shape = group.getByIndex(i)
+            kind = shape.getShapeType().rsplit(".", 1)[-1]
+            roof = kind == "PolyPolygonShape" and str(shape.FillStyle) == "NONE"
+            if kind == "LineShape" or roof:
+                obstacles += segments_of(shape)
+        doc.dispose()
+
+        cut = [(a, b) for a in parts["segments"] for b in obstacles
+               if segments_cross(a, b)]
+        through = [t for seg in parts["segments"]
+                   for t, box in parts["nodes"] if cuts_through(seg, box)]
+        if cut:
+            print(f"    FAIL: {name}: an arrow crosses a branch or roof at "
+                  f"{cut[0][0]}")
+            bad += 1
+        elif through:
+            print(f"    FAIL: {name}: an arrow passes through {through[0]!r}")
+            bad += 1
+        else:
+            print(f"    ok — {name}: {len(parts['arrows'])} arrow(s) clear of "
+                  f"{len(parts['nodes'])} nodes and {len(obstacles)} segments")
+    return bad
+
+
 def check_moves(ctx) -> int:
     """Movement arrows: named nodes, a move line, an arrow in the gutter."""
     print("--- moves")
@@ -1729,6 +1825,7 @@ def main() -> int:
     failures += check_bare_tree(ctx, out, profile)
     failures += check_moves(ctx)
     failures += check_move_geometry(ctx)
+    failures += check_arrow_clearance(ctx)
     failures += check_tree_alignment(ctx, out, profile)
     failures += check_tree_formatting(ctx)
 

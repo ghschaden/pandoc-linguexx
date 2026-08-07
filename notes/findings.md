@@ -1379,3 +1379,44 @@ wrong (`I` < `A` < `M`, `m` < `M`).
 `tests/test_tree_environments.py` pins forest and qtree end to end and the
 wording of the warning.  Confirmed it bites: removing the handler puts
 `]]]` back.
+
+## 2026-08-07 — the arrow routing that turned out not to be needed
+
+Listed twice as the open-ended part of movement: arrows that have to route
+*around* something.  Went to build a router and measured first, which is
+the only reason this entry is short.
+
+**There is nothing to route around.**  Nine tree shapes chosen to be
+awkward — a landing site in the middle of the tree, a target whose sibling
+is far deeper, rightward movement, two arrows with overlapping spans, a
+roof in the way, a target that dominates its own source — produce zero
+crossings against nodes, branches and roofs alike.
+
+The reason is structural, not luck, and it is worth writing down because it
+is not obvious:
+
+  * an arrow leaves and arrives at the *underside of a whole subtree*, so
+    it never enters the subtree it points at;
+  * sibling subtrees are laid out horizontally disjoint — `LxTPlace` packs
+    per tier and shifts whole subtrees — so at a riser's x, over the span
+    it travels, there is nothing belonging to anyone else;
+  * the horizontal run is in the gutter, below every node.
+
+The first of those is the fix made when arrows were reported as going
+through terminals.  It closed this too, which was not the intention at the
+time.
+
+**So the work was to pin it, not to build it.**  `check_move_geometry`
+tests arrows against node *boxes*, and a branch is a diagonal that slips
+straight through such a test.  `check_arrow_clearance` reads the shapes'
+own polygons back and does proper segment intersection against every branch
+and roof, over the seven awkward shapes.  Reverting arrows to node
+baselines fails all seven — six by crossing a branch, one by passing
+through a node — so the check earns its place.
+
+One case behaves oddly rather than wrongly: `move t -> top` where the target
+dominates the source.  The arrow lands under the target's *subtree* bottom,
+which is the deepest node in the tree, so it appears to point at whatever
+sits there.  That is meaningless input — a constituent cannot move to a
+position that dominates it — and it produces meaningless output without
+crossing anything.  Not worth engineering around; worth knowing.

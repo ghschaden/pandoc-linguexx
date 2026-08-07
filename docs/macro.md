@@ -201,7 +201,16 @@ in it is still refused, and the message points here.
 Refused by name: a `move` line with no `->`, a name no node carries, a node
 moving to itself, and move lines with no tree above them.
 
-Arrows above the tree, edge labels and custom routing are out of scope.
+**Nothing needs routing around.** An arrow crosses no node, no branch and
+no roof, in any tree — not by luck but by construction: it leaves and
+arrives at the underside of a whole subtree, so it never enters one, and
+sibling subtrees are laid out horizontally disjoint, so nothing sits at a
+riser's x over the span it travels. `check_arrow_clearance` pins it across
+seven awkward shapes — a landing site mid-tree, a target whose sibling is
+far deeper, rightward movement, two arrows with overlapping spans, a roof
+in the way, and a target that dominates its own source.
+
+Arrows above the tree and edge labels remain out of scope.
 
 ### Trees in a paradigm
 
@@ -451,7 +460,8 @@ without prose around it, two bare constituents, a partial bracketing, a
 transcription, an optional element, and a genuine tree typed into the wrong
 command. Three more pin that a non-tree item is refused by letter.
 
-`check_moves` and `check_move_geometry` cover movement. The geometry one
+`check_moves`, `check_move_geometry` and `check_arrow_clearance` cover
+movement. The geometry one
 tells the shapes apart by type rather than by order — a branch is a
 `LineShape`, an arrow a `PolyLineShape`, a filled `PolyPolygonShape` a
 head — and pins that every arrow runs below the deepest node, that two
@@ -461,7 +471,11 @@ caught), that each arrow's top meets the foot of its own head, and that no
 part of an arrow passes through a node box. That last one reads the shapes'
 own polygons back and tests each segment against each node, so it is the
 real invariant rather than a proxy for it — aim an arrow at a node's
-baseline instead of its subtree's underside and it fails. That
+baseline instead of its subtree's underside and it fails.
+
+`check_arrow_clearance` widens that to branches and roofs, which a
+box test cannot see because a branch is a diagonal. Aiming arrows at node
+baselines again fails all seven of its trees. That
 last one exists because getting the polygon's box origin wrong sinks the
 arrow away from its head while leaving something that still looks like an
 arrow and still counts as one.
