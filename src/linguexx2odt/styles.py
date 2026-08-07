@@ -135,10 +135,18 @@ class Layout:
     20% — so a \\textsc or \\lpzg column measured as lowercase is too
     narrow for what goes in it."""
 
-    width_safety: float = 1.06
-    """Multiplier on the width estimate.  Real font metrics are not
-    available to us, so err wide: a column a little too generous merely
-    looks loose, one a little too narrow breaks a word across two lines."""
+    width_safety: float = 1.02
+    """Multiplier on the width estimate.  Err wide: a column a little too
+    generous merely looks loose, one a little too narrow breaks a word
+    across two lines.
+
+    It was 1.06 when the advance table was a four-bucket guess that already
+    ran 6.7% wide on its own — so the margin was insuring against a bias in
+    the same direction, and columns came out some 13% too generous.  With
+    measured advances the estimate runs a median 2.9% wide (it sums
+    advances and so cannot see kerning, which only ever narrows) and 1.7%
+    narrow at worst over the test vocabulary, which 1.02 covers.  What is
+    left insures against a body face that is not Times-metric."""
 
     pad_cm: float = 0.16
     """Breathing room between adjacent word columns."""

@@ -1298,3 +1298,84 @@ One bug the refusal tests found: `LxSplitMoves` clears `LxTErr`, so the
 *next* item's processing erased the error the previous item had raised.
 `LxParseItems` now takes the error the moment it is raised rather than
 collecting it at the end.
+
+## 2026-08-07 — the converter destroyed trees, and its widths were biased
+
+Two things found by asking what was left rather than by a report.
+
+### A forest environment came out as "]]]"
+
+    \ex. \begin{forest}
+    [CP [DP what] [C' [C did] [TP [V see]]]]
+    \end{forest}
+
+converted to example (2) reading `]]]`.  `\begin` is not a command the
+inline renderer knows, so the whole fragment went to pandoc, which threw
+the tree away and left the closing brackets behind.  A warning did fire —
+so not silent — but the README's rule is "degrades to *readable* output
+rather than to nothing", and three brackets are not that.
+
+There is no way to draw a tree from here: that needs the draw shapes only
+Writer can make.  But the brackets are exactly what the Writer macro reads,
+so they are now kept whole and the warning says what to do with them:
+select them and run **Typeset unnumbered tree** — unnumbered, because the
+example around them already supplies the number.  Verified end to end:
+LaTeX in, converted ODT, select the cell, run the macro, tree drawn inside
+example (2) with its number intact.
+
+qtree's `\Tree [.S [.NP ] ]` gets the same treatment, with `[.` reduced to
+`[` so what lands is notation the macro can parse.
+
+### The advance table was 8.3% out and biased
+
+`_advance` was four buckets: wide 0.90, narrow 0.32, capitals 0.70, the
+rest 0.50.  Measured against Liberation Serif (metric-compatible with Times
+New Roman, which is the face it targets):
+
+    mean absolute error   8.3%
+    mean signed error    +6.7%  — it overestimated nearly everything
+    worst                 I +113%, J +79%, ' +71%, w +25%, F/P/S +24%
+
+`I` is the one that stings: INF, IND, INS, and much of the rest of the
+Leipzig list.  Gloss columns were the worst served by a table that was
+supposed to help them.
+
+Worse, `width_safety = 1.06` was multiplying on top of that bias.  The
+margin existed to guard against *under*estimating, and the table already
+overestimated by about the same amount, so columns ran some 13% too
+generous — one error hiding inside another.
+
+The table is now 217 measured advances, and matches published Times metrics
+to three decimals (`a` 0.444, `M` 0.889, `I` 0.333, `m` 0.778).  Mean
+absolute error 0.7%, signed +0.4% — what is left is the rounding.
+
+`width_safety` is 1.02, chosen from measurement rather than habit: over a
+test vocabulary the estimate runs a median 2.9% wide (summing advances
+cannot see kerning, which only ever narrows) and 1.7% narrow at worst, so
+1.02 covers every case with a little room.  What remains insures against a
+body face that is not Times-metric, which is the only thing it should ever
+have been insuring against.
+
+The documented estimate error goes from "-7% to +28%" to "-2% to +9%".
+
+**Two tests had to be relaxed, and both were over-specified.**
+`test_overlong_example_is_split_into_aligned_bands` asserted the second
+band starts on the word "que"; narrower columns legitimately move the break
+and the README already says the reference fixes the band *pattern*, never
+the break points.  And the `\lpzg` width test used "bbb" as the object word
+above the gloss — wide enough that it, not the gloss, set the column, so
+the test would have passed whatever the gloss measured.  A single narrow
+letter there restores what it was meant to prove.
+
+### Verification
+
+`tools/measure_advances.py` checks all 217 against the real font, the way
+`tools/sync_macro.py` checks the shared constants — so the table has a
+provenance rather than being magic numbers.  Three cheap tests in
+`tests/test_width.py` spot-check it against published Times metrics without
+needing LibreOffice, and pin the two collisions that made the old table
+wrong (`I` < `A` < `M`, `m` < `M`).
+
+`tests/test_tree_environments.py` pins forest and qtree end to end and the
+wording of the warning.  Confirmed it bites: removing the handler puts
+`]]]` back.

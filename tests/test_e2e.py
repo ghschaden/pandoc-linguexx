@@ -284,8 +284,11 @@ def test_overlong_example_is_split_into_aligned_bands(pdf: Path) -> None:
     ys = [y for y in sorted(rows) if y >= start][:4]
     band1_obj, band1_gloss, band2_obj, band2_gloss = (sorted(rows[y]) for y in ys)
 
-    # the second band exists at all, and restarts at the left text edge
-    assert band2_obj and band2_obj[0][1] == "que", "example (11) was not split"
+    # The second band exists at all, and restarts at the left text edge.
+    # Which word it starts on is deliberately not asserted: the reference
+    # document fixes the band *pattern*, never the break points, and a
+    # better width estimate legitimately moves them.
+    assert band2_obj, "example (11) was not split"
     left = [x for x, t in band1_obj if not t.startswith("(")][0]
     assert abs(band2_obj[0][0] - left) < 1.0, "a continuation band is not left-aligned"
 

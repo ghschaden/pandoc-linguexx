@@ -399,6 +399,16 @@ n'en est pas un est refusé **avec sa lettre** (« Sub-example b. is not a
 tree »), avant toute construction. Pour mettre un arbre à côté d'un exemple
 glosé, faites-en deux exemples.
 
+#### Un arbre venu de LaTeX
+
+Le convertisseur ne sait pas dessiner d'arbre, mais il ne le détruit plus :
+un environnement `\begin{forest}…\end{forest}` (ou `\Tree` de qtree)
+arrive dans le document converti sous forme de **notation entre crochets**,
+dans l'exemple auquel il appartient.
+
+Sélectionnez ces crochets et lancez **Composer l'arbre sans numéro** — sans
+numéro, car l'exemple qui les entoure en fournit déjà un.
+
 #### Un arbre sans numéro
 
 Tous les arbres ne doivent pas consommer un numéro d'exemple : celui d'une

@@ -34,7 +34,7 @@ import pytest
 
 from linguexx2odt import postprocess
 from linguexx2odt.cli import main
-from linguexx2odt.emit_odt import runs_width_cm, text_width_cm
+from linguexx2odt.emit_odt import _ADVANCE, _advance, runs_width_cm, text_width_cm
 from linguexx2odt.inline import InlineRenderer
 from linguexx2odt.styles import Layout
 
@@ -105,10 +105,13 @@ def test_runs_marks_only_the_small_caps_part() -> None:
     assert renderer.plain("und \\lpzg{3sg} dann") == "und 3sg dann"
 
 
+# The object word above the gloss is a single narrow letter, so the gloss
+# is what its column is measured on.  With a wide word there — "bbb" — the
+# column is the object language's either way and the test proves nothing.
 TEX = """\\documentclass[a4paper]{article}
 \\usepackage[lazy]{linguexx}
 \\begin{document}
-\\ex. \\gll Aaa bbb ccc \\\\
+\\ex. \\gll Aaa i ccc \\\\
      xxx %s zzz \\\\
 \\glt `A test.'
 \\end{document}
@@ -152,3 +155,37 @@ def test_a_leipzig_gloss_widens_its_own_column_only(tmp_path: Path) -> None:
         f"the \\lpzg column is {marked[moved[0]]}cm against the lowercase "
         f"{plain[moved[0]]}cm — it was measured as lowercase"
     )
+
+
+# Published Times New Roman advances, which Liberation Serif matches.  A
+# spot check, so an accidental edit to the table is caught without needing
+# a running LibreOffice; tools/measure_advances.py checks all 217 against
+# the real font.
+TIMES_EM = {" ": 0.250, "a": 0.444, "e": 0.444, "i": 0.278, "m": 0.778,
+            "w": 0.722, "A": 0.722, "I": 0.333, "M": 0.889, "W": 0.944,
+            "0": 0.500, ".": 0.250, "-": 0.333}
+
+
+def test_advances_match_times_metrics() -> None:
+    for ch, expected in TIMES_EM.items():
+        assert _advance(ch) == pytest.approx(expected, abs=0.005), (
+            f"{ch!r} is {_advance(ch)} em, Times says {expected}"
+        )
+
+
+def test_advances_replaced_the_four_bucket_guess() -> None:
+    """The guess gave every capital 0.70 and 'm'/'M' the same 0.90.
+
+    Those two collisions are what made it 8.3% out, worst of all on 'I' —
+    which is in INF, IND, INS and most of the rest of the Leipzig list.
+    """
+    assert _advance("I") < _advance("A") < _advance("M")
+    assert _advance("m") < _advance("M")
+    assert _advance("i") < _advance("I")
+    assert len(_ADVANCE) > 200, "the measured table is not being used"
+
+
+def test_an_uncovered_character_still_gets_a_width() -> None:
+    for ch in ("漢", "\u2603"):
+        assert 0.0 < _advance(ch) <= 1.0
+

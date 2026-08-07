@@ -185,7 +185,7 @@ faire deux choses que le convertisseur ne peut structurellement pas
 faire :
 
 - elle **mesure la police réelle**, au lieu d'estimer la largeur des
-  colonnes (l'estimation du convertisseur se trompe de −7 % à +28 %) ;
+  colonnes (l'estimation du convertisseur se trompe de −2 % à +9 %) ;
 - elle lit la **vraie largeur du bloc de texte** dans le style de page du
   document, au lieu de faire confiance à `--text-width`.
 

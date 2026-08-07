@@ -65,24 +65,75 @@ def sequence_ref(index: int, letter: str = "") -> str:
     )
 
 
-#: Rough Times-like advance widths, in em.  Not real metrics — just far
-#: better than counting characters, which made "AAA" narrower than "aaa".
-_WIDE = "MWmw%@"
-_NARROW = "iljtfr.,;:!'`|()[]{}-"
+#: Advance widths in em, measured from Liberation Serif — metric-compatible
+#: with Times New Roman, which is the face this estimate targets.  Check or
+#: reprint them with ``python3 tools/measure_advances.py``.
+#:
+#: These replace a four-bucket guess (wide 0.90 / narrow 0.32 / caps 0.70 /
+#: the rest 0.50) that was 8.3% out on average and, worse, 6.7% out in one
+#: direction: it overestimated nearly everything, with 'I' 113% too wide and
+#: 'J' 79%.  Both are common in Leipzig glosses — INF, IND, INS — so gloss
+#: columns were the worst affected, and width_safety was multiplying on top
+#: of a bias it was supposed to be insuring against.
+# --- BEGIN MEASURED — see tools/measure_advances.py
+_ADVANCE: dict[str, float] = {
+    ' ': 0.251, '!': 0.334, '"': 0.409, '#': 0.502, '$': 0.502,
+    '%': 0.832, '&': 0.78, "'": 0.18, '(': 0.334, ')': 0.334, '*': 0.502,
+    '+': 0.566, ',': 0.251, '-': 0.334, '.': 0.251, '/': 0.277,
+    '0': 0.502, '1': 0.502, '2': 0.502, '3': 0.502, '4': 0.502,
+    '5': 0.502, '6': 0.502, '7': 0.502, '8': 0.502, '9': 0.502,
+    ':': 0.277, ';': 0.277, '<': 0.566, '=': 0.566, '>': 0.566,
+    '?': 0.446, '@': 0.922, 'A': 0.724, 'B': 0.667, 'C': 0.667,
+    'D': 0.724, 'E': 0.611, 'F': 0.555, 'G': 0.724, 'H': 0.724,
+    'I': 0.334, 'J': 0.39, 'K': 0.724, 'L': 0.611, 'M': 0.889, 'N': 0.724,
+    'O': 0.724, 'P': 0.555, 'Q': 0.724, 'R': 0.667, 'S': 0.555,
+    'T': 0.611, 'U': 0.724, 'V': 0.724, 'W': 0.945, 'X': 0.724,
+    'Y': 0.724, 'Z': 0.611, '[': 0.334, '\\': 0.277, ']': 0.334,
+    '^': 0.469, '_': 0.502, '`': 0.334, 'a': 0.446, 'b': 0.502,
+    'c': 0.446, 'd': 0.502, 'e': 0.446, 'f': 0.334, 'g': 0.502,
+    'h': 0.502, 'i': 0.277, 'j': 0.277, 'k': 0.502, 'l': 0.277, 'm': 0.78,
+    'n': 0.502, 'o': 0.502, 'p': 0.502, 'q': 0.502, 'r': 0.334, 's': 0.39,
+    't': 0.277, 'u': 0.502, 'v': 0.502, 'w': 0.724, 'x': 0.502,
+    'y': 0.502, 'z': 0.446, '{': 0.48, '|': 0.199, '}': 0.48, '~': 0.54,
+    '\xa0': 0.251, '¡': 0.334, '¢': 0.502, '£': 0.502, '¤': 0.502,
+    '¥': 0.502, '¦': 0.199, '§': 0.502, '¨': 0.334, '©': 0.761,
+    'ª': 0.277, '«': 0.502, '¬': 0.566, '\xad': 0.0, '®': 0.761,
+    '¯': 0.502, '°': 0.401, '±': 0.551, '²': 0.3, '³': 0.3, '´': 0.334,
+    'µ': 0.577, '¶': 0.454, '·': 0.334, '¸': 0.334, '¹': 0.3, 'º': 0.311,
+    '»': 0.502, '¼': 0.75, '½': 0.75, '¾': 0.75, '¿': 0.446, 'À': 0.724,
+    'Á': 0.724, 'Â': 0.724, 'Ã': 0.724, 'Ä': 0.724, 'Å': 0.724,
+    'Æ': 0.889, 'Ç': 0.667, 'È': 0.611, 'É': 0.611, 'Ê': 0.611,
+    'Ë': 0.611, 'Ì': 0.334, 'Í': 0.334, 'Î': 0.334, 'Ï': 0.334,
+    'Ð': 0.724, 'Ñ': 0.724, 'Ò': 0.724, 'Ó': 0.724, 'Ô': 0.724,
+    'Õ': 0.724, 'Ö': 0.724, '×': 0.566, 'Ø': 0.724, 'Ù': 0.724,
+    'Ú': 0.724, 'Û': 0.724, 'Ü': 0.724, 'Ý': 0.724, 'Þ': 0.555,
+    'ß': 0.502, 'à': 0.446, 'á': 0.446, 'â': 0.446, 'ã': 0.446,
+    'ä': 0.446, 'å': 0.446, 'æ': 0.667, 'ç': 0.446, 'è': 0.446,
+    'é': 0.446, 'ê': 0.446, 'ë': 0.446, 'ì': 0.277, 'í': 0.277,
+    'î': 0.277, 'ï': 0.277, 'ð': 0.502, 'ñ': 0.502, 'ò': 0.502,
+    'ó': 0.502, 'ô': 0.502, 'õ': 0.502, 'ö': 0.502, '÷': 0.551,
+    'ø': 0.502, 'ù': 0.502, 'ú': 0.502, 'û': 0.502, 'ü': 0.502,
+    'ý': 0.502, 'þ': 0.502, 'ÿ': 0.502, 'ŋ': 0.495, 'ɑ': 0.525,
+    'ɔ': 0.446, 'ə': 0.446, 'ɛ': 0.42, 'ɜ': 0.42, 'ɡ': 0.502, 'ɪ': 0.277,
+    'ʃ': 0.334, 'ʊ': 0.551, 'ʌ': 0.502, 'ʒ': 0.446, 'ˈ': 0.334,
+    'ˌ': 0.334, 'ː': 0.277, 'θ': 0.48, '‐': 0.334, '–': 0.502, '—': 1.001,
+    '‘': 0.334, '’': 0.334, '“': 0.446, '”': 0.446, '…': 1.001,
+    '′': 0.217, '″': 0.416,
+}
+# --- END MEASURED
+
+#: For anything the table does not cover.  Deliberately unambitious: Latin
+#: text is covered, and a script that is not (CJK, rarer IPA) is not going
+#: to be served by a single number anyway.
+_FALLBACK_UPPER = 0.667
+_FALLBACK_OTHER = 0.5
 
 
 def _advance(ch: str) -> float:
-    if ch in _WIDE:
-        return 0.90
-    if ch in _NARROW:
-        return 0.32
-    if ch == " ":
-        return 0.25
-    if ch.isupper():
-        return 0.70
-    if ch.isdigit():
-        return 0.50
-    return 0.50
+    width = _ADVANCE.get(ch)
+    if width is not None:
+        return width
+    return _FALLBACK_UPPER if ch.isupper() else _FALLBACK_OTHER
 
 
 def text_width_cm(text: str, em_cm: float) -> float:

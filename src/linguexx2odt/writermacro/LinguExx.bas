@@ -33,7 +33,7 @@
 ' What this can do that linguexx2odt cannot is *measure*.  The converter
 ' estimates column widths from per-character advance widths because it has
 ' no font metrics; here the real font is on hand, so columns are exactly
-' as wide as their contents (the estimate is off by -7% to +28% in
+' as wide as their contents (the estimate is off by -2% to +9% in
 ' practice).  The available text width likewise comes from the actual page
 ' style rather than from a --text-width flag.
 '

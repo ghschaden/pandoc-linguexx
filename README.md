@@ -158,6 +158,7 @@ readable output rather than to nothing:
 | `\ex.` inside `itemize`, `enumerate`, `footnote`, `exe`/`xlist` | left as LaTeX, untouched |
 | `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped |
 | `\exsource{…}` | rendered inline at the end, not flush right |
+| `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro to draw |
 | `\refrange`, `\Last`, `\Next`, relative references | left as LaTeX |
 | `\altn`, `\altg` | left as LaTeX |
 | gb4e `exe`/`xlist` syntax, `[legacy]` mode | out of scope |
@@ -168,12 +169,14 @@ readable output rather than to nothing:
 
 Two of these are inherent to the table method, not defects:
 
-1. **Column widths are guesses.** Real font metrics are not available to
-   the converter, so widths are estimated from per-character advance
-   widths for a Times-like face at 12 pt, erring slightly wide. Drag the
-   column edges in Writer if a column looks wrong, or set `--font-pt` if
-   your body text is not 12 pt. The Writer macro below does not have this
-   limitation — it measures.
+1. **Column widths are estimated.** Real font metrics are not available
+   at conversion time, so widths come from a table of per-character
+   advances measured from Liberation Serif — metric-compatible with Times
+   New Roman — and err slightly wide: −2% to +9% of the rendered width
+   before `width_safety`. Drag the column edges in Writer if a column
+   looks wrong, or set `--font-pt` if your body text is not 12 pt. The
+   Writer macro below does not have this limitation — it measures.
+   `python3 tools/measure_advances.py` checks the table against the font.
 
    Text is estimated as it is *drawn*, not as it is spelled: `\lpzg{…}`
    and `\textsc{…}` set small capitals, which are the capitals at 80% of
@@ -206,7 +209,7 @@ named styles, same `NumEx` field, same hanging judgment marks.
 
 It exists because a macro can do two things the converter cannot: it
 **measures the real font** instead of estimating column widths (the
-estimate is off by −7% to +28%), and it reads the **actual page style**
+estimate is off by −2% to +9%), and it reads the **actual page style**
 instead of taking `--text-width` on trust. Since it shares the style
 names, it also works as a post-processor on converted documents.
 

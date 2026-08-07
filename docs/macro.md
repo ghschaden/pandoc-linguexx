@@ -66,7 +66,7 @@ example*.
 
 - **Measures the real font.** The converter has no font metrics and
   estimates column widths from per-character advance widths, which is off
-  by −7% to +28% in practice. Here the actual font is available, so
+  by −2% to +9% in practice. Here the actual font is available, so
   columns are exactly as wide as their contents.
 - **Reads the real page.** The available text width comes from the page
   style in front of you, not from a `--text-width` flag — so it is right
@@ -241,6 +241,21 @@ sentence.
 A real tree typed into *Typeset example* stays text too. An earlier attempt
 to guess narrowly — requiring the root to have children — kept `[ˈkæt]`
 safe and still swallowed every fully bracketed sentence.
+
+### Trees that came from LaTeX
+
+`linguexx2odt` cannot draw a tree — that needs draw shapes, and it has no
+Writer to make them in. What it does instead is keep one: a
+`\begin{forest}…\end{forest}` environment (or qtree's `\Tree`) arrives in
+the converted document as its **bracket notation**, inside the example it
+belongs to, with a warning saying so.
+
+Select those brackets and run **Typeset unnumbered tree** — unnumbered,
+because the example around them already supplies the number. The tree is
+drawn in place and the numbering is untouched.
+
+Before this, the environment went to pandoc and the example came out as
+`]]]`.
 
 ### Trees without a number
 

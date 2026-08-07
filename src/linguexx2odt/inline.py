@@ -265,7 +265,82 @@ class InlineRenderer:
             out.append(esc(SYMBOLS[name]))
             return j
 
+        if name in ("begin", "end"):
+            end = self._tree_environment(s, name, j, out)
+            if end is not None:
+                return end
+
+        if name in ("Tree", "qtree"):
+            return self._qtree(s, j, out)
+
         raise Unsupported(f"unhandled command \\{name}")
+
+    # -- trees ------------------------------------------------------------
+    #: environments whose body is bracket notation the Writer macro can draw
+    TREE_ENVIRONMENTS = ("forest",)
+
+    def _tree_environment(self, s: str, name: str, j: int, out: list[str]):
+        """``\begin{forest} … \end{forest}`` -> its bracket notation, as text.
+
+        Handed to pandoc this became ``]]]`` — the tree gone and three
+        closing brackets left behind, which is not the "degrades to
+        readable output" this converter promises anywhere else.  There is
+        no way to *draw* it from here (that needs the draw shapes only
+        Writer can make), but the brackets are exactly what the macro
+        reads, so they are kept whole and the warning says what to do with
+        them.
+        """
+        grp = find_group(s, j)
+        if grp is None or grp[0] not in self.TREE_ENVIRONMENTS:
+            return None
+        env = grp[0]
+        if name == "end":                     # a stray \end: nothing to keep
+            return grp[1]
+
+        close = f"\\end{{{env}}}"
+        stop = s.find(close, grp[1])
+        if stop < 0:
+            raise Unsupported(f"\\begin{{{env}}} is never closed")
+
+        body = " ".join(s[grp[1]:stop].split())
+        self.warn(
+            f"{env} tree kept as bracket notation; select it in Writer and "
+            f"run LinguExx > Typeset unnumbered tree (the example already "
+            f"supplies the number)"
+        )
+        out.append(esc(body))
+        return stop + len(close)
+
+    def _qtree(self, s: str, j: int, out: list[str]) -> int:
+        """qtree's ``\Tree [.S [.NP ] ]`` -> the same notation, undotted.
+
+        qtree marks a label with a leading dot; the macro does not, so the
+        dots come off and what is left is notation it can draw.
+        """
+        depth, k = 0, j
+        while k < len(s) and s[k] in " \t":
+            k += 1
+        start = k
+        while k < len(s):
+            if s[k] == "[":
+                depth += 1
+            elif s[k] == "]":
+                depth -= 1
+                if depth == 0:
+                    k += 1
+                    break
+            k += 1
+        if depth != 0:
+            raise Unsupported("\\Tree without a balanced bracket group")
+
+        body = " ".join(s[start:k].split()).replace("[.", "[")
+        self.warn(
+            "qtree tree kept as bracket notation; select it in Writer and "
+            "run LinguExx > Typeset unnumbered tree (the example already "
+            "supplies the number)"
+        )
+        out.append(esc(body))
+        return k
 
     # -- pandoc fallback --------------------------------------------------
     def _pandoc(self, latex: str) -> str:
