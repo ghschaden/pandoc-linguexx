@@ -149,6 +149,36 @@ ADDONS_XCU = """<?xml version="1.0" encoding="UTF-8"?>
               <value>com.sun.star.text.TextDocument</value>
             </prop>
           </node>
+          <node oor:name="m02" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>vnd.sun.star.script:{library}.{module}.TreeSelection?language=Basic&amp;location=application</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Typeset tree</value>
+              <value xml:lang="fr">Composer l'arbre</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m03" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>vnd.sun.star.script:{library}.{module}.TreeSelectionBare?language=Basic&amp;location=application</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Typeset tree (no number)</value>
+              <value xml:lang="fr">Composer l'arbre (sans numéro)</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
         </node>
       </node>
     </node>

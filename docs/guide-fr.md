@@ -124,6 +124,12 @@ linguexx2odt fichier.tex [-o sortie.odt]
 | `-v`, `--verbose` | résume ce qui a été converti |
 | `--print-macro` | affiche le code de la macro Writer et s'arrête |
 
+> **Les petites capitales sont estimées telles qu'elles sont dessinées.**
+> `\lpzg{…}` et `\textsc{…}` composent des petites capitales, c'est-à-dire
+> les majuscules à 80 % du corps — donc plus larges que les minuscules
+> qu'elles remplacent, pour la plupart des lettres. Une colonne de gloses
+> mesurée sur les minuscules serait trop étroite pour son propre contenu.
+
 > **Important à propos de `--text-width`.** La largeur des colonnes et
 > l'endroit où un exemple trop long est coupé en bandes sont calculés **au
 > moment de la conversion**, puis figés. Si vous changez la géométrie de
@@ -182,6 +188,23 @@ faire :
   colonnes (l'estimation du convertisseur se trompe de −7 % à +28 %) ;
 - elle lit la **vraie largeur du bloc de texte** dans le style de page du
   document, au lieu de faire confiance à `--text-width`.
+
+Elle sait aussi **dessiner des arbres syntaxiques** à partir d'une notation
+entre crochets — `[DP [D le] [NP [N arbre]]]` — sous forme d'un groupe de
+formes de dessin ancré dans le même tableau qu'un exemple ordinaire, donc
+numéroté et aligné comme lui — ou, avec une seconde commande, sans numéro
+du tout, pour une note de bas de page ou une figure. Les flèches de
+mouvement s'écrivent en nommant deux nœuds et en ajoutant `move t -> wh`
+sous l'arbre. Voir
+[`manuel-extension-fr.md`](manuel-extension-fr.md) § 4.9.
+
+Le **formatage que vous avez appliqué à la main est conservé** : petites
+capitales d'une glose Leipzig, italique de la langue objet, gras,
+exposants, styles de caractère. Chaque passage est de plus mesuré dans la
+police dans laquelle il sera effectivement dessiné — les petites capitales
+sont des capitales à 80 % du corps, donc 10 à 20 % **plus larges** que les
+minuscules qu'elles remplacent : une colonne mesurée sur les minuscules
+serait trop étroite et le texte y reviendrait à la ligne.
 
 ## B.1 Installation
 

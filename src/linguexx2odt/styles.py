@@ -87,6 +87,7 @@ MACRO_LENGTHS: dict[str, str] = {
     "MARKER_CM": "marker_cm",
     "JUDG_GAP_CM": "judgment_gap_cm",
     "SPACE_CM": "space_cm",
+    "SC_RATIO": "sc_ratio",
 }
 
 #: Deliberately *not* shared, with the reason — so that a value missing from
@@ -123,6 +124,16 @@ class Layout:
 
     font_pt: float = 12.0
     """Body font size assumed when estimating column widths."""
+
+    sc_ratio: float = 0.8
+    """What a small capital is drawn at, as a fraction of the font size.
+
+    Measured against rendered PDF at 12 pt Liberation Serif, not guessed:
+    modelling every lowercase letter as its capital at this size reproduces
+    what LibreOffice actually draws to within a few percent.  It matters
+    because small caps are *wider* than the lowercase they replace — 10% to
+    20% — so a \\textsc or \\lpzg column measured as lowercase is too
+    narrow for what goes in it."""
 
     width_safety: float = 1.06
     """Multiplier on the width estimate.  Real font metrics are not

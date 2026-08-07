@@ -90,6 +90,31 @@ def text_width_cm(text: str, em_cm: float) -> float:
     return sum(_advance(c) for c in text) * em_cm
 
 
+def _sc_advance(ch: str, sc_ratio: float) -> float:
+    """A small capital: the *capital's* advance, at sc_ratio of the size.
+
+    Which is usually wider than the lowercase letter it stands in for —
+    small-cap I against lowercase i is the extreme case — and occasionally
+    narrower, for the letters that are already wide in lowercase.
+    """
+    if ch.islower():
+        return _advance(ch.upper()) * sc_ratio
+    return _advance(ch)
+
+
+def runs_width_cm(runs, em_cm: float, sc_ratio: float) -> float:
+    """Estimated width of (text, is_small_caps) runs, each measured as drawn.
+
+    Small caps have to be measured as what they draw as, not as what they
+    say: \\lpzg{3sg} sets three small capitals, and estimating them from
+    "3sg" makes the column too narrow for its own contents.
+    """
+    return em_cm * sum(
+        sum(_sc_advance(c, sc_ratio) if small_caps else _advance(c) for c in text)
+        for text, small_caps in runs
+    )
+
+
 class Grid:
     """The shared column grid of one example's table.
 
@@ -186,11 +211,15 @@ class Emitter:
         judgment = 0.0
         if marks:
             judgment = lay.judgment_gap_cm + max(
-                text_width_cm(self.inline.plain(m), lay.em_cm) for m in marks
+                runs_width_cm(self.inline.runs(m), lay.em_cm, lay.sc_ratio)
+                for m in marks
             )
 
         numbers = [ex.custom_label or f"({ex.index + 1})" for ex in examples] or ["(1)"]
-        number = max(text_width_cm(self.inline.plain(n), lay.em_cm) for n in numbers)
+        number = max(
+            runs_width_cm(self.inline.runs(n), lay.em_cm, lay.sc_ratio)
+            for n in numbers
+        )
         letters = [it.marker for ex in examples for it in ex.items] or ["a."]
         letter = max(text_width_cm(m, lay.em_cm) for m in letters)
 
@@ -373,7 +402,9 @@ class Emitter:
             for tier in body.tiers:
                 for i, cell in enumerate(tier.cells):
                     widest[i] = max(
-                        widest[i], text_width_cm(self.inline.plain(cell), lay.em_cm)
+                        widest[i],
+                        runs_width_cm(self.inline.runs(cell), lay.em_cm,
+                                      lay.sc_ratio),
                     )
         return [
             min(lay.max_col_cm, max(lay.min_col_cm, w * lay.width_safety + lay.pad_cm))

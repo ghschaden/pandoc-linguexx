@@ -109,8 +109,22 @@ class InlineRenderer:
             self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
             return self._pandoc(latex)
 
+    #: character styles that draw their text as small capitals
+    SMALLCAPS_STYLES = frozenset({LEIPZIG, SMALLCAPS})
+
     def plain(self, latex: str) -> str:
         """Approximate rendered text, used only for column-width guessing."""
+        return "".join(text for text, _small_caps in self.runs(latex))
+
+    def runs(self, latex: str) -> list[tuple[str, bool]]:
+        """Approximate rendered text as (text, is_small_caps) runs.
+
+        Width estimation needs to know which parts are small caps and
+        cannot get that from the flattened string: a small capital is the
+        capital drawn at Layout.sc_ratio, which is *wider* than the
+        lowercase letter it replaces, so a ``\\lpzg`` gloss measured as
+        lowercase comes out too narrow for what is put in it.
+        """
         try:
             xml = self._render(latex)
         except Unsupported:
@@ -120,18 +134,41 @@ class InlineRenderer:
                 if ch == "\\":
                     depth = 0
                 xml += ch
-        out, i = [], 0
+
+        runs: list[tuple[str, bool]] = []
+        spans: list[str] = []                  # open <text:span> styles
+        buf: list[str] = []
+
+        def flush() -> None:
+            if buf:
+                runs.append(("".join(buf), self._small_caps(spans)))
+                buf.clear()
+
+        i = 0
         while i < len(xml):
             if xml[i] == "<":
                 j = xml.find(">", i)
+                tag = xml[i + 1:j] if j >= 0 else ""
+                if tag.startswith("text:span") and not tag.endswith("/"):
+                    flush()
+                    m = re.search(r'text:style-name="([^"]*)"', tag)
+                    spans.append(m.group(1) if m else "")
+                elif tag == "/text:span" and spans:
+                    flush()
+                    spans.pop()
                 i = len(xml) if j < 0 else j + 1
                 continue
-            out.append(xml[i])
+            buf.append(xml[i])
             i += 1
-        return (
-            "".join(out)
-            .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
-        )
+        flush()
+
+        return [
+            (t.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"), sc)
+            for t, sc in runs
+        ]
+
+    def _small_caps(self, spans: list[str]) -> bool:
+        return any(name in self.SMALLCAPS_STYLES for name in spans)
 
     # -- hand-rolled renderer --------------------------------------------
     def _render(self, s: str) -> str:

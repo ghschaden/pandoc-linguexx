@@ -809,3 +809,407 @@ earlier edit meant to change it to `--headless` had silently not matched,
 and the unconditional "ok" print hid that.  Stray `--invisible` instances
 outlived their runs and squatted on port 2084, which is what produced a
 "Binary URP bridge disposed" mid-run.  The replacement now asserts.
+
+## 2026-08-07 — the macro kept the words and threw the formatting away
+
+Reported from `tests/small_caps.odt`: a gloss tier typed in small caps came
+out of `GlossSelection` as plain lowercase.  `LxSelectedLines` read the
+selection with `oRange.getString()`, which is a string — every bit of
+character formatting went in the bin at the first line of the macro.
+
+The comment there said enumerating the selection's paragraphs "does not
+work — it yields a single empty element", and that is true of a text
+*cursor* built from the selection.  Enumerating the selection **range**
+works, and does the awkward part for free: the text portions it hands back
+are already clipped to the selection, so a half-selected paragraph yields
+exactly the half that was selected.  No `compareRegionStarts` arithmetic
+is needed.  Confirmed against a selection starting mid-word in one
+paragraph and ending mid-word in the next.
+
+**Formatting rides through the pipeline in the string.** Every run gets a
+one-character mark from the private use area (U+E000 + format index) in
+front of it; the format itself lives in the `LxFmt*` arrays.  The
+alternative — a parallel structure of offsets — would have to survive
+trimming, brace splitting, judgment pulling, banding and cell merging, all
+of which already move text around.  A mark is just a character, so it moves
+with the text it belongs to and nothing in between has to know.  A mark is
+re-emitted after every space, so every *word* carries its own, which is
+what makes `LxSplitWords` the only place that had to learn about them.
+
+Font name and size are deliberately **not** carried.  Carrying them would
+mean writing them back as direct formatting on every cell, and then editing
+`LxExampleCell` would no longer change the example — which is the point of
+the styles.  `LxApplyFmt` for the same reason applies the character style
+first and each property only if it is not already what the style gave, so
+text nobody formatted by hand comes out with no direct formatting at all
+and a run that carried `LxLeipzig` still answers to `LxLeipzig`.
+
+**The measurement half is the part that makes it a layout bug.** Small caps
+are capitals at `SC_RATIO` of the font size, and that is *wider* than the
+lowercase they stand in for, not narrower — measured against rendered PDF
+at 12pt Liberation Serif: `prs` 0.503cm → 0.608cm, `ind` 0.529 → 0.582,
+`3sg.nom` 1.429 → 1.534, `abcdefghij` 1.746 → 2.063.  Between 10% and 20%.
+A column measured on the lowercase is too narrow for what is put in it and
+the cell wraps; a band packed on the lowercase holds one word too many and
+runs off the text block, which is why this bites hardest on a multiline
+example.  `SC_RATIO = 0.8` reproduces those measurements to within a few
+percent — the same accuracy the full-size measurement already had.
+
+There is no small-caps field in `com.sun.star.awt.FontDescriptor`, so it is
+modelled: a second font at `SC_RATIO`, and every lowercase letter measured
+as its capital in that font.  Runs of like characters are measured together
+rather than one at a time, so kerning still counts.  Bold, italic and
+sub/superscript get the same treatment — one measuring font per run format,
+built once in `LxBuildFmtFonts`.
+
+`Asc()` on a private-use codepoint returns 57347, not an overflow, and
+`Chr(57344 + n)` round-trips — checked in Basic before relying on it.
+
+### Verification
+
+Two checks, because "does it preserve the formatting" and "does it measure
+the formatting" are different questions.
+
+`check_small_caps` builds the same example three times: glosses in small
+caps, in lowercase, and in real capitals.  The file must still spell the
+gloss `sleep.pst.3sg`, the PDF must render `SLEEP.PST.3SG` (joined without
+spaces — a small capital is a size change and pdftotext breaks a token at
+every one), and exactly one column may differ from the lowercase version,
+sitting **between** the lowercase and capitals widths.  Confirmed it bites,
+against four separate mutations: reader back on `getString()` (2 failures),
+`LxApplyFmt` stubbed out (1), `SC_RATIO = 1.0` (1), and small caps measured
+as the lowercase in the file (1).
+
+`check_formatting_round_trip` answers the other one, and answers it for
+more than small caps: one word each in italic, bold, both at once,
+underline, subscript, superscript, small caps and an `LxLeipzig` character
+style, with every word's character properties read off the document before
+and compared with the same properties read off the table cells after.
+Comparing against the *source* rather than against a literal written into
+the test matters — an expectation can be wrong in the same direction as the
+code, a before/after comparison cannot.  Confirmed it bites: `LxApplyFmt`
+stubbed out loses 8 of the 12, dropping `CharPosture` from `LxFormatIndex`
+loses the two italic ones, dropping the escapement pair loses sub- and
+superscript, and dropping `CharStyleName` loses the styled one while
+leaving its resolved small caps behind — which is the failure the read-back
+in `LxApplyFmt` is there to make visible.
+
+Also verified, and worth stating because it is easy to assume otherwise:
+because `LxFormatIndex` snapshots the *resolved* values off the portion,
+small caps that come from a character style rather than from direct
+formatting are measured as small caps too.
+
+The rest of the suite is unchanged, byte for byte, against unformatted
+input — which is the other thing worth knowing about the marks: they are
+invisible when there is nothing to mark.
+
+## 2026-08-07 — syntax trees in Writer, out of draw shapes
+
+Asked whether bracket notation could be drawn as a tree in Writer. It can,
+and the substrate is a **group of draw shapes anchored as a character** — a
+text shape per node, a line per branch — not a table and not an image. A
+table can only draw elbows, its borders being horizontal and vertical; an
+image (emit SVG, insert as a graphic) draws diagonals for free and is the
+right answer for the *converter*, but it stops being editable and its
+labels stop being text, which is the wrong trade for something you are
+authoring in Writer.
+
+Spiked before writing any Basic, and three of the four things worth knowing
+were found that way.
+
+**Grouping and anchoring have an order.** A shape already anchored
+`AS_CHARACTER` cannot be grouped at all — "Shape must not have 'as
+character' anchor!".  Anchor every piece `AT_PARAGRAPH`, group, and set the
+finished group to `AS_CHARACTER`.
+
+**A polygon shape has an order too, and this one is silent.** Set
+`PolyPolygon` *before* `setPosition`, in the shape's own frame, and the box
+lands exactly where asked.  Set position or size first and the polygon is
+interpreted in another coordinate space — measured at (-2501, -2501) on a
+page with 2cm margins — so every branch is drawn, correctly, 2.5cm away
+from the tree it belongs to.  Nothing errors.  It cost three iterations to
+see, because the failure looks like "the lines vanished" and is really "the
+lines are off the top of the page".
+
+**There is no style family for draw text in Writer.**
+`getStyleFamilies()` offers CharacterStyles, ParagraphStyles, PageStyles,
+FrameStyles, NumberingStyles, TableStyles, CellStyles — no `graphics`.  So
+node labels cannot be governed by a style the way `LxExampleCell` governs a
+cell, and the label font is applied directly.  Worth writing down because
+it is the one place this macro breaks its own rule, and not by choice.
+
+**Measuring by rendering.** A text shape with `TextAutoGrowWidth` sizes
+itself to its own text, so a scratch shape given the label and asked
+`getSize().Width` returns what Writer will actually draw.  That is 2-5%
+more than `getStringWidth` on a screen-compatible device reports — enough
+that "extraordinarily long constituent" wrapped inside its own node box on
+the first attempt.  It also makes measurement formatting-aware for free:
+the probe renders the label's italics or small caps, so nothing has to
+model them the way `LxSmallCapsWidth` models them for table columns.
+
+**Layout is not Reingold-Tilford.**  One leftmost-free-x per tier, placed
+bottom up, shifting a whole subtree right when its parent would collide at
+its own tier.  Non-overlap holds by construction; the packing is
+marginally looser than the linear algorithm and the code is a quarter of
+the size.  For tens of nodes the quadratic worst case is free.
+
+**The tree goes in the same table an example goes in** — number column,
+hanging judgment column, one wide cell — so a document that mixes trees and
+glossed examples keeps them all starting at the same x and renumbering
+together.  That was the cheapest part of the whole feature and the most
+valuable: `LxEmitTree` is 60 lines because `LxEnsureStyles`, `LxPlainTable`,
+`LxSetColumns` and `LxInsertNumber` already existed.
+
+**Scope refused on purpose.**  Movement arrows need node identity and edge
+routing, which is a different program; node options beyond `roof` are an
+open-ended surface.  Both are refused *by name* rather than dropped, so a
+tree that came out looking finished is finished.
+
+### Verification
+
+`check_trees` builds six trees and refuses five malformed ones.
+`check_tree_geometry` exists because counting shapes sees neither failure
+that actually happened during development: with the polygon/position order
+wrong every branch is still present, and with the tier factor at zero every
+node is still present.  It asserts instead that the nodes occupy as many
+tiers as the tree is deep and that every branch runs from the underside of
+one node to the top of another.  Confirmed against four mutations —
+polygon-after-position (caught only by the geometry check),
+siblings-dropped (8 failures), label-wears-trailing-mark (1), tier-factor-0
+(caught only by the geometry check).
+
+`check_tree_alignment` pins the tree against a glossed example in one
+document (97.3 against 98.2) and pins that a braced label is on one line,
+which is the regression the probe measurement exists to prevent.
+`check_tree_formatting` pins that a small-caps node label is still
+lowercase in the file and still small caps in the shape.
+
+One thing the format marks made trickier than expected: a label runs up to
+the next bracket and a mark is not a delimiter, so `sg` in small caps
+before a plain `]` comes out of the scanner as `<small caps>sg<plain>`.
+Wearing the last mark rather than the first sets the label in the
+formatting of the bracket after it.  `LxTCarry` takes the mark in force
+when the label *began*, notes the trailing one for the label that follows,
+and trims it.
+
+## 2026-08-07 — a tree that does not spend an example number
+
+`TreeSelection` put every tree in the example table, which is right for a
+tree in a paper and wrong for one in a footnote, a figure or a slide.
+`TreeSelectionBare` draws the same tree with no table, no number and no
+example styles.
+
+The refactor was almost free, because the drawing never depended on the
+table: `LxTreeShapes` already took an `XText`, and only `LxEmitTree`
+insisted on building a table around it.  What it did assume was
+`oText.getEnd()` as the insertion point — fine for an empty cell, wrong for
+a paragraph with text in it — so an `oWhere` range is now threaded through
+`LxTreeProbe`, `LxTreeShapes`, `LxTEmitNode`, `LxTBranch` and `LxTRoof`.
+`LxTreeDraw` holds what the two forms share: probe, measure, lay out, draw.
+
+Two separate commands, not one that infers whether a number is wanted.
+Guessing "am I inside an example already?" is the kind of inference this
+macro refuses everywhere else, and it would be wrong in silence.
+
+**An as-character group reserves vertical room but not horizontal.**
+Measured both ways rather than assumed.  Vertically it works: a bare tree
+on its own paragraph pushes the next paragraph down by its full height
+(tree ends at y=154, the paragraph after it starts at y=168).
+Horizontally it does not: a 38pt-wide tree between "AAA" and "ZZZ" leaves a
+31.3pt gap, which is the width of the words and the spaces alone.  So the
+tree is drawn where the line's text ends.
+
+That is why a bare tree wants a line of its own, and why the case that
+still works is text *before* it — which is exactly what the judgment mark
+needs, there being no hanging column without a table.  A tail on the same
+line gets a message rather than a silently misplaced tree.
+
+`VertOrient` is not the lever: NONE, TOP, CENTER, BOTTOM, CHAR_TOP,
+CHAR_BOTTOM and LINE_TOP all render identically here.  Checked before
+reaching for it.
+
+### Verification
+
+`check_bare_tree` pins all four: no table is built, the group is anchored
+`AS_CHARACTER` with its eleven shapes, the paragraph after it is pushed
+below the tree's lowest node, a judged bare tree leaves `*` as the
+paragraph's only text, and a tree with text after it on the line produces
+the warning.
+
+## 2026-08-07 — movement arrows
+
+Cheaper than the trees, because node positions were already solved.  What
+was left was a syntax decision, a lane allocator and one coordinate trap.
+
+**Not a TikZ subset.**  forest writes movement as
+`\draw[->] (t) to[out=south west,in=south] (wh);`.  Supporting part of that
+is a trap: the moment `move` looked like `\draw`, the next requests would
+be bend angles, edge labels and node anchors, and wherever the subset ended
+would read as a bug rather than a boundary.  The syntax is a line of its
+own — `move t -> wh` — with `name=` as a node option beside `roof`.  A line
+is a move line if it starts with `move`; everything else in the selection
+is the tree.  Backslashes are still refused, and that message now points
+here instead of just saying no.
+
+**Lanes are interval-graph colouring.**  Two arrows may share a lane only
+if their spans do not overlap; greedy, narrowest span first, so a movement
+nested inside another sits above it — which is how the same configuration
+is drawn by hand.  About 25 lines.
+
+**The trap, and it was silent.**  `LxTPolyShape` takes points measured from
+the shape's bounding box, and for a branch or a roof the topmost point is
+the first one, so "relative to the start" and "relative to the box" are the
+same thing.  For an arrow they are not: movement goes *up*, so the topmost
+point is where the arrow ends.  Passing `y0` as the box origin left the
+polygon with negative local coordinates, and `setPosition` then shifted the
+whole arrow down by however far the box was out.  Nothing errored; the
+arrows were simply drawn too low, which reads as "the gutter gap is wrong"
+rather than "the origin is wrong".  This is the third time the polygon
+coordinate frame has cost time, so the rule now lives in exactly one
+function.
+
+**Arrowheads without a MarkerTable.**  A Writer document has no
+`MarkerTable` — that is Draw and Impress — so `LineEndName` is unavailable.
+`LineEnd` accepts a polygon directly and works, but the head is drawn here
+as its own filled triangle, which needs no new mechanism at all: it is the
+roof code with a fill.
+
+Bezier arcs also work (`OpenBezierShape` with `PolyPolygonBezierCoords` and
+NORMAL/CONTROL flags, subject to the same ordering rule) and are not used.
+A straight run under the tree crosses nothing, and two of them in adjacent
+lanes stay legible where two arcs would not.
+
+**Where an arrow ends.**  The first version aimed at the node's own
+baseline, which is wrong in the ordinary case rather than the exotic one: a
+node almost always has something under it, so the riser went straight
+through the terminal it was pointing at.  Reported as soon as it was seen,
+and the fix is symmetric — an arrow leaves and arrives at the underside of
+the whole *subtree*, which is the one place on the node's x where nothing
+is in the way.  The source end had the same defect and the same cure: a
+trace with a daughter had the descent drawn through her.
+
+The property is now crisp enough to test: **no part of an arrow passes
+through a node box**.  Not a proxy for it — the check reads the shapes'
+polygons back and tests every segment against every node.
+
+### Verification
+
+`check_moves` covers three configurations and five refusals.
+`check_move_geometry` tells shapes apart by *type* rather than by order —
+branch = LineShape, arrow = PolyLineShape, head = filled PolyPolygonShape —
+which is what makes the drawing interrogable at all.
+
+It pins four things, and the mutation run says why each is there: arrows
+below the deepest node (gutter moved inside the tree → caught), two arrows
+in different lanes (all arrows in lane 0 → caught), heads centred on the
+nodes moved *to* rather than from (head drawn at the source → caught, since
+the source node is never a target), each arrow's top meeting the foot
+of its own head (the box-origin bug → caught), and no segment crossing a
+node (aiming at the baseline again → caught).  The first version of the
+check missed three of the five: a head under "some node" passes when the
+source is also a node, a sunken arrow is still an arrow in the right lane,
+and an arrow through a terminal is still an arrow in the gutter.
+
+Reading a polygon back needs care.  `PolyPolygon` reports in its own
+coordinate frame, offset from the one `getPosition()` uses — the same
+offset that has caused trouble twice already.  Rather than assume the
+constant, the check lines the polygon's own bounding box up with the
+shape's and derives the offset per shape.
+
+## 2026-08-07 — four things found by asking what was left
+
+None of these came from a bug report.  They came from testing the things
+the macro claims rather than the things it draws.
+
+**The harness could test the wrong library, silently.**  `connect()` used a
+fixed port 2084 and never stopped the instance it started, so a run left a
+soffice behind and the next run's `resolve()` was answered by *that* one —
+whichever profile and whichever library it happened to hold.  It cost a
+false failure while building the extension test: `TreeSelectionBareQuiet`
+"could not be found", from an instance still serving a library predating
+it.  Twenty-seven strays had accumulated by the end of a day's spiking.
+
+The earlier entry about `--invisible` strays squatting on 2084 treated the
+symptom.  Now each run takes a free port (bind to 0, read it back) and
+`shutdown()` terminates every instance `connect()` opened, from a `finally`
+so a failing run cleans up too.  `connect()` also notices if soffice exited
+before accepting, instead of waiting out the timeout.
+
+**The .oxt was never exercised.**  Every other check installs LinguExx.bas
+straight into a profile's Basic library, which skips the package.  This is
+the gap that let a missing `dialog.xlb` ship while the headless suite was
+green.  `check_extension` builds the package, installs it with `unopkg`
+into a throwaway profile, and drives all three commands with no `install()`
+call at all.  It also checks statically that every `vnd.sun.star.script:`
+URL in Addons.xcu names a Sub the macro defines — the menu invokes the
+*interactive* entry points, which nothing else calls, so a typo there would
+otherwise ship unnoticed.  Verified by misspelling one: caught.
+
+**Trees put 14 entries on the undo stack.**  Undo itself was right — one
+Ctrl+Z took the whole tree back — but `LxEnsureStyles` ran *outside* the
+undo context for trees where it is inside for examples, so the first tree
+in a document left one "Create paragraph style" entry per style for the
+user to unwind separately.  Precisely what the context exists to stop.  One
+line, and `check_undo` now pins the promise the docs make: example, tree,
+tree with movement and bare tree each come back in one step, and no style
+creation escapes the context.
+
+**`LxEmitTree` asked a consumed range what font it was in.**  The table is
+inserted with `insertTextContent(oRange, oTable, True)`, which absorbs
+oRange; the font was read afterwards.  It answered plausibly — which is why
+it survived — but it is a question about text that no longer exists.  The
+bare form already read it first, deliberately.  Now both do.
+
+Also noted and deliberately left: the module is 101 KB in one Basic file
+and loads fine (every run proves it), so splitting examples from trees is a
+preference, not a fix.
+
+## 2026-08-07 — the converter measures small caps too
+
+Raised at the start of the small-caps work and left alone then, on the
+grounds that the error sat inside the converter's existing -7%/+28% band.
+Now closed, and it turned out to be the same bug the macro had: a
+`\lpzg{3sg}` column was estimated from the *string* "3sg" while the
+document draws three small capitals, which are wider.
+
+**The information was being thrown away one step too early.**
+`InlineRenderer.plain()` rendered the fragment to ODF and then stripped
+every tag — including the `<text:span>` carrying `LxLeipzig` or
+`LxSmallCaps`, which is exactly the thing width estimation needed.  So
+`runs()` now returns `(text, is_small_caps)` pairs and `plain()` is
+`"".join` over it, which keeps the two honest with each other.  Span
+tracking is a stack, so `\textit{\textsc{x}}` still counts as small caps.
+
+`runs_width_cm` measures each run as drawn: a lowercase letter in a
+small-caps run takes its *capital's* advance at `sc_ratio`.  The three
+places that estimated a width — judgment marks, numbers, word cells — all
+go through it.
+
+**`sc_ratio` is shared, not duplicated.**  It is the same physical fact in
+both tools (LibreOffice draws a small capital at 80%), so it belongs in
+`Layout` and in `MACRO_LENGTHS`, and the macro's own `Const SC_RATIO` is
+now generated by `tools/sync_macro.py` rather than written by hand.  The
+two cannot drift.  That is what the sync mechanism is for, and this is the
+first constant added to it since it was built.
+
+**Small caps are not always wider.**  For letters already wide in
+lowercase — m, w — the capital at 80% is *narrower* than the lowercase:
+Liberation Serif has lowercase m at 0.778 em against small-cap M at
+0.889 × 0.8 = 0.711.  So "wider than lowercase" is true of ordinary
+Leipzig glosses but is not an invariant; "never wider than the full
+capital" is.
+
+### Verification
+
+`tests/test_width.py`: seven tests, both directions pinned.  Measured as
+lowercase → caught (3 failures, including the end-to-end one).  `sc_ratio`
+left at 1, i.e. small caps measured as full-size capitals → caught, but
+only after tightening the upper bound from `<=` to `<`; the first version
+passed because equality satisfied it.  Also pinned: a fragment with no
+small caps measures exactly what it measured before, so no column that has
+nothing to do with this moves.
+
+The end-to-end test converts the same example twice, with and without
+`\lpzg` on one gloss, and requires exactly one column to differ and that
+one to be the wider — the same shape as `check_small_caps` in the macro
+harness.

@@ -175,6 +175,12 @@ Two of these are inherent to the table method, not defects:
    your body text is not 12 pt. The Writer macro below does not have this
    limitation — it measures.
 
+   Text is estimated as it is *drawn*, not as it is spelled: `\lpzg{…}`
+   and `\textsc{…}` set small capitals, which are the capitals at 80% of
+   the size and so wider than the lowercase they replace for most letters.
+   A gloss column measured from the lowercase would be too narrow for its
+   own contents.
+
 2. **Tables do not reflow.** Where a band breaks is computed from
    `--text-width` at conversion time and then frozen — the reference
    document fixes the band *pattern*, never the break points. If you
@@ -206,6 +212,22 @@ names, it also works as a post-processor on converted documents.
 
 Sub-example paradigms (`a. … b. …`) work too, glossed or not, with the
 letters in their own column and one number for the paradigm.
+
+It also draws **syntax trees** from bracket notation: select
+`[DP [D the] [NP [N tree]]]`, press the shortcut, and get a numbered
+example whose content is the tree — built from Writer draw shapes, in the
+same table as any other example, so trees and glossed examples line up and
+renumber together. `{braced}` labels, `, roof` triangles, judgment marks and
+movement arrows all work — movement is written by naming two nodes and
+adding `move t -> wh` under the tree, and the arrow is routed in a gutter
+below it. A second
+command draws the tree with no number at all, for a footnote or a figure.
+
+Formatting you applied by hand comes through — small caps on a Leipzig
+gloss, italics, bold, superscripts — and each run is measured in the font
+it will be drawn in, which matters more than it sounds: small caps are
+capitals at 80% of the size, so 10–20% *wider* than the lowercase they
+stand in for, and a column measured as lowercase is too narrow for them.
 
 Install it as a LibreOffice extension:
 

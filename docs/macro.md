@@ -69,6 +69,14 @@ example*.
 - **Reads the real page.** The available text width comes from the page
   style in front of you, not from a `--text-width` flag — so it is right
   for the document you are actually in.
+- **Keeps the formatting you applied.** Italic, bold, small caps (and the
+  other case maps), sub- and superscript, underline, and character styles
+  such as `LxLeipzig` all come through the transform unchanged, in any
+  combination. Each run is also *measured* in the font it will be drawn
+  in — bold is wider than roman, a superscript smaller, and small caps are
+  capitals at 80% of the size, which is 10–20% **wider** than the lowercase
+  they stand in for, so a column measured as lowercase would be too narrow
+  for what goes in it. See [What is not carried](#what-is-not-carried).
 - **Splits overlong examples into bands**, each starting back at the left
   edge, and can redo it at any time: nothing is frozen at conversion time.
 - **Hangs judgment marks.** A leading `*`, `??`, `#`, `%` or `!` goes into
@@ -81,6 +89,27 @@ example*.
   converted document and a hand-built example are the same object, and the
   spacing styles described in the main README govern both. Existing styles
   are never overwritten.
+
+### What is not carried
+
+**Font family and size are deliberately dropped**, and the example is set
+in whatever `LxExampleCell` says. Carrying them would mean writing them
+back as direct formatting on every cell, and then editing the style would
+no longer change the example — which is the point of having the style. The
+consequence to know about: an example typed in a font other than the body
+font is measured, and set, in the body font.
+
+Everything else outside the list above is dropped too — text colour,
+highlighting, strikeout, letter spacing, the run's language. They are
+dropped because nobody asked for them, not for any deeper reason: each is
+one more entry in `LxFormatIndex` and `LxApplyFmt`, and none of them
+changes a column width.
+
+The character style goes on first and each direct property only if the
+style did not already supply it, so a run that carried `LxLeipzig` still
+answers to `LxLeipzig` afterwards rather than being frozen into hard small
+caps, and text nobody formatted by hand arrives with no direct formatting
+at all.
 
 The last selected line is treated as a free translation when it opens with
 a quote character — straight, curly, guillemets, or the backtick of LaTeX's
@@ -97,6 +126,137 @@ A simple example.
 becomes `(1)  A simple example.`, numbered like any other. It stays running
 text in one cell rather than being split one word per column. Add a quoted
 line under it and that becomes the translation.
+
+## Trees
+
+`TreeSelection` (**LinguExx ▸ Typeset tree**) turns bracket notation into a
+drawn syntax tree. Select
+
+```
+[DP [D the] [NP [N tree]]]
+```
+
+and you get a numbered example whose content is the tree, in the same table
+as any other example — same number field, same spacing styles, same
+alignment, so a document that mixes trees and glossed examples keeps them
+all starting at the same x.
+
+The notation is the one qtree and forest share: the first token after a `[`
+is the label, everything after it is a child, and a bare word is a leaf.
+`[D the]` and `[D [the]]` mean the same thing.
+
+- **`{braced groups}`** are one label even with spaces in them, as in
+  glossed examples.
+- **A leaf marked `, roof`** is drawn under a triangle:
+  `[S [NP {the big tree, roof}] [VP [V slept]]]`.
+- **`name=`** labels a node so a `move` line can refer to it — see
+  [Movement](#movement).
+- **A judgment mark** leads the tree as it leads an example —
+  `*[S [NP him] [VP [V left]]]` — and hangs in the same column.
+- **Node labels keep their formatting.** Italicise a terminal or set a
+  feature in small caps before running it and that is how it is drawn.
+- The bracket expression may be typed over **several lines**; select them
+  all and they are read as one expression.
+
+### Movement
+
+Name the two nodes and put a `move` line under the tree:
+
+```
+[CP [DP,name=wh what] [C' [C did] [TP [DP John] [VP [V see] [DP,name=t __]]]]]
+move t -> wh
+```
+
+The arrow runs out from under the node it moved from, along its own lane in
+a gutter beneath the tree, and up to the node it moved to, with a filled
+head. Both ends sit at the **underside of the whole subtree**, not at the
+node's own baseline: a node almost always has something below it, and an
+arrow aimed at the baseline would go straight through it. An arrow points
+at a constituent; it never crosses one. Several arrows get separate lanes: two may share one only if
+their spans do not overlap, and the narrower span goes in the shallower
+lane, so a movement nested inside another sits above it — which is how the
+same configuration is drawn by hand.
+
+`name=` is a node option like `roof`, so it goes inside the brackets after
+a comma. A `move` line is recognised by starting with `move`; everything
+else in the selection is the tree.
+
+**This is not TikZ, on purpose.** forest writes the same thing as
+`\draw[->] (t) to[out=south west,in=south] (wh);`, and supporting a subset
+of TikZ is a trap: the moment `move` looked like `\draw`, the next thing
+asked for would be bend angles, edge labels and node anchors, and wherever
+the subset ended would read as a bug rather than a boundary. A line that is
+plainly not TikZ promises only what it delivers. Anything with a backslash
+in it is still refused, and the message points here.
+
+Refused by name: a `move` line with no `->`, a name no node carries, a node
+moving to itself, and move lines with no tree above them.
+
+Arrows above the tree, edge labels and custom routing are out of scope.
+
+### Trees without a number
+
+Not every tree should spend an example number — one in a footnote, a figure
+or a slide should not. **LinguExx ▸ Typeset tree (no number)**
+(`TreeSelectionBare`) draws the same tree with no table, no number and no
+example styles: the shapes replace the brackets where they stand, anchored
+as a character in that paragraph.
+
+It is a separate command rather than one that works out whether a number is
+wanted. Guessing from context is the kind of inference this macro refuses
+everywhere else, and it would be wrong in silence.
+
+**Give a bare tree a line of its own.** A shape group anchored as a
+character reserves vertical room in the line but not horizontal — measured,
+a 38 pt-wide tree between two words leaves a 31 pt gap, which is the width
+of the words alone. So the tree is drawn where the line's text ends. Text
+*before* it is fine, and is exactly how the judgment mark works (with no
+table there is no hanging column, so `*` is set as the text it would have
+been). Text still to come on the line would end up beside the tree rather
+than after it, and the macro says so when it finds any.
+
+The vertical half does work: a bare tree pushes the paragraph after it down
+by its full height.
+
+### What it draws with, and what that means
+
+The tree is a group of Writer draw shapes — a text shape per node, a line
+per branch — anchored as a character. So it is a real object in the
+document: it prints, it exports to PDF, its labels are selectable text, and
+you can drag a node afterwards. Nothing re-runs the layout if you do, in
+exactly the way a built example does not re-align itself; run it again on
+the source instead.
+
+Node labels are the one thing in this macro not governed by a paragraph
+style, because Writer has no style family for draw-shape text (there is no
+`graphics` family in a text document — only `ParagraphStyles`,
+`CharacterStyles`, `FrameStyles` and friends). The label font is therefore
+the document's, applied directly.
+
+Widths are not estimated at all here: each label is measured **by being
+set** into a scratch shape that grows to fit, so what the layout gets is
+what Writer will draw, formatting included. That is exact where
+`getStringWidth` is 2–5% out — enough to wrap a long label inside its own
+node box.
+
+Layout keeps every parent centred over its children and no two subtrees
+overlapping. It is not Reingold–Tilford: it tracks one leftmost-free-x per
+tier and shifts a subtree right when its parent would collide. That packs
+marginally looser than the linear algorithm and is a great deal easier to
+be sure of.
+
+### What it refuses
+
+- **Backslash commands.** This does not read LaTeX; the message points at
+  the `move` line instead.
+- **Node options other than `roof` and `name=`** — edge labels, per-node
+  styling. Refused by name, so adding one later is a small change rather
+  than a silent behaviour shift.
+- Unbalanced brackets, text after the end of the tree, and a selection
+  that does not begin with `[`.
+
+A tree wider than the text block is still built, with a warning saying how
+wide it came out — shorten a label or group words with `{braces}`.
 
 ## Sub-examples
 
@@ -134,7 +294,10 @@ not start with one, it refuses rather than guess.
 
 | | converter | macro |
 |---|---|---|
+| syntax trees | no | yes, from bracket notation, numbered or bare |
 | column widths | estimated | measured |
+| inline formatting | from the LaTeX (`\lpzg`, `\textsc`, …) | from the text you selected |
+| small caps | estimated at `sc_ratio` of the capital | measured, by rendering them |
 | text width | `--text-width` | the actual page style |
 | band grid | union of the bands' boundaries | the same |
 | judgment column | reserved only if the document judges something | always reserved |
@@ -163,7 +326,11 @@ re-implementation of it.
 python3 tools/run_macro_test.py [OUTDIR]
 ```
 
-It needs `soffice`, `pdftotext` and python-uno. It checks that the number
+It needs `soffice`, `unopkg`, `pdftotext` and python-uno. Each run picks a
+free port and shuts its LibreOffice down at the end: a fixed port lets a
+stray instance from an earlier run answer instead, and the suite then
+drives whatever library *that* one holds — which has produced a false
+failure at least once. It checks that the number
 field evaluates, that every gloss sits under its word, that `{braces}`
 group, that an overlong example still aligns, and that a judgment mark
 hangs left without shifting the text block of a neighbouring unjudged
@@ -172,6 +339,59 @@ roman-numeral and marker-on-its-own-line paradigms, and one pins the
 letter against a main example's text — the invariant
 `test_sub_example_letters_align_with_main_example_text` pins for the
 converter.
+
+Two cases cover formatting. `check_small_caps` builds the same example
+three times — glosses in small caps, in lowercase, and in real capitals —
+and pins both halves of what formatting has to do: the file still spells
+the gloss in lowercase, the PDF renders it as capitals, and exactly one
+column, the one holding it, comes out *between* the lowercase and the
+capitals width. `check_formatting_round_trip` types one word in each of
+italic, bold, both, underline, sub- and superscript, small caps and a
+character style, and compares each word's character properties before and
+after against the document itself — not against an expectation written
+into the test, which could be wrong in the same direction as the code.
+
+Four more cover trees. `check_trees` builds six shapes of tree and pins
+that every node got a shape and every parent-child pair a branch, and that
+five malformed selections are refused rather than drawn. `check_tree_geometry`
+asks *where* the shapes are, which counting cannot: the nodes must sit on as
+many tiers as the tree is deep, and every branch must run from the underside
+of one node to the top of another. Both failures it exists for leave the
+shape count untouched — a polygon positioned before its `PolyPolygon` is
+still a branch, just 2501 units away, and a collapsed tier spacing still has
+every node. `check_tree_alignment` puts a tree and a glossed example in one
+document and pins that they start at the same x, and that a long braced
+label is on one line rather than wrapped inside its node.
+`check_tree_formatting` pins that a small-caps label is still lowercase in
+the file and still small caps in the shape. `check_bare_tree` pins the
+unnumbered form: no table, the group anchored as a character, the next
+paragraph pushed down by the tree's height, a judgment mark set as text,
+and the warning when something is left on the line after it.
+
+`check_undo` pins what the docs promise about Ctrl+Z: one step takes back
+an example, a tree, a tree with movement or a bare tree, and no style
+creation is left outside the undo context to be unwound separately.
+
+`check_extension` builds the `.oxt`, checks every command the menu offers
+names a Sub that exists, installs it with `unopkg` into a throwaway profile
+and drives all three commands *from the package* rather than from the loose
+`.bas`. Everything else in the suite loads the macro straight into a Basic
+library, which skips the package — and that has hidden a real bug before.
+
+`check_moves` and `check_move_geometry` cover movement. The geometry one
+tells the shapes apart by type rather than by order — a branch is a
+`LineShape`, an arrow a `PolyLineShape`, a filled `PolyPolygonShape` a
+head — and pins that every arrow runs below the deepest node, that two
+arrows take different lanes, that the heads are centred on the nodes moved
+*to* (the source node is never a target, so an arrow drawn backwards is
+caught), that each arrow's top meets the foot of its own head, and that no
+part of an arrow passes through a node box. That last one reads the shapes'
+own polygons back and tests each segment against each node, so it is the
+real invariant rather than a proxy for it — aim an arrow at a node's
+baseline instead of its subtree's underside and it fails. That
+last one exists because getting the polygon's box origin wrong sinks the
+arrow away from its head while leaving something that still looks like an
+arrow and still counts as one.
 
 `GlossSelectionQuiet()` is the entry point the harness uses: it does the
 same work with dialogs suppressed and returns the message instead

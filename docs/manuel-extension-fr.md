@@ -47,9 +47,11 @@ arrive surtout sous Linux) :
 4. **Fermez et rouvrez LibreOffice** — le menu n'apparaît qu'au
    redémarrage.
 
-Une fois installée, l'extension ajoute un menu :
+Une fois installée, l'extension ajoute un menu à trois entrées :
 
 > **LinguExx ▸ Composer l'exemple**
+> **LinguExx ▸ Composer l'arbre**
+> **LinguExx ▸ Composer l'arbre (sans numéro)**
 
 ### 2.2 En ligne de commande
 
@@ -163,6 +165,10 @@ Le menu fonctionne, mais un raccourci est bien plus rapide à l'usage.
 > La fonction s'appelle encore `GlossSelection` pour des raisons de
 > compatibilité, alors que l'entrée de menu s'appelle « Composer
 > l'exemple ». C'est le même traitement.
+
+Pour les arbres syntaxiques (§ 4.9), répétez l'opération en choisissant
+**`TreeSelection`** et une autre combinaison, par exemple **Ctrl+Maj+T** —
+et **`TreeSelectionBare`** pour un arbre sans numéro.
 
 Sous macOS, pensez à vérifier dans **LibreOffice ▸ Préférences** que la
 combinaison choisie n'est pas déjà prise par le système.
@@ -293,7 +299,104 @@ La largeur des colonnes est **mesurée sur la police réelle** du document,
 et la largeur disponible est lue dans le style de page : le résultat est
 juste pour la page que vous avez sous les yeux.
 
-### 4.8 Annuler
+### 4.8 Le formatage que vous avez appliqué
+
+Ce que vous avez mis en forme à la main est conservé : **petites
+capitales** d'une glose Leipzig, *italique* de la langue objet, **gras**,
+exposants et indices, styles de caractère.
+
+Chaque passage est mesuré dans la police dans laquelle il sera dessiné, et
+non dans celle du reste de la ligne. C'est indispensable pour les petites
+capitales : ce sont des capitales à 80 % du corps, donc 10 à 20 % **plus
+larges** que les minuscules qu'elles remplacent. Mesurée sur les
+minuscules, la colonne serait trop étroite et la glose y reviendrait à la
+ligne — et, dans un exemple découpé en bandes, une bande de trop
+déborderait du bloc de texte.
+
+### 4.9 Arbres syntaxiques
+
+**LinguExx ▸ Composer l'arbre** transforme une notation entre crochets en
+un arbre dessiné. Sélectionnez
+
+```
+[DP [D le] [NP [N arbre]]]
+```
+
+et vous obtenez un exemple numéroté dont le contenu est l'arbre, dans le
+même tableau que n'importe quel autre exemple : même champ de numéro,
+mêmes styles d'espacement, même alignement.
+
+La notation est celle que partagent qtree et forest : le premier mot après
+un `[` est l'étiquette, ce qui suit sont les filles, et un mot nu est une
+feuille. `[D le]` et `[D [le]]` sont équivalents.
+
+- **`{groupes entre accolades}`** forment une seule étiquette, espaces
+  comprises.
+- **Une feuille suivie de `, roof`** est dessinée sous un triangle :
+  `[S [NP {le grand arbre, roof}] [VP [V dormait]]]`.
+- **Un jugement d'acceptabilité** précède l'arbre comme il précède un
+  exemple : `*[S [NP lui] [VP [V partait]]]`.
+- **Les étiquettes gardent leur mise en forme** : italique d'un terminal,
+  petites capitales d'un trait.
+
+L'arbre est un groupe de formes de dessin Writer ancré comme caractère :
+un objet réel du document, qui s'imprime, s'exporte en PDF, dont les
+étiquettes sont du texte sélectionnable, et que vous pouvez déplacer à la
+souris — mais rien ne recalcule la disposition si vous le faites.
+
+#### Mouvement
+
+Nommez les deux nœuds et ajoutez une ligne `move` sous l'arbre :
+
+```
+[CP [DP,name=wh quoi] [C' [C a] [TP [DP Jean] [VP [V vu] [DP,name=t __]]]]]
+move t -> wh
+```
+
+La flèche part de sous le nœud d'origine, suit sa propre voie dans une
+gouttière sous l'arbre, et remonte jusqu'au nœud d'arrivée. Les deux
+extrémités se placent **sous le sous-arbre entier**, et non à la ligne de
+base du nœud : un nœud a presque toujours quelque chose en dessous de lui,
+et une flèche visant la ligne de base le traverserait. Une flèche pointe
+vers un constituant, elle ne le traverse jamais. Plusieurs
+flèches reçoivent des voies distinctes ; deux flèches ne partagent une voie
+que si leurs portées ne se chevauchent pas, et la plus courte passe
+au-dessus — comme on le dessine à la main.
+
+`name=` est une option de nœud comme `roof` : elle se met dans les
+crochets, après une virgule. Une ligne `move` est reconnue au mot `move`
+en tête ; tout le reste de la sélection est l'arbre.
+
+**Ce n'est pas du TikZ, volontairement.** forest écrit la même chose
+`\draw[->] (t) to[out=south west,in=south] (wh);`. Prendre en charge un
+sous-ensemble de TikZ serait un piège : la limite du sous-ensemble
+passerait pour un bug. Tout ce qui contient une barre oblique inverse reste
+refusé, et le message renvoie ici.
+
+#### Un arbre sans numéro
+
+Tous les arbres ne doivent pas consommer un numéro d'exemple : celui d'une
+note de bas de page, d'une figure ou d'une diapositive, non.
+**LinguExx ▸ Composer l'arbre (sans numéro)** dessine le même arbre sans
+tableau, sans numéro et sans styles d'exemple : les formes remplacent les
+crochets là où ils se trouvent.
+
+C'est une commande distincte, et non une commande qui devinerait si un
+numéro est souhaité — deviner d'après le contexte serait faux en silence.
+
+**Donnez-lui une ligne à lui.** Un groupe ancré comme caractère réserve la
+place en hauteur mais pas en largeur : l'arbre est dessiné là où le texte
+de la ligne s'arrête. Du texte *avant* lui ne pose pas de problème (c'est
+ainsi que fonctionne le jugement d'acceptabilité : sans tableau, le `*` est
+simplement écrit devant). Du texte *après* lui se retrouverait à côté de
+l'arbre plutôt qu'après, et la macro vous le signale.
+
+**Non pris en charge, et refusé explicitement** : toute commande LaTeX
+(avec une barre oblique inverse), les étiquettes d'arête, les flèches
+au-dessus de l'arbre, et les options de nœud autres que `roof` et `name=`.
+Elles sont refusées par leur nom plutôt qu'ignorées en silence.
+
+### 4.10 Annuler
 
 Toute la construction est **une seule étape d'annulation**. Un **Ctrl+Z**
 (⌘+Z) reprend l'exemple entier.

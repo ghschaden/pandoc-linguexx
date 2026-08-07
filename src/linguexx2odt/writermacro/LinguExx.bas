@@ -37,6 +37,19 @@
 ' practice).  The available text width likewise comes from the actual page
 ' style rather than from a --text-width flag.
 '
+' Character formatting the linguist already applied survives: small caps on
+' a Leipzig gloss, italics on the object language, bold, superscripts.  It
+' has to.  A gloss tier is very often typed as small caps, and reading the
+' selection as a plain string threw that away.
+'
+' Keeping it is half the job; the other half is measuring it.  Small caps
+' are capitals at SC_RATIO of the size, which is *wider* than the lowercase
+' letters they stand in for — 10% to 20% wider, measured.  A column measured
+' on the lowercase and then set in small caps is too narrow, and the words
+' wrap inside their cells; a band packed on the lowercase holds one word too
+' many and runs off the text block.  Bold, italic and superscript are the
+' same story, so every run is measured in the font it will be drawn in.
+'
 ' Style names are deliberately the ones linguexx2odt emits, so a converted
 ' example and a macro-built one are the same object and answer to the same
 ' styles.
@@ -67,6 +80,7 @@ Const NUMBER_CM   As Double = 1.1
 Const MARKER_CM   As Double = 0.7
 Const JUDG_GAP_CM As Double = 0.12
 Const SPACE_CM    As Double = 0.18
+Const SC_RATIO    As Double = 0.8
 
 ' Deliberately not shared:
 '   text_width_cm — the macro reads the real page style instead
@@ -78,6 +92,74 @@ Const JUDG_CHARS   As String = "*?#%!"
 
 ' Column boundaries closer together than this are the same boundary.
 Const GRID_TOL_CM  As Double = 0.015
+
+' Run formats.  The selection is read as text with a one-character mark in
+' front of every run of like-formatted characters; the marks are private-use
+' codepoints, so nothing a linguist can type collides with them, and they
+' ride along through splitting, banding and column assignment untouched.
+' The format itself is kept here, out of the string, and looked up by the
+' mark's offset from FMT_BASE.
+'
+' A mark is emitted again after every space, so that every *word* carries
+' its own format and none of the code between here and LxPut has to track
+' what was in force.  LxStrip takes them all back out for the places that
+' want the text a linguist would recognise.
+Const FMT_BASE     As Long = 57344        ' U+E000, the private use area
+Const FMT_MAX      As Integer = 250
+
+Dim LxFmtN         As Integer
+Dim LxFmtCase(FMT_MAX)   As Integer       ' CharCaseMap
+Dim LxFmtWeight(FMT_MAX) As Double        ' CharWeight
+Dim LxFmtItalic(FMT_MAX) As Boolean       ' CharPosture <> NONE
+Dim LxFmtStyle(FMT_MAX)  As String        ' CharStyleName
+Dim LxFmtEsc(FMT_MAX)    As Integer       ' CharEscapement
+Dim LxFmtEscH(FMT_MAX)   As Integer       ' CharEscapementHeight, per cent
+Dim LxFmtUnder(FMT_MAX)  As Integer       ' CharUnderline
+Dim LxFmtFont(FMT_MAX)   As Object        ' measuring font for this format
+Dim LxFmtFontSC(FMT_MAX) As Object        ' and the reduced one for small caps
+
+
+' Trees.  A node is five parallel arrays and two links, because Basic has
+' no record type and an array of arrays is worse.  Children hang off
+' LxNdKid/LxNdSib — first child, next sibling — which is the shape a
+' bracket parser produces anyway and needs no second pass to build.
+Const TREE_MAX     As Integer = 300       ' nodes in one tree
+Const TREE_DEPTH   As Integer = 40        ' tiers in one tree
+Const NODE_PAD_CM  As Double = 0.06       ' slack each side of a label
+Const NODE_GAP_CM  As Double = 0.22       ' least space between subtrees
+Const TIER_FACTOR  As Double = 2.0        ' tier spacing / line height
+Const BRANCH_WIDTH As Integer = 8         ' branch thickness, 1/100 mm
+
+Dim LxNdLabel(TREE_MAX) As String
+Dim LxNdRoof(TREE_MAX)  As Boolean        ' drawn under a triangle
+Dim LxNdKid(TREE_MAX)   As Integer        ' first child, -1 for a leaf
+Dim LxNdSib(TREE_MAX)   As Integer        ' next sibling, -1 for the last
+Dim LxNdDepth(TREE_MAX) As Integer
+Dim LxNdX(TREE_MAX)     As Double         ' centre of the label, 1/100 mm
+Dim LxNdW(TREE_MAX)     As Double
+Dim LxNdN               As Integer
+Dim LxFree(TREE_DEPTH)  As Double         ' leftmost free x on each tier
+
+Dim LxTSrc As String                      ' the parser's input and cursor
+Dim LxTPos As Integer
+Dim LxTErr As String
+Dim LxTTag As String                      ' the format mark in force
+
+' Movement arrows.  Drawn in a gutter below the tree, one lane each, so an
+' arrow never crosses a branch and two arrows never share a line.
+Const ARROW_MAX     As Integer = 40
+Const GUTTER_GAP_CM As Double = 0.30      ' from the deepest node to lane 0
+Const LANE_STEP_CM  As Double = 0.34      ' from one lane to the next
+Const HEAD_LEN_CM   As Double = 0.18
+Const HEAD_HALF_CM  As Double = 0.07
+
+Dim LxNdName(TREE_MAX)  As String         ' from the "name=" node option
+Dim LxArFrom(ARROW_MAX) As Integer        ' node moved from
+Dim LxArTo(ARROW_MAX)   As Integer        ' node moved to
+Dim LxArLane(ARROW_MAX) As Integer
+Dim LxArN               As Integer
+Dim LxMoveSrc(ARROW_MAX) As String        ' the "move a -> b" lines, unparsed
+Dim LxMoveN             As Integer
 
 
 ' Every message goes through LxSay, so a caller that must not be blocked by
@@ -233,9 +315,9 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
                 aItems(n) = LxMakeItem(sMarker, aBody(), nBody)
                 n = n + 1
             End If
-            sLine = Trim(aLines(i))
+            sLine = LxTrimTagged(aLines(i))
             sMarker = LxSplitWords(sLine)(0)
-            sRest = Trim(Mid(sLine, Len(sMarker) + 1))
+            sRest = LxCarryTag(sMarker, LxTrimTagged(Mid(sLine, Len(sMarker) + 1)))
             nBody = 0
             If Len(sRest) > 0 Then             ' "a. Esto es ..." on one line
                 aBody(nBody) = sRest
@@ -550,7 +632,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                         For i = aBandStart(b) To nEnd - 1
                             c = nLead + aWordCol(i) - nShift
                             If i <= UBound(aWords) Then
-                                oTable.getCellByName(LxCell(c, nRow)).setString(aWords(i))
+                                Call LxPut(oTable.getCellByName(LxCell(c, nRow)), aWords(i))
                             End If
                             If aWordSpan(i) > 1 Then
                                 ' Merging removes cells, so everything to the
@@ -595,7 +677,7 @@ Sub LxHead(oDoc As Object, oTable As Object, nRow As Integer, _
         Call LxInsertNumber(oDoc, oTable.getCellByName(LxCell(0, nRow)))
     End If
     If nLead = 3 Then
-        oTable.getCellByName(LxCell(1, nRow)).setString(aItem(IT_MARKER))
+        Call LxPut(oTable.getCellByName(LxCell(1, nRow)), aItem(IT_MARKER))
     End If
     Call LxSetCellStyle(oTable, LxCell(nLead - 1, nRow), JUDG_PARA)
     If Len(aItem(IT_JUDG)) > 0 Then
@@ -613,7 +695,7 @@ Sub LxWideCell(oTable As Object, nRow As Integer, nLead As Integer, _
         oCur.goRight(nSpan - 1, True)
         oCur.mergeRange()
     End If
-    oTable.getCellByName(LxCell(nLead, nRow)).setString(sText)
+    Call LxPut(oTable.getCellByName(LxCell(nLead, nRow)), sText)
 End Sub
 
 
@@ -662,20 +744,66 @@ End Function
 
 ' --------------------------------------------------------------- pieces ---
 
-' The lines of the selection, trimmed, blank ones dropped.
+' The lines of the selection, trimmed, blank ones dropped, every run of
+' character formatting marked (see FMT_BASE).
 '
-' Enumerating paragraphs over a cursor built from the selection looks like
+' Enumerating paragraphs over a *cursor* built from the selection looks like
 ' the tidy way to do this and does not work — it yields a single empty
-' element.  The selection's own string already has the paragraphs in it,
-' separated by newlines, so split that.  Chr(11) is a line break inside a
-' paragraph (Shift+Enter), which a linguist typing a gloss is at least as
-' likely to have used as a paragraph mark.
+' element, which is why this used to read oRange.getString() and throw all
+' the formatting away.  Enumerating the selection range itself does work,
+' and does the one hard part for free: the text portions it hands back are
+' already clipped to the selection, so a half-selected paragraph yields
+' exactly the half that was selected.
+'
+' Chr(11) is a line break inside a paragraph (Shift+Enter), which a linguist
+' typing a gloss is at least as likely to have used as a paragraph mark; it
+' arrives here as a portion of its own rather than as a character.
 Function LxSelectedLines(oRange As Object) As Variant
-    Dim s As String, sLine As String
+    Dim oParEnum As Object, oPorEnum As Object
+    Dim oPar As Object, oPor As Object
+    Dim s As String, sLine As String, sType As String
     Dim aRaw As Variant, aOut() As String
     Dim i As Integer, n As Integer
 
-    s = oRange.getString()
+    LxFmtN = 0
+
+    s = ""
+    oParEnum = Nothing
+    On Error Resume Next
+    oParEnum = oRange.createEnumeration()
+    On Error Goto 0
+    If Not IsNull(oParEnum) Then
+        Do While oParEnum.hasMoreElements()
+            oPar = oParEnum.nextElement()
+            If oPar.supportsService("com.sun.star.text.Paragraph") Then
+                oPorEnum = oPar.createEnumeration()
+                Do While oPorEnum.hasMoreElements()
+                    oPor = oPorEnum.nextElement()
+                    sType = ""
+                    On Error Resume Next
+                    sType = oPor.TextPortionType
+                    On Error Goto 0
+                    If sType = "LineBreak" Then
+                        s = s & Chr(10)
+                    Else
+                        sLine = oPor.getString()
+                        If Len(sLine) > 0 Then _
+                            s = s & LxTagged(sLine, LxFormatIndex(oPor))
+                    End If
+                Loop
+            End If
+            s = s & Chr(10)
+        Loop
+    End If
+
+    ' Anything the enumeration could not read — a selection that is not a
+    ' text range at all — still has a string, and a plain example is better
+    ' than none.
+    If Len(LxStrip(s)) = 0 Then
+        LxFmtN = 0
+        s = oRange.getString()
+    End If
+
     s = Replace(s, Chr(13) & Chr(10), Chr(10))
     s = Replace(s, Chr(13), Chr(10))
     s = Replace(s, Chr(11), Chr(10))
@@ -684,7 +812,7 @@ Function LxSelectedLines(oRange As Object) As Variant
     ReDim aOut(UBound(aRaw))
     n = 0
     For i = 0 To UBound(aRaw)
-        sLine = Trim(aRaw(i))
+        sLine = LxTrimTagged(aRaw(i))
         If Len(sLine) > 0 Then
             aOut(n) = sLine
             n = n + 1
@@ -700,6 +828,188 @@ Function LxSelectedLines(oRange As Object) As Variant
 End Function
 
 
+' ------------------------------------------------------------ run marks ---
+
+' The format of one text portion, as an index into the LxFmt* arrays.
+'
+' Font name and size are deliberately not part of it.  Carrying them would
+' mean writing them back as direct formatting on every cell, and then
+' editing LxExampleCell would no longer change the example — the whole point
+' of the styles.  What is carried is what a linguist marks *within* a line
+' and would notice the loss of.
+Function LxFormatIndex(oPor As Object) As Integer
+    Dim i As Integer
+    Dim nCase As Integer, nEsc As Integer, nEscH As Integer, nUnder As Integer
+    Dim dWeight As Double
+    Dim bItalic As Boolean
+    Dim sStyle As String
+
+    nCase = com.sun.star.style.CaseMap.NONE
+    dWeight = com.sun.star.awt.FontWeight.NORMAL
+    bItalic = False
+    sStyle = ""
+    nEsc = 0 : nEscH = 100 : nUnder = com.sun.star.awt.FontUnderline.NONE
+
+    On Error Resume Next
+    nCase = oPor.CharCaseMap
+    dWeight = oPor.CharWeight
+    bItalic = (oPor.CharPosture <> com.sun.star.awt.FontSlant.NONE)
+    sStyle = oPor.CharStyleName
+    nEsc = oPor.CharEscapement
+    nEscH = oPor.CharEscapementHeight
+    nUnder = oPor.CharUnderline
+    On Error Goto 0
+
+    For i = 0 To LxFmtN - 1
+        If LxFmtCase(i) = nCase And LxFmtWeight(i) = dWeight And _
+           LxFmtItalic(i) = bItalic And LxFmtStyle(i) = sStyle And _
+           LxFmtEsc(i) = nEsc And LxFmtEscH(i) = nEscH And _
+           LxFmtUnder(i) = nUnder Then
+            LxFormatIndex = i
+            Exit Function
+        End If
+    Next i
+
+    ' More distinct formats than there are marks to name them with: the rest
+    ' of the example is still built, just without its formatting.
+    If LxFmtN > FMT_MAX Then
+        LxFormatIndex = -1
+        Exit Function
+    End If
+
+    i = LxFmtN
+    LxFmtCase(i) = nCase
+    LxFmtWeight(i) = dWeight
+    LxFmtItalic(i) = bItalic
+    LxFmtStyle(i) = sStyle
+    LxFmtEsc(i) = nEsc
+    LxFmtEscH(i) = nEscH
+    LxFmtUnder(i) = nUnder
+    LxFmtFont(i) = Nothing
+    LxFmtFontSC(i) = Nothing
+    LxFmtN = LxFmtN + 1
+    LxFormatIndex = i
+End Function
+
+
+Function LxTag(nFmt As Integer) As String
+    If nFmt < 0 Then LxTag = "" Else LxTag = Chr(FMT_BASE + nFmt)
+End Function
+
+
+' The format a mark stands for, or -1 if this is an ordinary character.
+Function LxTagIndex(c As String) As Integer
+    Dim n As Long
+    LxTagIndex = -1
+    If Len(c) <> 1 Then Exit Function
+    n = Asc(c) - FMT_BASE
+    If n >= 0 And n < LxFmtN Then LxTagIndex = CInt(n)
+End Function
+
+
+' Mark the text, and mark it again after every space — so that whatever
+' splits it into words, every word comes away knowing its own format.
+Function LxTagged(s As String, nFmt As Integer) As String
+    Dim sTag As String, sOut As String, c As String
+    Dim i As Integer
+    Dim bSpace As Boolean
+
+    sTag = LxTag(nFmt)
+    If Len(sTag) = 0 Then
+        LxTagged = s
+        Exit Function
+    End If
+
+    sOut = sTag
+    bSpace = False
+    For i = 1 To Len(s)
+        c = Mid(s, i, 1)
+        If c = " " Or c = Chr(9) Then
+            sOut = sOut & c
+            bSpace = True
+        Else
+            If bSpace Then sOut = sOut & sTag
+            sOut = sOut & c
+            bSpace = False
+        End If
+    Next i
+    LxTagged = sOut
+End Function
+
+
+' The text without its marks — what the line "really says", for every test
+' that asks a question about the characters a linguist typed.
+Function LxStrip(s As String) As String
+    Dim i As Integer
+    Dim c As String, sOut As String
+    For i = 1 To Len(s)
+        c = Mid(s, i, 1)
+        If LxTagIndex(c) < 0 Then sOut = sOut & c
+    Next i
+    LxStrip = sOut
+End Function
+
+
+' Trim, keeping the mark that the first surviving character is under: plain
+' Trim() would not even see the spaces, because a mark stands in front of
+' them.
+Function LxTrimTagged(s As String) As String
+    Dim i As Integer, n As Integer
+    Dim c As String, sTag As String
+
+    n = Len(s)
+    Do While n > 0
+        c = Mid(s, n, 1)
+        If c <> " " And c <> Chr(9) Then Exit Do
+        n = n - 1
+    Loop
+
+    i = 1
+    sTag = ""
+    Do While i <= n
+        c = Mid(s, i, 1)
+        If LxTagIndex(c) >= 0 Then
+            sTag = c
+        ElseIf c <> " " And c <> Chr(9) Then
+            Exit Do
+        End If
+        i = i + 1
+    Loop
+
+    If i > n Then
+        LxTrimTagged = ""
+    Else
+        LxTrimTagged = sTag & Mid(s, i, n - i + 1)
+    End If
+End Function
+
+
+Function LxLastTag(s As String) As String
+    Dim i As Integer
+    Dim c As String
+    LxLastTag = ""
+    For i = Len(s) To 1 Step -1
+        c = Mid(s, i, 1)
+        If LxTagIndex(c) >= 0 Then
+            LxLastTag = c
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+' Text cut out of the middle of a line has lost the mark that was in force
+' where the cut was made; give it back the one the part before it ended on.
+Function LxCarryTag(sFrom As String, s As String) As String
+    Dim sTag As String
+    LxCarryTag = s
+    If Len(s) = 0 Then Exit Function
+    If LxTagIndex(Left(s, 1)) >= 0 Then Exit Function
+    sTag = LxLastTag(sFrom)
+    If Len(sTag) > 0 Then LxCarryTag = sTag & s
+End Function
+
+
 ' Does this line open with a sub-example marker — "a.", "(b)", "iii."?
 '
 ' Deliberately narrow, because a false positive refuses to gloss a perfectly
@@ -711,7 +1021,7 @@ Function LxLooksLikeMarker(sLine As String) As Boolean
     Dim i As Integer
 
     LxLooksLikeMarker = False
-    aWords = LxSplitWords(sLine)
+    aWords = LxSplitWords(LxStrip(sLine))
     If UBound(aWords) < 0 Then Exit Function
 
     s = aWords(0)
@@ -757,35 +1067,44 @@ End Function
 
 Function LxIsTranslation(s As String) As Boolean
     Dim c As String
-    c = Left(Trim(s), 1)
+    c = Left(Trim(LxStrip(s)), 1)
     LxIsTranslation = (InStr(LxQuotes(), c) > 0)
 End Function
 
 
 ' Whitespace splits words, except inside {braces} — linguexx's way of
 ' making several words share one column.  The braces are not kept.
+'
+' Format marks are not characters of the word: one in the middle of a word
+' stays where it is, and the last one seen opens the *next* word, so a
+' format that spans a space is not lost at the space.  A word that would be
+' nothing but marks is no word at all.
 Function LxSplitWords(sLine As String) As Variant
     Dim aOut() As String
     Dim n As Integer, i As Integer, nDepth As Integer
-    Dim sCur As String, c As String
+    Dim sCur As String, c As String, sTag As String
 
     ReDim aOut(LxMaxI(Len(sLine), 1))
-    n = -1 : sCur = "" : nDepth = 0
+    n = -1 : sCur = "" : nDepth = 0 : sTag = ""
     For i = 1 To Len(sLine)
         c = Mid(sLine, i, 1)
-        If c = "{" Then
+        If LxTagIndex(c) >= 0 Then
+            sTag = c
+            If Len(sCur) > 0 Then sCur = sCur & c
+        ElseIf c = "{" Then
             nDepth = nDepth + 1
         ElseIf c = "}" Then
             If nDepth > 0 Then nDepth = nDepth - 1
         ElseIf (c = " " Or c = Chr(9)) And nDepth = 0 Then
             If Len(sCur) > 0 Then
-                n = n + 1 : aOut(n) = sCur : sCur = ""
+                n = n + 1 : aOut(n) = LxTrimTags(sCur) : sCur = ""
             End If
         Else
+            If Len(sCur) = 0 Then sCur = sTag
             sCur = sCur & c
         End If
     Next i
-    If Len(sCur) > 0 Then n = n + 1 : aOut(n) = sCur
+    If Len(sCur) > 0 Then n = n + 1 : aOut(n) = LxTrimTags(sCur)
 
     If n < 0 Then
         LxSplitWords = Array()
@@ -796,16 +1115,39 @@ Function LxSplitWords(sLine As String) As Variant
 End Function
 
 
+' Drop marks left dangling at the end of a word, where they can only open a
+' run with nothing in it.
+Function LxTrimTags(s As String) As String
+    Dim n As Integer
+    n = Len(s)
+    Do While n > 0
+        If LxTagIndex(Mid(s, n, 1)) < 0 Then Exit Do
+        n = n - 1
+    Loop
+    LxTrimTags = Left(s, n)
+End Function
+
+
+' The mark comes away as plain text — it is set in its own cell, in that
+' cell's style — but whatever formatting was in force has to stay with the
+' word behind it.
 Function LxPullJudgment(sWord As String, ByRef sMark As String) As String
-    Dim i As Integer, c As String
-    sMark = "" : i = 1
+    Dim i As Integer
+    Dim c As String, sTag As String
+
+    sMark = "" : sTag = "" : i = 1
     Do While i <= Len(sWord)
         c = Mid(sWord, i, 1)
-        If InStr(JUDG_CHARS, c) = 0 Then Exit Do
-        sMark = sMark & c
+        If LxTagIndex(c) >= 0 Then
+            sTag = c
+        ElseIf InStr(JUDG_CHARS, c) = 0 Then
+            Exit Do
+        Else
+            sMark = sMark & c
+        End If
         i = i + 1
     Loop
-    LxPullJudgment = Mid(sWord, i)
+    LxPullJudgment = LxCarryTag(sTag, Mid(sWord, i))
 End Function
 
 
@@ -987,14 +1329,133 @@ Function LxFontForRange(oDoc As Object, oRange As Object, ByRef dPxPerCm As Doub
     aFD.Name = sName
     aFD.Height = CLng(dPt / 72.0 * 2.54 * dPxPerCm)
     LxFontForRange = oDev.getFont(aFD)
+
+    Call LxBuildFmtFonts(oDev, sName, dPt, dPxPerCm)
 End Function
 
 
+' One measuring font per run format.  Bold and italic are wider than roman,
+' a superscript is smaller, and small caps need a second font at SC_RATIO to
+' draw their lowercase with — measure any of them with the body font and the
+' column comes out the wrong width.
+'
+' Only weight, slant and size vary: the family is the one the example is
+' being set in, because that is the one the table will be set in too.
+Sub LxBuildFmtFonts(oDev As Object, sName As String, dPt As Double, dPxPerCm As Double)
+    Dim aFD As New com.sun.star.awt.FontDescriptor
+    Dim i As Integer
+    Dim dSize As Double
+
+    For i = 0 To LxFmtN - 1
+        dSize = dPt
+        If LxFmtEscH(i) > 0 And LxFmtEscH(i) < 100 Then _
+            dSize = dPt * LxFmtEscH(i) / 100.0
+
+        aFD.Name = sName
+        aFD.Weight = LxFmtWeight(i)
+        If LxFmtItalic(i) Then
+            aFD.Slant = com.sun.star.awt.FontSlant.ITALIC
+        Else
+            aFD.Slant = com.sun.star.awt.FontSlant.NONE
+        End If
+        aFD.Height = CLng(dSize / 72.0 * 2.54 * dPxPerCm)
+        LxFmtFont(i) = oDev.getFont(aFD)
+
+        If LxFmtCase(i) = com.sun.star.style.CaseMap.SMALLCAPS Then
+            aFD.Height = CLng(dSize * SC_RATIO / 72.0 * 2.54 * dPxPerCm)
+            LxFmtFontSC(i) = oDev.getFont(aFD)
+        Else
+            LxFmtFontSC(i) = Nothing
+        End If
+    Next i
+End Sub
+
+
+' The width of a marked string: each run measured in its own font, in what
+' it will actually be drawn as.
 Function LxWidth(oFont As Object, dPxPerCm As Double, s As String) As Double
-    If Len(s) = 0 Then
-        LxWidth = 0
+    Dim i As Integer, nFmt As Integer
+    Dim c As String, sRun As String
+    Dim d As Double
+
+    d = 0 : sRun = "" : nFmt = -1
+    For i = 1 To Len(s)
+        c = Mid(s, i, 1)
+        If LxTagIndex(c) >= 0 Then
+            d = d + LxRunWidth(oFont, dPxPerCm, sRun, nFmt)
+            sRun = ""
+            nFmt = LxTagIndex(c)
+        Else
+            sRun = sRun & c
+        End If
+    Next i
+    LxWidth = d + LxRunWidth(oFont, dPxPerCm, sRun, nFmt)
+End Function
+
+
+Function LxRunWidth(oFont As Object, dPxPerCm As Double, _
+                    s As String, nFmt As Integer) As Double
+    Dim oF As Object
+
+    LxRunWidth = 0
+    If Len(s) = 0 Then Exit Function
+    If nFmt < 0 Then
+        LxRunWidth = oFont.getStringWidth(s) / dPxPerCm
+        Exit Function
+    End If
+
+    oF = LxFmtFont(nFmt)
+    If IsNull(oF) Then oF = oFont
+
+    ' A case map changes what is drawn, not what the text says, so the
+    ' string has to be measured as it will appear.
+    Select Case LxFmtCase(nFmt)
+    Case com.sun.star.style.CaseMap.UPPERCASE
+        LxRunWidth = oF.getStringWidth(UCase(s)) / dPxPerCm
+    Case com.sun.star.style.CaseMap.LOWERCASE
+        LxRunWidth = oF.getStringWidth(LCase(s)) / dPxPerCm
+    Case com.sun.star.style.CaseMap.SMALLCAPS
+        LxRunWidth = LxSmallCapsWidth(oF, LxFmtFontSC(nFmt), dPxPerCm, s)
+    Case Else
+        LxRunWidth = oF.getStringWidth(s) / dPxPerCm
+    End Select
+End Function
+
+
+' Small caps: every lowercase letter is drawn as its capital at SC_RATIO of
+' the size, everything else at full size.  Measured in runs of like
+' characters rather than one at a time, so that kerning inside a run of
+' capitals still counts.
+Function LxSmallCapsWidth(oF As Object, oSC As Object, dPxPerCm As Double, _
+                          s As String) As Double
+    Dim i As Integer
+    Dim c As String, sSeg As String
+    Dim bLower As Boolean, bThis As Boolean
+    Dim d As Double
+
+    d = 0 : sSeg = "" : bLower = False
+    For i = 1 To Len(s)
+        c = Mid(s, i, 1)
+        bThis = (UCase(c) <> c)               ' a letter with a capital form
+        If Len(sSeg) > 0 And bThis <> bLower Then
+            d = d + LxSegWidth(oF, oSC, dPxPerCm, sSeg, bLower)
+            sSeg = ""
+        End If
+        bLower = bThis
+        sSeg = sSeg & c
+    Next i
+    LxSmallCapsWidth = d + LxSegWidth(oF, oSC, dPxPerCm, sSeg, bLower)
+End Function
+
+
+Function LxSegWidth(oF As Object, oSC As Object, dPxPerCm As Double, _
+                    s As String, bLower As Boolean) As Double
+    LxSegWidth = 0
+    If Len(s) = 0 Then Exit Function
+    If bLower And Not IsNull(oSC) Then
+        LxSegWidth = oSC.getStringWidth(UCase(s)) / dPxPerCm
     Else
-        LxWidth = oFont.getStringWidth(s) / dPxPerCm
+        LxSegWidth = oF.getStringWidth(s) / dPxPerCm
     End If
 End Function
 
@@ -1073,6 +1534,74 @@ End Sub
 
 Sub LxSetCellStyle(oTable As Object, sCell As String, sStyle As String)
     oTable.getCellByName(sCell).getText().createTextCursor().ParaStyleName = sStyle
+End Sub
+
+
+' setString for marked text: one insertion per run, each in the formatting
+' it was read with.  Everything in the table that came from the linguist's
+' own text goes through here; text this macro made up itself (the number,
+' the sub-example brackets) does not, and is left to the cell style.
+Sub LxPut(oCell As Object, sText As String)
+    Dim oText As Object, oCur As Object
+    Dim i As Integer, nFmt As Integer
+    Dim c As String, sRun As String
+
+    oText = oCell.getText()
+    oText.setString("")
+    If Len(LxStrip(sText)) = 0 Then Exit Sub
+
+    oCur = oText.createTextCursor()
+    sRun = "" : nFmt = -1
+    For i = 1 To Len(sText)
+        c = Mid(sText, i, 1)
+        If LxTagIndex(c) >= 0 Then
+            Call LxPutRun(oText, oCur, sRun, nFmt)
+            sRun = ""
+            nFmt = LxTagIndex(c)
+        Else
+            sRun = sRun & c
+        End If
+    Next i
+    Call LxPutRun(oText, oCur, sRun, nFmt)
+End Sub
+
+
+Sub LxPutRun(oText As Object, oCur As Object, sRun As String, nFmt As Integer)
+    If Len(sRun) = 0 Then Exit Sub
+    oCur.gotoEnd(False)
+    oText.insertString(oCur, sRun, False)
+    oCur.goLeft(Len(sRun), True)              ' select what was just written
+    Call LxApplyFmt(oCur, nFmt)
+    oCur.gotoEnd(False)
+End Sub
+
+
+' Put the run's formatting back.
+'
+' The character style goes on first, and then each property only if it is
+' not already what the style gave — so text that was never formatted by hand
+' comes out with no direct formatting at all, and a run that carried
+' LxLeipzig still answers to LxLeipzig afterwards instead of being frozen
+' into hard small caps.
+Sub LxApplyFmt(oCur As Object, nFmt As Integer)
+    If nFmt < 0 Then Exit Sub
+    On Error Resume Next
+    If Len(LxFmtStyle(nFmt)) > 0 Then oCur.CharStyleName = LxFmtStyle(nFmt)
+    If oCur.CharCaseMap <> LxFmtCase(nFmt) Then oCur.CharCaseMap = LxFmtCase(nFmt)
+    If oCur.CharWeight <> LxFmtWeight(nFmt) Then oCur.CharWeight = LxFmtWeight(nFmt)
+    If (oCur.CharPosture <> com.sun.star.awt.FontSlant.NONE) <> LxFmtItalic(nFmt) Then
+        If LxFmtItalic(nFmt) Then
+            oCur.CharPosture = com.sun.star.awt.FontSlant.ITALIC
+        Else
+            oCur.CharPosture = com.sun.star.awt.FontSlant.NONE
+        End If
+    End If
+    If oCur.CharEscapement <> LxFmtEsc(nFmt) Then
+        oCur.CharEscapement = LxFmtEsc(nFmt)
+        oCur.CharEscapementHeight = LxFmtEscH(nFmt)
+    End If
+    If oCur.CharUnderline <> LxFmtUnder(nFmt) Then oCur.CharUnderline = LxFmtUnder(nFmt)
+    On Error Goto 0
 End Sub
 
 
@@ -1208,3 +1737,1163 @@ End Function
 Function LxMinI(a As Integer, b As Integer) As Integer
     If a < b Then LxMinI = a Else LxMinI = b
 End Function
+
+
+' ================================================================ trees ===
+'
+' TreeSelection — turn bracket notation into a drawn syntax tree.
+'
+' Select the brackets and run it:
+'
+'     [DP [D the] [NP [N tree]]]
+'
+' The label is the first token after a '[', everything after it is a child,
+' and a bare word is a leaf — the notation qtree and forest share.  A
+' {braced group} is one label even with spaces in it, and a leaf marked
+' ", roof" is drawn under a triangle, as in forest.
+'
+' The tree is a group of draw shapes anchored as a character in the wide
+' cell of the same kind of table GlossSelection builds, so it carries a
+' NumEx field and the LxExampleSpace styles and lines up with every other
+' example in the document.  It is a real Writer object: selectable,
+' printable, and editable afterwards by dragging — though nothing re-runs
+' the layout if you do, exactly as a built example does not re-align itself.
+'
+' Node labels keep whatever formatting they were typed in, and they are
+' measured by *being set*: a scratch text shape with TextAutoGrowWidth is
+' given the label and asked how wide it came out.  That is exact where
+' getStringWidth is 2-5% out — and it costs nothing to be formatting-aware,
+' because the shape measures italics and small caps by rendering them.
+'
+' Deliberately not supported: movement arrows, edge labels, and every node
+' option but "roof".  Arrows need node identity and routing, which is a
+' different program; the parser refuses them by name rather than dropping
+' them silently.
+
+
+' ---------------------------------------------------------------- entry ---
+
+' A numbered tree: an example whose content happens to be a tree.
+Sub TreeSelection
+    Call LxTreeCommand(True)
+End Sub
+
+
+' A bare tree: the same drawing, anchored where the brackets were, with no
+' table, no number and no example styles.  For a tree in a footnote, a
+' figure or a slide — anywhere it should not spend an example number.
+'
+' Deliberately its own command rather than one that works out whether a
+' number is wanted.  Guessing from context is the kind of inference this
+' macro refuses everywhere else, and it would be wrong in silence.
+Sub TreeSelectionBare
+    Call LxTreeCommand(False)
+End Sub
+
+
+Sub LxTreeCommand(bNumbered As Boolean)
+    Dim oDoc As Object, oSel As Object, oRange As Object
+    Dim oUndo As Object
+    Dim aLines As Variant
+    Dim sSrc As String, sMark As String
+    Dim nRoot As Integer
+
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+    If Not oDoc.supportsService("com.sun.star.text.TextDocument") Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+
+    oSel = oDoc.getCurrentController().getSelection()
+    If oSel.getCount() < 1 Then
+        Call LxSay("Select the bracket notation of the tree first.")
+        Exit Sub
+    End If
+    oRange = oSel.getByIndex(0)
+
+    ' A tree is one expression however many lines it was typed over, so the
+    ' selected lines are joined rather than treated as tiers.  The exception
+    ' is a "move a -> b" line, which is about the tree rather than part of
+    ' it and is set aside here.
+    aLines = LxSelectedLines(oRange)
+    If UBound(aLines) < 0 Then
+        Call LxSay("Select the bracket notation of the tree first.")
+        Exit Sub
+    End If
+    sSrc = LxSplitMoves(aLines)
+    If Len(LxTErr) > 0 Then
+        Call LxSay(LxTErr)
+        Exit Sub
+    End If
+
+    ' A judgment mark leads the tree the way it leads an example, and lands
+    ' in the same hanging column.
+    sSrc = LxPullJudgment(sSrc, sMark)
+
+    nRoot = LxTreeParse(sSrc)
+    If nRoot < 0 Then
+        Call LxSay(LxTErr)
+        Exit Sub
+    End If
+
+    If Not LxResolveMoves() Then
+        Call LxSay(LxTErr)
+        Exit Sub
+    End If
+
+    oUndo = oDoc.getUndoManager()
+    oUndo.enterUndoContext("Typeset tree")
+    On Error Goto Cleanup
+    If bNumbered Then
+        ' Inside the context, or the first tree in a document leaves one
+        ' undo entry per style created and Ctrl+Z unwinds them one at a
+        ' time — the very thing the context exists to stop.  Only the
+        ' numbered form needs them: a bare tree has no business creating
+        ' example styles in a document that never asked for one.
+        Call LxEnsureStyles(oDoc)
+        Call LxEmitTree(oDoc, oRange, nRoot, sMark)
+    Else
+        Call LxEmitBareTree(oDoc, oRange, nRoot, sMark)
+    End If
+Cleanup:
+    oUndo.leaveUndoContext()
+    If Err <> 0 Then Call LxSay(Error$ & " (line " & Erl & ")")
+End Sub
+
+
+' The non-interactive doors, as GlossSelectionQuiet is for examples.
+Function TreeSelectionQuiet() As String
+    LxSilent = True
+    LxLastMessage = ""
+    Call TreeSelection
+    LxSilent = False
+    TreeSelectionQuiet = LxLastMessage
+    LxLastMessage = ""
+End Function
+
+
+Function TreeSelectionBareQuiet() As String
+    LxSilent = True
+    LxLastMessage = ""
+    Call TreeSelectionBare
+    LxSilent = False
+    TreeSelectionBareQuiet = LxLastMessage
+    LxLastMessage = ""
+End Function
+
+
+' --------------------------------------------------------------- parsing ---
+
+Function LxTreeParse(s As String) As Integer
+    Dim nRoot As Integer
+
+    LxTErr = ""
+    LxNdN = 0
+    LxTSrc = s
+    LxTPos = 1
+    LxTTag = ""
+
+    ' Refused by name, not dropped in silence: a tree that quietly lost its
+    ' movement arrows looks finished and is not.
+    If InStr(LxStrip(s), "\") > 0 Then
+        LxTErr = "This does not read LaTeX (anything with a backslash)." & _
+                 Chr(10) & Chr(10) & _
+                 "For movement, name the two nodes and put a move line " & _
+                 "under the tree:" & Chr(10) & _
+                 "    [CP [DP,name=wh what] [TP [V saw] [DP,name=t __]]]" & _
+                 Chr(10) & "    move t -> wh"
+        LxTreeParse = -1
+        Exit Function
+    End If
+
+    Call LxTSkip()
+    If LxTPos > Len(LxTSrc) Or Mid(LxTSrc, LxTPos, 1) <> "[" Then
+        LxTErr = "A tree has to start with a bracket, like " & _
+                 "[DP [D the] [NP [N tree]]]."
+        LxTreeParse = -1
+        Exit Function
+    End If
+
+    nRoot = LxTNode()
+    If Len(LxTErr) > 0 Then
+        LxTreeParse = -1
+        Exit Function
+    End If
+
+    Call LxTSkip()
+    If LxTPos <= Len(LxTSrc) Then
+        LxTErr = "The tree ends before the selection does; there is still " & _
+                 """" & LxStrip(Mid(LxTSrc, LxTPos)) & """ after it."
+        LxTreeParse = -1
+        Exit Function
+    End If
+
+    LxTreeParse = nRoot
+End Function
+
+
+Function LxTNode() As Integer
+    Dim n As Integer, nKid As Integer, nPrev As Integer
+    Dim c As String
+
+    n = LxNewNode()
+    If n < 0 Then
+        LxTNode = -1
+        Exit Function
+    End If
+
+    LxTPos = LxTPos + 1                       ' the '['
+    Call LxTSkip()
+    LxNdLabel(n) = LxTToken()
+
+    nPrev = -1
+    Do
+        Call LxTSkip()
+        If LxTPos > Len(LxTSrc) Then
+            LxTErr = "A bracket is never closed."
+            LxTNode = -1
+            Exit Function
+        End If
+        c = Mid(LxTSrc, LxTPos, 1)
+        If c = "]" Then
+            LxTPos = LxTPos + 1
+            Exit Do
+        End If
+        If c = "[" Then
+            nKid = LxTNode()
+        Else                                  ' a bare word is a leaf
+            nKid = LxNewNode()
+            If nKid >= 0 Then
+                LxNdLabel(nKid) = LxTToken()
+                Call LxTOptions(nKid)         ' ", roof" lives on leaves too
+            End If
+        End If
+        If nKid < 0 Or Len(LxTErr) > 0 Then
+            LxTNode = -1
+            Exit Function
+        End If
+        If nPrev < 0 Then
+            LxNdKid(n) = nKid
+        Else
+            LxNdSib(nPrev) = nKid
+        End If
+        nPrev = nKid
+    Loop
+
+    Call LxTOptions(n)
+    If Len(LxTErr) > 0 Then
+        LxTNode = -1
+        Exit Function
+    End If
+    LxTNode = n
+End Function
+
+
+Function LxNewNode() As Integer
+    Dim n As Integer
+    If LxNdN > TREE_MAX Then
+        LxTErr = "That tree has more nodes than this can draw."
+        LxNewNode = -1
+        Exit Function
+    End If
+    n = LxNdN
+    LxNdLabel(n) = ""
+    LxNdName(n) = ""
+    LxNdRoof(n) = False
+    LxNdKid(n) = -1
+    LxNdSib(n) = -1
+    LxNdDepth(n) = 0
+    LxNdX(n) = 0
+    LxNdW(n) = 0
+    LxNdN = LxNdN + 1
+    LxNewNode = n
+End Function
+
+
+' A label: bare, or {braced} so that it may hold spaces.  Format marks are
+' ordinary characters here — they are none of the delimiters, so they ride
+' along inside the label and LxPut puts the formatting back at the end.
+Function LxTToken() As String
+    Dim c As String, s As String
+    Dim nDepth As Integer, nStart As Integer
+
+    LxTToken = ""
+    If LxTPos > Len(LxTSrc) Then Exit Function
+
+    If Mid(LxTSrc, LxTPos, 1) = "{" Then
+        nDepth = 0
+        nStart = LxTPos + 1
+        Do While LxTPos <= Len(LxTSrc)
+            c = Mid(LxTSrc, LxTPos, 1)
+            If c = "{" Then
+                nDepth = nDepth + 1
+            ElseIf c = "}" Then
+                nDepth = nDepth - 1
+                If nDepth = 0 Then
+                    s = Mid(LxTSrc, nStart, LxTPos - nStart)
+                    LxTPos = LxTPos + 1
+                    LxTToken = LxTCarry(s)
+                    Exit Function
+                End If
+            End If
+            LxTPos = LxTPos + 1
+        Loop
+        LxTErr = "A { is never closed."
+        Exit Function
+    End If
+
+    nStart = LxTPos
+    Do While LxTPos <= Len(LxTSrc)
+        If LxTIsDelim(Mid(LxTSrc, LxTPos, 1)) Then Exit Do
+        LxTPos = LxTPos + 1
+    Loop
+    LxTToken = LxTCarry(Mid(LxTSrc, nStart, LxTPos - nStart))
+End Function
+
+
+' Give a label the mark that was in force where it *began*, not the one it
+' ended on.  A label runs up to the next bracket, and a mark is not a
+' delimiter, so "sg" written in small caps before a plain "]" comes out of
+' the scanner as "<small caps>sg<plain>" — wear the last of those and the
+' label is set in the formatting of the bracket after it.
+'
+' The trailing mark is still worth keeping: it is what the *next* label
+' inherits.  So it is noted here and then trimmed off, because on the end
+' of a label it can only open a run with nothing in it.
+Function LxTCarry(s As String) As String
+    Dim sIn As String, sLast As String
+    sIn = LxTTag
+    sLast = LxLastTag(s)
+    If Len(sLast) > 0 Then LxTTag = sLast
+    LxTCarry = LxCarryTag(sIn, LxTrimTags(s))
+End Function
+
+
+Function LxTIsDelim(c As String) As Boolean
+    LxTIsDelim = (InStr("[]{} ", c) > 0 Or c = Chr(9))
+End Function
+
+
+' Skip what separates one piece of structure from the next: whitespace, and
+' the format marks that sit in front of it.  A mark is remembered rather
+' than thrown away — it is the formatting the *next* label is written in,
+' and LxTToken puts it back on the front.  Everything upstream of here can
+' therefore go on treating brackets as brackets.
+Sub LxTSkip()
+    Dim c As String
+    Do While LxTPos <= Len(LxTSrc)
+        c = Mid(LxTSrc, LxTPos, 1)
+        If LxTagIndex(c) >= 0 Then
+            LxTTag = c
+        ElseIf c <> " " And c <> Chr(9) Then
+            Exit Do
+        End If
+        LxTPos = LxTPos + 1
+    Loop
+End Sub
+
+
+' forest writes node options after a comma: "the big tree, roof".  Only
+' roof is understood, and anything else is refused by name.
+Sub LxTOptions(n As Integer)
+    Dim sHead As String, sRest As String, sOpt As String, sKey As String
+    Dim p As Integer
+
+    p = InStr(LxNdLabel(n), ",")
+    If p = 0 Then Exit Sub
+    sHead = Left(LxNdLabel(n), p - 1)
+    sRest = Mid(LxNdLabel(n), p + 1)
+
+    Do
+        p = InStr(sRest, ",")
+        If p > 0 Then
+            sOpt = Left(sRest, p - 1)
+            sRest = Mid(sRest, p + 1)
+        Else
+            sOpt = sRest
+            sRest = ""
+        End If
+        sOpt = Trim(LxStrip(sOpt))
+        sKey = LCase(sOpt)
+        If sKey = "roof" Then
+            LxNdRoof(n) = True
+        ElseIf Left(sKey, 5) = "name=" Then
+            ' the value keeps its case: it is what a move line refers to
+            LxNdName(n) = Trim(Mid(sOpt, 6))
+        ElseIf Len(sOpt) > 0 Then
+            LxTErr = "This does not know the node option """ & sOpt & """.  " & _
+                     "Only ""roof"" and ""name=..."" are supported."
+            Exit Sub
+        End If
+    Loop While Len(sRest) > 0
+
+    LxNdLabel(n) = LxTrimTagged(sHead)
+End Sub
+
+
+' -------------------------------------------------------------- movement ---
+
+' Movement is written as its own line under the tree, not as TikZ:
+'
+'     [CP [DP,name=wh what] [C\' [C did] [TP [V see] [DP,name=t __]]]]
+'     move t -> wh
+'
+' forest says this with \draw[->] (t) to[out=south west,in=south] (wh), and
+' a subset of TikZ is a trap: the moment `move` looked like \draw people
+' would reach for bend angles, edge labels and node anchors, and wherever
+' the subset ended would look like a bug rather than a boundary.  A line
+' that is plainly not TikZ promises only what it delivers.
+Function LxIsMoveLine(sLine As String) As Boolean
+    Dim s As String
+    s = LCase(Trim(LxStrip(sLine)))
+    LxIsMoveLine = (Left(s, 5) = "move " Or Left(s, 5) = "move" & Chr(9))
+End Function
+
+
+' The tree source, with the move lines taken out and kept for later — their
+' names cannot be resolved until every node exists.
+Function LxSplitMoves(aLines As Variant) As String
+    Dim i As Integer
+    Dim s As String
+
+    LxTErr = ""
+    LxMoveN = 0
+    s = ""
+    For i = 0 To UBound(aLines)
+        If LxIsMoveLine(aLines(i)) Then
+            If LxMoveN > ARROW_MAX Then
+                LxTErr = "That is more movement arrows than this can draw."
+                LxSplitMoves = ""
+                Exit Function
+            End If
+            LxMoveSrc(LxMoveN) = LxStrip(aLines(i))
+            LxMoveN = LxMoveN + 1
+        Else
+            If Len(s) > 0 Then s = s & " "
+            s = s & aLines(i)
+        End If
+    Next i
+
+    If Len(Trim(s)) = 0 And LxMoveN > 0 Then
+        LxTErr = "There are movement lines but no tree above them."
+    End If
+    LxSplitMoves = s
+End Function
+
+
+' Turn the move lines into node pairs, now that the tree has been parsed.
+Function LxResolveMoves() As Boolean
+    Dim i As Integer, p As Integer
+    Dim s As String, sFrom As String, sTo As String
+
+    LxArN = 0
+    LxResolveMoves = False
+
+    For i = 0 To LxMoveN - 1
+        s = Trim(Mid(Trim(LxMoveSrc(i)), 5))       ' drop the leading "move"
+        p = InStr(s, "->")
+        If p = 0 Then
+            LxTErr = "A movement line reads ""move <from> -> <to>""; this " & _
+                     "one has no arrow:" & Chr(10) & Chr(10) & "    " & _
+                     Trim(LxMoveSrc(i))
+            Exit Function
+        End If
+        sFrom = Trim(Left(s, p - 1))
+        sTo = Trim(Mid(s, p + 2))
+
+        LxArFrom(LxArN) = LxNodeNamed(sFrom)
+        LxArTo(LxArN) = LxNodeNamed(sTo)
+        If LxArFrom(LxArN) < 0 Or LxArTo(LxArN) < 0 Then
+            If LxArFrom(LxArN) < 0 Then s = sFrom Else s = sTo
+            LxTErr = "No node is named """ & s & """." & Chr(10) & Chr(10) & _
+                     "Name one by adding "", name=" & s & """ inside its " & _
+                     "brackets, as in [DP,name=" & s & " what]."
+            Exit Function
+        End If
+        If LxArFrom(LxArN) = LxArTo(LxArN) Then
+            LxTErr = "A movement line points """ & sFrom & """ at itself."
+            Exit Function
+        End If
+        LxArN = LxArN + 1
+    Next i
+
+    LxResolveMoves = True
+End Function
+
+
+Function LxNodeNamed(sName As String) As Integer
+    Dim i As Integer
+    LxNodeNamed = -1
+    If Len(sName) = 0 Then Exit Function
+    For i = 0 To LxNdN - 1
+        If LxNdName(i) = sName Then
+            LxNodeNamed = i
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+' Which lane each arrow runs in.
+'
+' Two arrows may share a lane only if their spans do not overlap, so this is
+' greedy colouring of an interval graph — narrowest span first, so that a
+' movement nested inside another sits above it rather than below, which is
+' how the same configuration is drawn by hand.
+Sub LxArrowLanes()
+    Dim aOrder(ARROW_MAX) As Integer
+    Dim i As Integer, j As Integer, k As Integer, m As Integer
+    Dim nTmp As Integer
+    Dim bFree As Boolean
+
+    For i = 0 To LxArN - 1
+        aOrder(i) = i
+        LxArLane(i) = -1
+    Next i
+
+    For i = 1 To LxArN - 1                       ' insertion sort by span
+        nTmp = aOrder(i)
+        j = i - 1
+        Do While j >= 0
+            If LxArSpan(aOrder(j)) <= LxArSpan(nTmp) Then Exit Do
+            aOrder(j + 1) = aOrder(j)
+            j = j - 1
+        Loop
+        aOrder(j + 1) = nTmp
+    Next i
+
+    For i = 0 To LxArN - 1
+        k = 0
+        Do
+            bFree = True
+            For j = 0 To i - 1
+                m = aOrder(j)
+                If LxArLane(m) = k And LxArOverlap(aOrder(i), m) Then
+                    bFree = False
+                    Exit For
+                End If
+            Next j
+            If bFree Then Exit Do
+            k = k + 1
+        Loop
+        LxArLane(aOrder(i)) = k
+    Next i
+End Sub
+
+
+Function LxArLo(i As Integer) As Double
+    LxArLo = LxMin(LxNdX(LxArFrom(i)), LxNdX(LxArTo(i)))
+End Function
+
+Function LxArHi(i As Integer) As Double
+    LxArHi = LxMax(LxNdX(LxArFrom(i)), LxNdX(LxArTo(i)))
+End Function
+
+Function LxArSpan(i As Integer) As Double
+    LxArSpan = LxArHi(i) - LxArLo(i)
+End Function
+
+Function LxArOverlap(i As Integer, j As Integer) As Boolean
+    LxArOverlap = (LxArLo(i) <= LxArHi(j) And LxArLo(j) <= LxArHi(i))
+End Function
+
+
+' ---------------------------------------------------------------- layout ---
+
+' Every parent centred over its children, and no two subtrees overlapping.
+'
+' Not Reingold-Tilford: instead of contours and threads it keeps one
+' leftmost-free-x per tier, places bottom up, and shifts a whole subtree
+' right when its parent would collide at its own tier.  Non-overlap then
+' holds by construction, which is the property that matters, and for a
+' syntax tree — tens of nodes, not thousands — the quadratic worst case
+' costs nothing.  The linear algorithm packs marginally tighter and is
+' much harder to be sure of.
+Function LxTreeLayout(oProbe As Object, nRoot As Integer, _
+                      dPad As Double, dGap As Double) As Boolean
+    Dim i As Integer
+    Dim dLeft As Double
+
+    For i = 0 To TREE_DEPTH
+        LxFree(i) = 0
+    Next i
+
+    If Not LxTDepth(nRoot, 0) Then
+        LxTErr = "That tree is nested deeper than this can draw."
+        LxTreeLayout = False
+        Exit Function
+    End If
+
+    Call LxTPlace(nRoot, oProbe, dPad, dGap)
+
+    dLeft = LxTMinLeft(nRoot)                 ' start the tree at x = 0
+    If dLeft <> 0 Then Call LxTShift(nRoot, -dLeft)
+    LxTreeLayout = True
+End Function
+
+
+Function LxTDepth(n As Integer, d As Integer) As Boolean
+    Dim k As Integer
+    LxTDepth = False
+    If d > TREE_DEPTH Then Exit Function
+    LxNdDepth(n) = d
+    k = LxNdKid(n)
+    Do While k >= 0
+        If Not LxTDepth(k, d + 1) Then Exit Function
+        k = LxNdSib(k)
+    Loop
+    LxTDepth = True
+End Function
+
+
+Sub LxTPlace(n As Integer, oProbe As Object, dPad As Double, dGap As Double)
+    Dim k As Integer, nLast As Integer
+    Dim dWant As Double, dFloor As Double
+
+    LxNdW(n) = LxTMeasure(oProbe, LxNdLabel(n)) + dPad
+
+    k = LxNdKid(n)
+    If k < 0 Then
+        LxNdX(n) = LxFree(LxNdDepth(n)) + LxNdW(n) / 2
+    Else
+        nLast = -1
+        Do While k >= 0
+            Call LxTPlace(k, oProbe, dPad, dGap)
+            nLast = k
+            k = LxNdSib(k)
+        Loop
+        dWant = (LxNdX(LxNdKid(n)) + LxNdX(nLast)) / 2
+        dFloor = LxFree(LxNdDepth(n)) + LxNdW(n) / 2
+        If dWant < dFloor Then                ' the parent will not fit there
+            Call LxTShift(n, dFloor - dWant)
+            dWant = dFloor
+        End If
+        LxNdX(n) = dWant
+    End If
+
+    Call LxTClaim(n, dGap)
+End Sub
+
+
+Sub LxTShift(n As Integer, dx As Double)
+    Dim k As Integer
+    LxNdX(n) = LxNdX(n) + dx
+    k = LxNdKid(n)
+    Do While k >= 0
+        Call LxTShift(k, dx)
+        k = LxNdSib(k)
+    Loop
+End Sub
+
+
+Sub LxTClaim(n As Integer, dGap As Double)
+    Dim k As Integer
+    Dim d As Double
+    d = LxNdX(n) + LxNdW(n) / 2 + dGap
+    If d > LxFree(LxNdDepth(n)) Then LxFree(LxNdDepth(n)) = d
+    k = LxNdKid(n)
+    Do While k >= 0
+        Call LxTClaim(k, dGap)
+        k = LxNdSib(k)
+    Loop
+End Sub
+
+
+Function LxTMinLeft(n As Integer) As Double
+    Dim k As Integer
+    Dim d As Double
+    d = LxNdX(n) - LxNdW(n) / 2
+    k = LxNdKid(n)
+    Do While k >= 0
+        d = LxMin(d, LxTMinLeft(k))
+        k = LxNdSib(k)
+    Loop
+    LxTMinLeft = d
+End Function
+
+
+Function LxTreeWidth(n As Integer) As Double
+    Dim k As Integer
+    Dim d As Double
+    d = LxNdX(n) + LxNdW(n) / 2
+    k = LxNdKid(n)
+    Do While k >= 0
+        d = LxMax(d, LxTreeWidth(k))
+        k = LxNdSib(k)
+    Loop
+    LxTreeWidth = d
+End Function
+
+
+Function LxTreeTiers(n As Integer) As Integer
+    Dim k As Integer
+    Dim m As Integer
+    m = LxNdDepth(n) + 1
+    k = LxNdKid(n)
+    Do While k >= 0
+        m = LxMaxI(m, LxTreeTiers(k))
+        k = LxNdSib(k)
+    Loop
+    LxTreeTiers = m
+End Function
+
+
+' ------------------------------------------------------------ measuring ---
+
+' A label is measured by being set.  The probe grows to fit its own text,
+' so what comes back is what Writer will actually draw — including the
+' label's own italics or small caps, which no width model has to know
+' about because the shape renders them.
+Function LxTMeasure(oProbe As Object, sLabel As String) As Double
+    If Len(LxStrip(sLabel)) = 0 Then
+        LxTMeasure = 0
+        Exit Function
+    End If
+    Call LxPut(oProbe, sLabel)
+    LxTMeasure = oProbe.getSize().Width
+End Function
+
+
+Function LxTreeProbe(oDoc As Object, oText As Object, oWhere As Object, _
+                     sFont As String, dPt As Double) As Object
+    Dim oShape As Object
+    oShape = oDoc.createInstance("com.sun.star.drawing.TextShape")
+    oText.insertTextContent(oWhere, oShape, False)
+    oShape.AnchorType = com.sun.star.text.TextContentAnchorType.AT_PARAGRAPH
+    Call LxTPlainShape(oShape, sFont, dPt)
+    oShape.TextAutoGrowWidth = True
+    oShape.TextAutoGrowHeight = True
+    LxTreeProbe = oShape
+End Function
+
+
+Sub LxTPlainShape(oShape As Object, sFont As String, dPt As Double)
+    oShape.FillStyle = com.sun.star.drawing.FillStyle.NONE
+    oShape.LineStyle = com.sun.star.drawing.LineStyle.NONE
+    oShape.TextWordWrap = False
+    oShape.TextLeftDistance = 0
+    oShape.TextRightDistance = 0
+    oShape.TextUpperDistance = 0
+    oShape.TextLowerDistance = 0
+    oShape.CharFontName = sFont
+    oShape.CharHeight = dPt
+End Sub
+
+
+' ------------------------------------------------------------- the table ---
+
+' The same object GlossSelection builds — number column, hanging judgment
+' column, one wide cell — with the tree in the wide cell instead of text.
+' Sharing the table is what makes a tree line up with the examples around
+' it and renumber with them.
+Sub LxEmitTree(oDoc As Object, oRange As Object, nRoot As Integer, sMark As String)
+    Dim oTable As Object, oCell As Object, oText As Object
+    Dim oCur As Object, oFont As Object, oGroup As Object
+    Dim dPxPerCm As Double, dJudg As Double, dNumber As Double
+    Dim dAvail As Double, dWidth As Double
+    Dim dPt As Double
+    Dim sFont As String
+    Dim aWidths(2) As Double
+    Dim dSum As Double
+    Dim i As Integer
+
+    oFont = LxFontForRange(oDoc, oRange, dPxPerCm)
+    dAvail = LxTextWidthCm(oDoc)
+
+    ' Before anything else: inserting the table below absorbs oRange, and
+    ' asking a consumed range what font it is in is a question about text
+    ' that is no longer there.  It answered plausibly, which is worse than
+    ' failing.  The bare form reads it first for the same reason.
+    sFont = "" : dPt = 0
+    On Error Resume Next
+    sFont = oRange.CharFontName
+    dPt = oRange.CharHeight
+    On Error Goto 0
+    If Len(sFont) = 0 Then sFont = "Liberation Serif"
+    If dPt <= 0 Then dPt = 12
+
+    dJudg = LxWidth(oFont, dPxPerCm, "*")
+    If Len(sMark) > 0 Then dJudg = LxMax(dJudg, LxWidth(oFont, dPxPerCm, sMark))
+    dJudg = dJudg + JUDG_GAP_CM
+    dNumber = LxMax(NUMBER_CM, LxWidth(oFont, dPxPerCm, "(00)") + PAD_CM) + dJudg
+
+    oTable = oDoc.createInstance("com.sun.star.text.TextTable")
+    oTable.initialize(3, 3)                   ' spacer, the tree, spacer
+    oDoc.getText().insertTextContent(oRange, oTable, True)
+    Call LxPlainTable(oTable)
+
+    For i = 0 To 2
+        Call LxSetCellStyle(oTable, LxCell(i, 1), SPACE_ABOVE)
+        Call LxSetCellStyle(oTable, LxCell(i, 2), CELL_PARA)
+        Call LxSetCellStyle(oTable, LxCell(i, 3), SPACE_BELOW)
+    Next i
+    Call LxSetCellStyle(oTable, LxCell(1, 2), JUDG_PARA)
+
+    aWidths(0) = dNumber - dJudg
+    aWidths(1) = dJudg
+    aWidths(2) = LxMax(dAvail - dNumber, MIN_COL_CM)
+    dSum = aWidths(0) + aWidths(1) + aWidths(2)
+    Call LxSetColumns(oTable, aWidths(), 3, dSum)
+
+    Call LxInsertNumber(oDoc, oTable.getCellByName(LxCell(0, 2)))
+    If Len(sMark) > 0 Then _
+        oTable.getCellByName(LxCell(1, 2)).setString(sMark)
+
+    oCell = oTable.getCellByName(LxCell(2, 2))
+    oText = oCell.getText()
+
+    oCur = oText.createTextCursor()
+    oCur.gotoEnd(False)
+    oGroup = LxTreeDraw(oDoc, oText, oCur, nRoot, sFont, dPt)
+    If IsNull(oGroup) Then
+        Call LxSay(LxTErr)
+        Exit Sub
+    End If
+
+    ' Said, not silently produced: a tree wider than the text block will
+    ' hang off the page, and shortening a label is the user's call.
+    dWidth = LxTreeWidth(nRoot) / 1000.0
+    If dWidth > aWidths(2) Then
+        Call LxSay("The tree is " & Format(dWidth, "0.0") & " cm wide but " & _
+                   "only " & Format(aWidths(2), "0.0") & " cm is left beside " & _
+                   "the number, so it will stick out." & Chr(10) & Chr(10) & _
+                   "Shorten a label, or group words with {braces} so they " & _
+                   "share one node.")
+    End If
+End Sub
+
+
+' Probe, measure, lay out, draw.  Everything the two forms of tree share;
+' they differ only in what they anchor it into.  Nothing on failure, with
+' LxTErr set.
+Function LxTreeDraw(oDoc As Object, oText As Object, oWhere As Object, _
+                    nRoot As Integer, sFont As String, dPt As Double) As Object
+    Dim oProbe As Object
+    Dim dLineH As Double
+
+    LxTreeDraw = Nothing
+    oProbe = LxTreeProbe(oDoc, oText, oWhere, sFont, dPt)
+    Call LxTMeasure(oProbe, "Ag")             ' the width is discarded; the
+    dLineH = oProbe.getSize().Height          ' line height is the point
+
+    If Not LxTreeLayout(oProbe, nRoot, NODE_PAD_CM * 1000, NODE_GAP_CM * 1000) Then
+        oDoc.getDrawPage().remove(oProbe)
+        Exit Function
+    End If
+    oDoc.getDrawPage().remove(oProbe)
+
+    LxTreeDraw = LxTreeShapes(oDoc, oText, oWhere, nRoot, dLineH, _
+                              dLineH * TIER_FACTOR, sFont, dPt)
+End Function
+
+
+' ------------------------------------------------------- a tree on its own ---
+
+' No table, no number, no example styles: the tree replaces the brackets
+' where they stand and is anchored as a character in that same paragraph,
+' so whatever was either side of the notation stays either side of the tree.
+Sub LxEmitBareTree(oDoc As Object, oRange As Object, nRoot As Integer, _
+                   sMark As String)
+    Dim oText As Object, oCur As Object, oGroup As Object, oTail As Object
+    Dim sFont As String
+    Dim dPt As Double, dWidth As Double, dAvail As Double
+    Dim bTail As Boolean
+
+    ' Read the font off the selection before the tree replaces it.
+    sFont = "" : dPt = 0
+    On Error Resume Next
+    sFont = oRange.CharFontName
+    dPt = oRange.CharHeight
+    On Error Goto 0
+    If Len(sFont) = 0 Then sFont = "Liberation Serif"
+    If dPt <= 0 Then dPt = 12
+
+    dAvail = LxTextWidthCm(oDoc)
+    oText = oRange.getText()
+
+    ' An as-character group reserves vertical room in the line but not
+    ' horizontal — measured: a 38pt-wide tree between two words leaves a
+    ' 31pt gap, which is the width of the words alone.  So the tree is drawn
+    ' where the line's text ends.  Text *before* it is fine, and is how the
+    ' judgment mark below works; text after it would end up beside the tree
+    ' rather than after it, so that is worth saying.
+    bTail = False
+    On Error Resume Next
+    oTail = oText.createTextCursorByRange(oRange.getEnd())
+    oTail.gotoEndOfParagraph(True)
+    bTail = (Len(Trim(LxStrip(oTail.getString()))) > 0)
+    On Error Goto 0
+
+    ' There is no hanging column without a table, so a judgment mark becomes
+    ' the text it would have been had you typed it there yourself.
+    oRange.setString(sMark)
+    oCur = oText.createTextCursorByRange(oRange.getEnd())
+
+    oGroup = LxTreeDraw(oDoc, oText, oCur, nRoot, sFont, dPt)
+    If IsNull(oGroup) Then
+        Call LxSay(LxTErr)
+        Exit Sub
+    End If
+
+    dWidth = LxTreeWidth(nRoot) / 1000.0
+    If dWidth > dAvail Then
+        Call LxSay("The tree is " & Format(dWidth, "0.0") & " cm wide but " & _
+                   "the text block is only " & Format(dAvail, "0.0") & _
+                   " cm, so it will stick out." & Chr(10) & Chr(10) & _
+                   "Shorten a label, or group words with {braces} so they " & _
+                   "share one node.")
+    ElseIf bTail Then
+        Call LxSay("A tree without a number is drawn where the line's text " & _
+                   "ends, so it should be the last thing on its line." & _
+                   Chr(10) & Chr(10) & _
+                   "There is still text after this one; move it to a " & _
+                   "paragraph of its own, or use Typeset example instead " & _
+                   "so the tree gets a table to sit in.")
+    End If
+End Sub
+
+
+' ------------------------------------------------------------- the shapes ---
+
+' One text shape per node, one line per branch, one triangle per roof, all
+' grouped and anchored as a character.
+'
+' Two orderings matter, both found the hard way:
+'
+'   * a shape already anchored as a character cannot be grouped, so every
+'     piece is anchored to the paragraph and only the finished group is
+'     made a character;
+'   * a polygon shape must be given its PolyPolygon *before* its position.
+'     Setting position or size first puts the polygon in another coordinate
+'     space — 2501 units out, on a page with 2cm margins — and the branches
+'     land away from the nodes they belong to.
+Function LxTreeShapes(oDoc As Object, oText As Object, oWhere As Object, _
+                      nRoot As Integer, dLineH As Double, dTier As Double, _
+                      sFont As String, dPt As Double) As Object
+    Dim oShapes As Object, oGroup As Object
+
+    oShapes = createUnoService("com.sun.star.drawing.ShapeCollection")
+    Call LxTEmitNode(oDoc, oText, oWhere, oShapes, nRoot, dLineH, dTier, sFont, dPt)
+    Call LxTEmitArrows(oDoc, oText, oWhere, oShapes, dLineH, dTier)
+
+    oGroup = oDoc.getDrawPage().group(oShapes)
+    oGroup.AnchorType = com.sun.star.text.TextContentAnchorType.AS_CHARACTER
+    LxTreeShapes = oGroup
+End Function
+
+
+Sub LxTEmitNode(oDoc As Object, oText As Object, oWhere As Object, _
+                oShapes As Object, n As Integer, dLineH As Double, _
+                dTier As Double, sFont As String, dPt As Double)
+    Dim oShape As Object
+    Dim k As Integer
+    Dim dY As Double, dBottom As Double, dTop As Double
+    Dim aPos As New com.sun.star.awt.Point
+    Dim aSize As New com.sun.star.awt.Size
+
+    dY = LxNdDepth(n) * dTier
+
+    If Len(LxStrip(LxNdLabel(n))) > 0 Then
+        oShape = oDoc.createInstance("com.sun.star.drawing.TextShape")
+        oText.insertTextContent(oWhere, oShape, False)
+        oShape.AnchorType = com.sun.star.text.TextContentAnchorType.AT_PARAGRAPH
+        aPos.X = CLng(LxNdX(n) - LxNdW(n) / 2)
+        aPos.Y = CLng(dY)
+        aSize.Width = CLng(LxNdW(n))
+        aSize.Height = CLng(dLineH)
+        oShape.setPosition(aPos)
+        oShape.setSize(aSize)
+        Call LxTPlainShape(oShape, sFont, dPt)
+        oShape.TextAutoGrowWidth = False
+        oShape.TextAutoGrowHeight = False
+        oShape.TextHorizontalAdjust = com.sun.star.drawing.TextHorizontalAdjust.CENTER
+        oShape.TextVerticalAdjust = com.sun.star.drawing.TextVerticalAdjust.CENTER
+        Call LxPut(oShape, LxNdLabel(n))
+        Call LxTShapeFont(oShape, sFont, dPt)
+        oShapes.add(oShape)
+    End If
+
+    dBottom = dY + dLineH
+    k = LxNdKid(n)
+    Do While k >= 0
+        dTop = LxNdDepth(k) * dTier
+        If LxNdRoof(k) Then
+            Call LxTRoof(oDoc, oText, oWhere, oShapes, LxNdX(n), dBottom, k, dTop)
+        Else
+            Call LxTBranch(oDoc, oText, oWhere, oShapes, LxNdX(n), dBottom, _
+                           LxNdX(k), dTop)
+        End If
+        Call LxTEmitNode(oDoc, oText, oWhere, oShapes, k, dLineH, dTier, _
+                         sFont, dPt)
+        k = LxNdSib(k)
+    Loop
+End Sub
+
+
+' The label keeps its own italics and small caps from LxPut; the family and
+' size are the document's, applied afterwards because they are not part of
+' what a run carries.
+Sub LxTShapeFont(oShape As Object, sFont As String, dPt As Double)
+    Dim oCur As Object
+    oCur = oShape.getText().createTextCursor()
+    oCur.gotoStart(False)
+    oCur.gotoEnd(True)
+    On Error Resume Next
+    oCur.CharFontName = sFont
+    oCur.CharHeight = dPt
+    On Error Goto 0
+End Sub
+
+
+' Every polygon in a tree goes through here, so the ordering rule lives in
+' one place: the PolyPolygon first, in the shape's own frame, and only then
+' the position.  Points arrive already relative to (dLeft, dTop).
+Function LxTPolyShape(oDoc As Object, oText As Object, oWhere As Object, _
+                      sKind As String, aPts As Variant, _
+                      dLeft As Double, dTop As Double, _
+                      bFill As Boolean) As Object
+    Dim oShape As Object
+    Dim aPos As New com.sun.star.awt.Point
+
+    oShape = oDoc.createInstance("com.sun.star.drawing." & sKind)
+    oText.insertTextContent(oWhere, oShape, False)
+    oShape.AnchorType = com.sun.star.text.TextContentAnchorType.AT_PARAGRAPH
+
+    oShape.PolyPolygon = Array(aPts)
+    aPos.X = CLng(dLeft) : aPos.Y = CLng(dTop)
+    oShape.setPosition(aPos)
+
+    oShape.LineStyle = com.sun.star.drawing.LineStyle.SOLID
+    oShape.LineWidth = BRANCH_WIDTH
+    oShape.LineColor = RGB(0, 0, 0)
+    If bFill Then
+        oShape.FillStyle = com.sun.star.drawing.FillStyle.SOLID
+        oShape.FillColor = RGB(0, 0, 0)
+    Else
+        oShape.FillStyle = com.sun.star.drawing.FillStyle.NONE
+    End If
+    LxTPolyShape = oShape
+End Function
+
+
+Function LxPt(x As Double, y As Double) As Object
+    Dim aP As New com.sun.star.awt.Point
+    aP.X = CLng(x) : aP.Y = CLng(y)
+    LxPt = aP
+End Function
+
+
+Sub LxTBranch(oDoc As Object, oText As Object, oWhere As Object, _
+              oShapes As Object, x0 As Double, y0 As Double, _
+              x1 As Double, y1 As Double)
+    Dim dLeft As Double
+    dLeft = LxMin(x0, x1)
+    oShapes.add(LxTPolyShape(oDoc, oText, oWhere, "LineShape", _
+        Array(LxPt(x0 - dLeft, 0), LxPt(x1 - dLeft, y1 - y0)), _
+        dLeft, y0, False))
+End Sub
+
+
+' A movement arrow: down out of the node it moved from, along its own lane
+' under the tree, and up into the node it moved to, with a filled head.
+'
+' Drawn as a polyline in a gutter rather than as a curve because a straight
+' run under the tree crosses nothing, and because two of them in adjacent
+' lanes stay legible where two arcs would not.
+Sub LxTArrow(oDoc As Object, oText As Object, oWhere As Object, _
+             oShapes As Object, x0 As Double, y0 As Double, _
+             x1 As Double, y1 As Double, dLane As Double)
+    Dim dLeft As Double, dHead As Double, dHalf As Double, dTop As Double
+
+    dLeft = LxMin(x0, x1)
+    dHead = HEAD_LEN_CM * 1000
+    dHalf = HEAD_HALF_CM * 1000
+
+    ' The top of the arrow is where it *ends*, not where it starts: movement
+    ' goes up the tree, so y1 is above y0.  LxTPolyShape wants points
+    ' measured from the bounding box, and getting that wrong does not fail —
+    ' it silently sinks the whole arrow by however far the box was out.
+    dTop = LxMin(y0, y1 + dHead)
+
+    oShapes.add(LxTPolyShape(oDoc, oText, oWhere, "PolyLineShape", _
+        Array(LxPt(x0 - dLeft, y0 - dTop), _
+              LxPt(x0 - dLeft, dLane - dTop), _
+              LxPt(x1 - dLeft, dLane - dTop), _
+              LxPt(x1 - dLeft, y1 + dHead - dTop)), _
+        dLeft, dTop, False))
+
+    ' the head, apex on the underside of the node moved to
+    oShapes.add(LxTPolyShape(oDoc, oText, oWhere, "PolyPolygonShape", _
+        Array(LxPt(dHalf, 0), LxPt(0, dHead), LxPt(2 * dHalf, dHead), _
+              LxPt(dHalf, 0)), _
+        x1 - dHalf, y1, True))
+End Sub
+
+
+' The underside of everything a node dominates.
+'
+' An arrow leaves and arrives *here*, not at the node's own baseline.  A
+' node almost always has something under it — a terminal, a whole subtree —
+' and an arrow drawn to the node's baseline goes straight through it.  An
+' arrow should point at a constituent, not cross it, and the bottom of the
+' subtree is the one place on the node's own x where nothing is in the way.
+Function LxSubtreeBottom(n As Integer, dLineH As Double, dTier As Double) As Double
+    Dim k As Integer
+    Dim d As Double
+    d = LxNdDepth(n) * dTier + dLineH
+    k = LxNdKid(n)
+    Do While k >= 0
+        d = LxMax(d, LxSubtreeBottom(k, dLineH, dTier))
+        k = LxNdSib(k)
+    Loop
+    LxSubtreeBottom = d
+End Function
+
+
+' The gutter: every arrow below every node, each in the lane it was given.
+Sub LxTEmitArrows(oDoc As Object, oText As Object, oWhere As Object, _
+                  oShapes As Object, dLineH As Double, dTier As Double)
+    Dim i As Integer
+    Dim dDeep As Double, dLane As Double
+
+    If LxArN < 1 Then Exit Sub
+
+    dDeep = 0
+    For i = 0 To LxNdN - 1
+        dDeep = LxMax(dDeep, LxNdDepth(i) * dTier + dLineH)
+    Next i
+
+    Call LxArrowLanes()
+    For i = 0 To LxArN - 1
+        dLane = dDeep + GUTTER_GAP_CM * 1000 + LxArLane(i) * LANE_STEP_CM * 1000
+        Call LxTArrow(oDoc, oText, oWhere, oShapes, _
+                      LxNdX(LxArFrom(i)), _
+                      LxSubtreeBottom(LxArFrom(i), dLineH, dTier), _
+                      LxNdX(LxArTo(i)), _
+                      LxSubtreeBottom(LxArTo(i), dLineH, dTier), dLane)
+    Next i
+End Sub
+
+
+' A roof: the triangle from the parent down to the width of the child's own
+' label, which is what "the big tree" under one NP is supposed to look like.
+Sub LxTRoof(oDoc As Object, oText As Object, oWhere As Object, _
+            oShapes As Object, xApex As Double, yApex As Double, _
+            k As Integer, yBase As Double)
+    Dim dLo As Double, dHi As Double, dLeft As Double
+
+    dLo = LxNdX(k) - LxNdW(k) / 2
+    dHi = LxNdX(k) + LxNdW(k) / 2
+    dLeft = LxMin(dLo, xApex)
+
+    oShapes.add(LxTPolyShape(oDoc, oText, oWhere, "PolyPolygonShape", _
+        Array(LxPt(xApex - dLeft, 0), _
+              LxPt(dLo - dLeft, yBase - yApex), _
+              LxPt(dHi - dLeft, yBase - yApex), _
+              LxPt(xApex - dLeft, 0)), _
+        dLeft, yApex, False))
+End Sub
