@@ -7,4 +7,14 @@ dist/
 spikes/_out/
 tests/reference/*.fodt
 .venv/
-demo.odt
+
+# Writer documents are output or scratch — except the one the whole output
+# spec is read out of, which tests/test_bands.py and tests/test_e2e.py both
+# cite.  Named here rather than left to "it is already tracked, so the rule
+# does not apply": that is true until someone regenerates it, and then
+# git add skips it without saying why.
+*.odt
+!tests/reference/reference.odt
+
+# LibreOffice's lock file, left behind beside a document it has open
+.~lock.*#
