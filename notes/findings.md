@@ -1420,3 +1420,102 @@ which is the deepest node in the tree, so it appears to point at whatever
 sits there.  That is meaningless input — a constituent cannot move to a
 position that dominates it — and it produces meaningless output without
 crossing anything.  Not worth engineering around; worth knowing.
+
+---
+
+## 2026-08-09 — the layout a linguist is allowed to set, and two Basic traps
+
+Asked for: the indents and the vertical spacing configurable from the
+LinguExx menu, defaults unchanged.
+
+**What "indentation to the example number" is was not obvious**, and the
+answer taken was to offer the whole set rather than guess at two of it.
+An example has three horizontal lengths, each measured from the one before:
+
+    |<- indent ->|(1)|<- number ->|a.|<- marker ->|Esto es un ejemplo
+
+`indent` was not adjustable at all before (it was 0 and unnamed); `number`
+and `marker` existed as `NUMBER_CM` and `MARKER_CM` and are now floors
+rather than constants.  Whichever of the two readings was meant, it is in
+there, and the third costs one dialog row.
+
+**Where each setting lives was the real design question.**  Two answers,
+deliberately different:
+
+  * the three indents → user-defined document properties.  A column width
+    is worked out afresh for every example and no style holds one, so there
+    was nowhere else.
+  * the two spacings → nowhere.  They already *are* `LxExampleSpace` and
+    its two children; storing the height a second time would give the
+    document two answers and let them drift the moment someone edited the
+    style in the sidebar.  The dialog reads and writes the style, and
+    reproduces `styles.py`'s own rule — equal sides on the parent with both
+    children inheriting, unequal ones broken away per child.
+
+That makes the two kinds behave differently, which the dialog says out
+loud: spacing restyles every example in the document at once because it is
+a style; an indent shows up only in examples built afterwards, because the
+ones already built are tables whose columns are already set.
+
+Per document, not per profile.  The styles are per document and a paper has
+one geometry; the answer for "in all my papers" is a template.
+
+### Two Basic traps, both silent
+
+**A `Const` is resolved in source order.**  The three property-name
+constants were declared beside the code that owns them, three quarters of
+the way down the module — and every procedure above them failed with
+"Variable not defined: OPT_INDENT" at *run* time.  They are at the top with
+the others now, with a comment saying why they are not where they belong.
+This is the second time a `Const` has broken this module from a distance
+(see 2026-08-06, `Chr()` in a `Const`).
+
+**A user-defined document property may hold a double, and Basic will not
+send one.**  `addProperty(name, REMOVEABLE, dValue)` raised
+`IllegalTypeException` — but only sometimes.  Basic converts a `Double`
+whose value happens to be integral into a `Long` on the way into the Any,
+and a user-defined property takes string, boolean, date, duration or
+double, and nothing else.  So 0.9 cm stored, 2.0 cm did not, and the whole
+`Sub` gave up silently at the second of three.  `CreateUnoValue("double",
+dValue)` says what it means.
+
+Worth noting *how* it hid: the defaults are 1.1, 0.7, 0.18 — none of them
+integral.  Any test that set a whole number of centimetres would have found
+it and any test that did not, never would.  `LAYOUT_CM` now sets exactly
+one integral value (2.0 cm) for that reason.
+
+Worth noting *why it was silent*: `LayoutSettingsQuiet` had no error trap,
+and a runtime error inside a Basic function invoked through the script
+provider does not always surface as an exception on the Python side — the
+call returned `""`, which means success.  It traps now, as the interactive
+command already did.
+
+### Verification
+
+`check_layout_settings` builds the same paradigm twice — once under the
+defaults, once under five settings all different from each other and from
+their defaults — and measures the *difference* in the rendered PDF, so
+nothing depends on where an example happens to start:
+
+    the number   moved by the example indent            0.90 cm
+    the letter   by that + the change in `number`       1.80 cm
+    its text     by that + the change in `marker`       2.50 cm
+
+all three exact to the 0.12 cm tolerance.  Plus: an untouched document
+reports the defaults, a setting round-trips, an out-of-range length is
+refused and changes nothing, the spacings land on the styles with equal
+sides left on the parent for the children to inherit (asserted through
+`getPropertyState`, not just the height), and the table's own `LeftMargin`
+is what was asked for.
+
+**The dialog is tested without being shown.**  `LxLayoutModel` builds the
+model and `LxAskLayout` shows it, split for exactly this reason: headless
+LibreOffice has nothing to `execute()` a dialog in, but a mistyped control
+property or a field holding its neighbour's value goes wrong while the
+model is assembled.  `LayoutDialogQuiet` assembles one and reads the five
+fields back.
+
+Built at run time rather than shipped as a `.xdl` in the extension's dialog
+library: everything here loads `LinguExx.bas` into a Basic library, which
+carries no dialogs, so a `.xdl` would exist only in the packaged form —
+the one file that ships would stop being the one file the tests drive.

@@ -235,6 +235,14 @@ it will be drawn in, which matters more than it sounds: small caps are
 capitals at 80% of the size, so 10–20% *wider* than the lowercase they
 stand in for, and a column measured as lowercase is too narrow for them.
 
+*Example layout…* sets the five lengths that are house style rather than
+measurement: how far in the example number sits, how far from it the
+sub-example letter sits, how far from that the sub-example's text sits, and
+the space above and below. They belong to the document, like the styles.
+The two spacings *are* the `LxExampleSpace*` styles, so changing them
+restyles every example at once; the indents apply to examples built
+afterwards.
+
 Install it as a LibreOffice extension:
 
 ```

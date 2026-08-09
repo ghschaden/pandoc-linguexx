@@ -37,9 +37,10 @@ python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt
 ```
 
-It appears as a **LinguExx** menu in Writer, with three entries:
+It appears as a **LinguExx** menu in Writer, with three commands —
 *Typeset example*, *Typeset numbered tree* and *Typeset unnumbered
-tree*. An installed extension raises
+tree* — and, below a separator, *Example layout…*. An installed
+extension raises
 no macro-security warning, and it is the only sensible thing to hand to
 someone who is not going to paste Basic into an IDE.
 
@@ -364,6 +365,74 @@ language as above or stand alone on its line.
 If a letter appears part-way through the selection but the selection does
 not start with one, it refuses rather than guess.
 
+## Example layout
+
+**LinguExx ▸ Example layout…** sets the five lengths that are a matter of
+house style rather than of measurement. Everything else — column widths,
+the width of the text block, how the bands are packed — is measured or read
+off the page and is not yours to set.
+
+| | default | what it is |
+|---|---|---|
+| indent to the example number | 0 cm | from the left margin to the `(1)` |
+| indent to the sub-example letter | 1.1 cm | from the number to the `a.` |
+| indent to the sub-example text | 0.7 cm | from the `a.` to the text beside it |
+| space above an example | 0.18 cm | the `LxExampleSpaceAbove` style |
+| space below an example | 0.18 cm | the `LxExampleSpaceBelow` style |
+
+Each horizontal one is measured from the one before it:
+
+```
+|<- indent ->|(1)|<- number ->|a.|<- marker ->|Esto es un ejemplo
+```
+
+so the second also fixes where a **main** example's own text begins — the
+letter of a sub-example and the text of a main example sit at the same x,
+which is linguexx's geometry and the reason the judgment column is carved
+out of the column to its left rather than inserted after it.
+
+The two indents that are floors say so: a number too wide for the column
+allotted to it — `(100)`, or `(12)` in a large body font — still gets the
+room it needs rather than colliding with the example. Set them below what
+the text needs and nothing moves.
+
+**The two kinds of setting behave differently, on purpose.**
+
+- **The indents apply to examples built from now on.** An example already
+  in the document is a table whose columns are already set; nothing goes
+  back and re-lays it out, exactly as nothing re-aligns an example when you
+  edit a word in it. Rebuild it from its source if you want it to move.
+- **The spacings restyle every example in the document at once**, because
+  they *are* the `LxExampleSpace*` styles — the dialog is a front end to the
+  same two styles the Styles sidebar edits, and to the same
+  `--example-spacing`, `--space-above` and `--space-below` the converter
+  takes. Setting both sides to the same value puts the height back on the
+  parent `LxExampleSpace` with both children inheriting it, so one later
+  sidebar edit still moves both sides; setting them apart breaks each child
+  away on its own.
+
+**The settings belong to the document**, like the styles, and travel with
+it. There is no global preference: a paper has one geometry, and a linguist
+who wants the same in every paper should set it in the template they start
+from. The three indents are stored as user-defined document properties
+(File ▸ Properties ▸ Custom Properties, `LinguExxIndentCm`,
+`LinguExxNumberCm`, `LinguExxMarkerCm`); the two spacings are not stored
+anywhere but in the styles, because writing the height down a second time
+would give the document two answers and let them drift the moment someone
+edited the style.
+
+An indented example is the one case where the table does not span the text
+block: `HoriOrient` FULL means *the whole text block* and leaves no room
+for a margin, so an indented table is placed and sized outright. The cost
+is that such an example holds its width when the page geometry changes,
+where an unindented one follows it.
+
+Non-interactively — `LayoutSettingsQuiet(indent, number, marker, above,
+below)` applies the five without a dialog and returns the message
+(`""` on success), `LayoutQuiet()` reads them back as `;`-separated
+centimetres. A length outside 0–10 cm is refused rather than clamped, and
+nothing is changed when one is.
+
 ## Differences from `linguexx2odt`
 
 | | converter | macro |
@@ -373,6 +442,7 @@ not start with one, it refuses rather than guess.
 | inline formatting | from the LaTeX (`\lpzg`, `\textsc`, …) | from the text you selected |
 | small caps | estimated at `sc_ratio` of the capital | measured, by rendering them |
 | text width | `--text-width` | the actual page style |
+| indents and spacing | command-line flags | **LinguExx ▸ Example layout…** |
 | band grid | union of the bands' boundaries | the same |
 | judgment column | reserved only if the document judges something | always reserved |
 | sub-examples | yes | yes — one marker column, as the converter has |
@@ -442,14 +512,34 @@ unnumbered form: no table, the group anchored as a character, the next
 paragraph pushed down by the tree's height, a judgment mark set as text,
 and the warning when something is left on the line after it.
 
+`check_layout_settings` covers **Example layout…**. It builds the same
+paradigm twice, once under the defaults and once under five settings that
+are all different from each other and from their defaults, and measures the
+*difference* — so nothing in it depends on where an example happens to
+start, only on how far each setting moved what it claims to move: the
+number by the example indent, the letter by that plus the change in the
+number indent, the sub-example's text by that plus the change in the marker
+indent. Both indents under test are set well clear of their floor, so the
+shift is the whole of the change. It also pins that an untouched document
+reports the defaults, that a setting round-trips, that a length out of
+range is refused and changes nothing, that the two spacings land on the
+styles with equal sides left on the parent for both children to inherit,
+and — through `LayoutDialogQuiet` — that the dialog assembles with each
+field holding its own document's value. That last one builds the dialog
+model and shows none of it: a headless LibreOffice has nothing to
+`execute()` a dialog in, but a mistyped control property or a field holding
+its neighbour's value goes wrong while the model is assembled, which is
+where it is caught.
+
 `check_undo` pins what the docs promise about Ctrl+Z: one step takes back
 an example, a tree, a tree with movement or a bare tree, and no style
 creation is left outside the undo context to be unwound separately.
 
 `check_extension` builds the `.oxt`, checks every command the menu offers
-names a Sub that exists, installs it with `unopkg` into a throwaway profile
-and drives all three commands *from the package* rather than from the loose
-`.bas`. Everything else in the suite loads the macro straight into a Basic
+names a Sub that exists — all four of them, which is what catches a typo in
+`Addons.xcu` for the one command nothing else here invokes — installs it
+with `unopkg` into a throwaway profile and drives the three building
+commands *from the package* rather than from the loose `.bas`. Everything else in the suite loads the macro straight into a Basic
 library, which skips the package — and that has hidden a real bug before.
 
 `check_tree_items` covers trees inside a paradigm — beside a glossed item,

@@ -126,13 +126,13 @@ def install(ctx) -> None:
     libs.storeLibraries()
 
 
-def run(ctx, macro: str = "GlossSelectionQuiet") -> str:
+def run(ctx, macro: str = "GlossSelectionQuiet", args: tuple = ()) -> str:
     """Invoke the macro and return whatever it wanted to tell the user."""
     factory = ctx.ServiceManager.createInstanceWithContext(
         "com.sun.star.script.provider.MasterScriptProviderFactory", ctx)
     script = factory.createScriptProvider("").getScript(
         f"vnd.sun.star.script:LinguExx.Gloss.{macro}?language=Basic&location=application")
-    return script.invoke((), (), ())[0] or ""
+    return script.invoke(tuple(args), (), ())[0] or ""
 
 
 def make_doc(ctx, lines: list[str]):
@@ -397,6 +397,181 @@ def check_sub_alignment(ctx, out: Path, profile: Path) -> int:
         return 1
     print("    ok")
     return 0
+
+
+# The layout dialog's five lengths: indent, number, marker, above, below.
+# Each is deliberately different from its default and from the others, so a
+# value read back into the wrong field cannot pass.
+LAYOUT_CM = (0.9, 2.0, 1.4, 0.30, 0.45)
+LAYOUT_DEFAULT_CM = (0.0, 1.1, 0.7, 0.18, 0.18)
+LAYOUT_LINES = ["a. Esto es un ejemplo", "this is a example",
+                "b. Otro ejemplo aqui", "another example here"]
+PT_PER_CM = 72 / 2.54
+
+
+def build_with_layout(ctx, out: Path, name: str, layout) -> tuple[Path, int]:
+    """One paradigm built under `layout`, plus the table's own left margin."""
+    doc = make_doc(ctx, LAYOUT_LINES)
+    if layout is not None:
+        msg = run(ctx, "LayoutSettingsQuiet", layout)
+        if msg:
+            doc.dispose()
+            raise RuntimeError(f"LayoutSettingsQuiet said {msg!r}")
+    msg = run(ctx)
+    if msg:
+        doc.dispose()
+        raise RuntimeError(f"GlossSelectionQuiet said {msg!r}")
+    margin = doc.getTextTables().getByIndex(0).LeftMargin
+    odt = out / f"{name}.odt"
+    doc.storeToURL(odt.as_uri(), (PropertyValue("FilterName", 0, "writer8", 0),))
+    doc.dispose()
+    return odt, margin
+
+
+def spacing_of(ctx, above_cm: float, below_cm: float) -> tuple:
+    """Set the two spacings on a fresh document and report what they became.
+
+    Returns the macro's message and, for the above, below and parent
+    styles in that order, (height in 1/100 mm, declares one of its own).
+    The inheritance is half the contract: equal sides must stay on the
+    parent so that one sidebar edit of LxExampleSpace still moves both.
+    """
+    doc = make_doc(ctx, ["Esto es un ejemplo", "this is a example"])
+    msg = run(ctx, "LayoutSettingsQuiet", (0.0, 1.1, 0.7, above_cm, below_cm))
+    styles = doc.getStyleFamilies().getByName("ParagraphStyles")
+    got = []
+    for name in ("LxExampleSpaceAbove", "LxExampleSpaceBelow", "LxExampleSpace"):
+        style = styles.getByName(name)
+        # .value, not str(): a PropertyState comes back as a uno.Enum, and
+        # comparing one to a string is quietly false for ever
+        got.append((style.ParaLineSpacing.Height,
+                    style.getPropertyState("ParaLineSpacing").value == "DIRECT_VALUE"))
+    doc.dispose()
+    return msg, got
+
+
+def check_layout_settings(ctx, out: Path, profile: Path) -> int:
+    """The layout settings move exactly what they say they move.
+
+    Measured as a difference between two builds of the same paradigm, one
+    under the defaults and one under LAYOUT_CM, so nothing here depends on
+    where an example happens to start — only on how far each setting moved
+    it.  The two indents that are floors are set well above their floor, so
+    the shift is the whole of the change:
+
+        the number   by the example indent
+        the letter   by that, plus the change in the number indent
+        its text     by that, plus the change in the marker indent
+    """
+    print("--- layout_settings")
+    bad = 0
+
+    # a document that has never been touched answers with the defaults
+    doc = make_doc(ctx, ["Esto es un ejemplo"])
+    fresh = [float(v) for v in run(ctx, "LayoutQuiet").split(";")]
+    doc.dispose()
+    if any(abs(a - b) > 0.005 for a, b in zip(fresh, LAYOUT_DEFAULT_CM)):
+        print(f"    FAIL: an untouched document reports {fresh}, "
+              f"not the defaults {list(LAYOUT_DEFAULT_CM)}")
+        bad += 1
+
+    try:
+        before, margin0 = build_with_layout(ctx, out, "layout_default", None)
+        after, margin1 = build_with_layout(ctx, out, "layout_set", LAYOUT_CM)
+    except RuntimeError as exc:
+        print(f"    FAIL: {exc}")
+        return bad + 1
+
+    # and reports back what it was set to — and offers it in the dialog,
+    # which is built here and shown nowhere, so a mistyped control property
+    # or a field holding its neighbour's value is caught without a window
+    # server to execute() in
+    doc = make_doc(ctx, ["Esto es un ejemplo"])
+    msg = run(ctx, "LayoutSettingsQuiet", LAYOUT_CM)
+    got = [float(v) for v in run(ctx, "LayoutQuiet").split(";")]
+    shown = [float(v) for v in run(ctx, "LayoutDialogQuiet").split(";")]
+    doc.dispose()
+    if msg or any(abs(a - b) > 0.005 for a, b in zip(got, LAYOUT_CM)):
+        print(f"    FAIL: set {list(LAYOUT_CM)}, read back {got} ({msg!r})")
+        bad += 1
+    if any(abs(a - b) > 0.005 for a, b in zip(shown, LAYOUT_CM)):
+        print(f"    FAIL: the dialog would offer {shown}, not {list(LAYOUT_CM)}")
+        bad += 1
+
+    # out of range is refused rather than clamped, and changes nothing
+    doc = make_doc(ctx, ["Esto es un ejemplo"])
+    msg = run(ctx, "LayoutSettingsQuiet", (0.0, 1.1, 0.7, 0.18, 99.0))
+    left = [float(v) for v in run(ctx, "LayoutQuiet").split(";")]
+    doc.dispose()
+    if not msg:
+        print("    FAIL: 99 cm of space below was accepted")
+        bad += 1
+    elif any(abs(a - b) > 0.005 for a, b in zip(left, LAYOUT_DEFAULT_CM)):
+        print(f"    FAIL: a refused setting still changed something: {left}")
+        bad += 1
+
+    # the indented table is placed where it was told to be
+    if abs(margin0) > 20:
+        print(f"    FAIL: the default table has a left margin of {margin0}")
+        bad += 1
+    if abs(margin1 - LAYOUT_CM[0] * 1000) > 20:
+        print(f"    FAIL: the table's left margin is {margin1}, "
+              f"expected {LAYOUT_CM[0] * 1000:.0f}")
+        bad += 1
+
+    # and every column boundary moved by the sum of the settings before it
+    want = {
+        "(1)": LAYOUT_CM[0],
+        "a.": LAYOUT_CM[0] + LAYOUT_CM[1] - LAYOUT_DEFAULT_CM[1],
+        "Esto": LAYOUT_CM[0] + LAYOUT_CM[1] - LAYOUT_DEFAULT_CM[1]
+                + LAYOUT_CM[2] - LAYOUT_DEFAULT_CM[2],
+    }
+    xs = []
+    for odt in (before, after):
+        first = {}
+        for t, x, y in sorted(words_of(render(profile, odt)), key=lambda w: (w[2], w[1])):
+            first.setdefault(t, x)
+        xs.append(first)
+    for token, cm in want.items():
+        if token not in xs[0] or token not in xs[1]:
+            print(f"    FAIL: {token!r} is not in both renderings")
+            bad += 1
+            continue
+        moved = (xs[1][token] - xs[0][token]) / PT_PER_CM
+        print(f"    {token!r} moved {moved:.2f} cm, expected {cm:.2f}")
+        if abs(moved - cm) > 0.12:
+            print(f"    FAIL: {token!r} moved {moved:.2f} cm, not {cm:.2f}")
+            bad += 1
+
+    # the spacings are the styles: unequal sides break away from the parent
+    apart = [round(cm * 1000) for cm in LAYOUT_CM[3:]]
+    msg, got = spacing_of(ctx, *LAYOUT_CM[3:])
+    if msg:
+        print(f"    FAIL: unequal spacing: macro said {msg!r}")
+        bad += 1
+    elif [h for h, _own in got[:2]] != apart or not all(o for _h, o in got[:2]):
+        print(f"    FAIL: {LAYOUT_CM[3]}/{LAYOUT_CM[4]} cm came out as {got}, "
+              f"expected each side to carry {apart[0]}/{apart[1]} of its own")
+        bad += 1
+
+    # and equal ones stay on the parent, for both children to inherit
+    both = round(0.25 * 1000)
+    msg, got = spacing_of(ctx, 0.25, 0.25)
+    if msg:
+        print(f"    FAIL: equal spacing: macro said {msg!r}")
+        bad += 1
+    elif got[2] != (both, True) or any(own for _h, own in got[:2]):
+        print(f"    FAIL: equal sides came out as {got}, expected the parent "
+              f"to carry {both} and both children to inherit it")
+        bad += 1
+    elif [h for h, _own in got[:2]] != [both, both]:
+        print(f"    FAIL: the children do not inherit {both}: {got}")
+        bad += 1
+
+    if not bad:
+        print("    ok — defaults, round trip, dialog, refusal, three indents "
+              "and both spacings")
+    return bad
 
 
 # Long enough to be split into bands, with the translation written the way
@@ -1795,6 +1970,7 @@ def main() -> int:
         failures += check_sub(name, render(profile, odt), n_markers, glossed)
     failures += check_pair(ctx, out, profile)
     failures += check_sub_alignment(ctx, out, profile)
+    failures += check_layout_settings(ctx, out, profile)
     for name, lines in TRANSLATION_CASES.items():
         doc = make_doc(ctx, lines)
         msg = run(ctx)

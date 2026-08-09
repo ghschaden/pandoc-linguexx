@@ -217,7 +217,11 @@ python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt
 ```
 
-Une entrée **LinguExx ▸ Composer l'exemple** apparaît dans Writer. Une extension installée ne
+Un menu **LinguExx** apparaît dans Writer : **Composer l'exemple**, les deux
+commandes d'arbre, et **Mise en page des exemples…**, qui règle les retraits
+de l'exemple et l'espace au-dessus et au-dessous (voir
+[`manuel-extension-fr.md`](manuel-extension-fr.md), § 7). Une extension
+installée ne
 déclenche **aucun avertissement de sécurité**, contrairement aux macros
 incorporées dans un document — c'est la seule méthode raisonnable pour
 distribuer la macro à des collègues.

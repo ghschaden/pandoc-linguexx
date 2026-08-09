@@ -47,11 +47,13 @@ arrive surtout sous Linux) :
 4. **Fermez et rouvrez LibreOffice** — le menu n'apparaît qu'au
    redémarrage.
 
-Une fois installée, l'extension ajoute un menu à trois entrées :
+Une fois installée, l'extension ajoute un menu à trois commandes, plus un
+réglage :
 
 > **LinguExx ▸ Composer l'exemple**
 > **LinguExx ▸ Composer l'arbre numéroté**
 > **LinguExx ▸ Composer l'arbre sans numéro**
+> **LinguExx ▸ Mise en page des exemples…** (§ 7)
 
 ### 2.2 En ligne de commande
 
@@ -467,9 +469,12 @@ coup** depuis le volet Styles (**F11**, rubrique *Styles personnalisés*).
 
 ### Changer l'espace autour des exemples
 
-Modifiez le style **`LxExampleSpace`** : onglet **Retraits et espacement**,
-puis **Interligne : Fixe**, et donnez la hauteur voulue. Tous les exemples
-du document suivent immédiatement.
+Le plus simple : **LinguExx ▸ Mise en page des exemples…** (§ 7), qui écrit
+ces styles pour vous.
+
+À la main : modifiez le style **`LxExampleSpace`** : onglet **Retraits et
+espacement**, puis **Interligne : Fixe**, et donnez la hauteur voulue. Tous
+les exemples du document suivent immédiatement.
 
 Pour ne changer qu'un seul côté, donnez une hauteur propre à
 `LxExampleSpaceAbove` ou `LxExampleSpaceBelow`.
@@ -484,7 +489,76 @@ l'extension sont le même objet et obéissent aux mêmes styles.
 
 ---
 
-## 7. Ce que l'extension refuse de faire
+## 7. Régler la mise en page des exemples
+
+**LinguExx ▸ Mise en page des exemples…** ouvre une boîte de dialogue qui
+règle les cinq longueurs relevant de la maison d'édition plutôt que de la
+mesure. Tout le reste — la largeur des colonnes, celle du bloc de texte, le
+découpage des exemples trop longs — est mesuré ou lu sur la page, et n'est
+pas réglable.
+
+| | par défaut | ce que c'est |
+|---|---|---|
+| retrait jusqu'au numéro d'exemple | 0 cm | de la marge de gauche au `(1)` |
+| retrait jusqu'à la lettre de sous-exemple | 1,1 cm | du numéro au `a.` |
+| retrait jusqu'au texte du sous-exemple | 0,7 cm | du `a.` au texte qui le suit |
+| espace au-dessus d'un exemple | 0,18 cm | le style `LxExampleSpaceAbove` |
+| espace au-dessous d'un exemple | 0,18 cm | le style `LxExampleSpaceBelow` |
+
+Chaque retrait se compte à partir du précédent :
+
+```
+|<- retrait ->|(1)|<- numéro ->|a.|<- lettre ->|Esto es un ejemplo
+```
+
+Le deuxième fixe donc aussi l'endroit où commence le texte d'un exemple
+**principal** : la lettre d'un sous-exemple et le texte d'un exemple
+principal sont au même x — c'est la géométrie de linguexx, et la raison
+pour laquelle la colonne des jugements est prélevée sur la colonne de
+gauche au lieu d'être insérée après elle.
+
+Les deux retraits de sous-exemple sont des **minimums** : un numéro trop
+large pour la colonne qu'on lui donne — `(100)`, ou `(12)` dans un grand
+corps — obtient quand même la place qu'il lui faut, au lieu d'entrer en
+collision avec l'exemple.
+
+**Les deux sortes de réglage n'agissent pas de la même façon, et c'est
+voulu :**
+
+- **Les retraits ne s'appliquent qu'aux exemples composés ensuite.** Un
+  exemple déjà dans le document est un tableau dont les colonnes sont
+  déjà fixées ; rien ne revient le recomposer, exactement comme rien ne
+  réaligne un exemple quand vous en modifiez un mot. Recomposez-le depuis
+  son texte source si vous voulez qu'il bouge.
+- **Les espaces, eux, remettent en forme tout le document d'un coup**,
+  parce qu'ils *sont* les styles `LxExampleSpace*` (§ 6) : la boîte de
+  dialogue n'est qu'une autre façon de les modifier. Deux valeurs égales
+  sont écrites sur le style parent, dont les deux enfants héritent — une
+  modification ultérieure du parent depuis le volet Styles déplace donc
+  toujours les deux côtés ; deux valeurs différentes détachent chaque
+  enfant.
+
+**Les réglages appartiennent au document**, comme les styles, et le
+suivent. Il n'y a pas de préférence globale : un article a une géométrie,
+et pour l'avoir dans tous vos articles, réglez-la dans le **modèle** dont
+vous partez. Les trois retraits sont rangés dans les propriétés
+personnalisées du document (**Fichier ▸ Propriétés ▸ Propriétés
+personnalisées** : `LinguExxIndentCm`, `LinguExxNumberCm`,
+`LinguExxMarkerCm`) ; les espaces ne sont rangés nulle part ailleurs que
+dans les styles, pour que le document n'ait pas deux réponses à la même
+question.
+
+Une longueur hors de l'intervalle 0–10 cm est refusée, et dans ce cas rien
+n'est modifié.
+
+> Un exemple avec retrait est le seul cas où le tableau ne s'étend pas sur
+> tout le bloc de texte. La conséquence : sa largeur ne suit plus les
+> changements de géométrie de la page, alors qu'un exemple sans retrait,
+> lui, les suit.
+
+---
+
+## 8. Ce que l'extension refuse de faire
 
 Elle ne devine pas quand la sélection est ambiguë :
 
@@ -496,7 +570,7 @@ Elle ne devine pas quand la sélection est ambiguë :
 
 ---
 
-## 8. Dépannage
+## 9. Dépannage
 
 ### L'extension est installée mais le menu n'apparaît pas
 
@@ -537,7 +611,7 @@ Utile pour signaler un problème ou repartir de zéro :
 
 ---
 
-## 9. Fabriquer le fichier `.oxt` soi-même
+## 10. Fabriquer le fichier `.oxt` soi-même
 
 Seulement utile si vous travaillez sur le code source. Depuis la racine du
 dépôt :

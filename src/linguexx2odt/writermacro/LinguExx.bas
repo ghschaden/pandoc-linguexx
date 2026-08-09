@@ -90,6 +90,17 @@ Const SC_RATIO    As Double = 0.8
 
 Const JUDG_CHARS   As String = "*?#%!"
 
+' The document properties the three configurable indents are kept in, and
+' the largest length any of the five will take.  Up here with the other
+' constants because Basic resolves a Const in source order: one declared
+' beside the code that owns it, down in the layout section, is "Variable
+' not defined" to every procedure above it.  See that section for what each
+' one means.
+Const OPT_INDENT   As String = "LinguExxIndentCm"
+Const OPT_NUMBER   As String = "LinguExxNumberCm"
+Const OPT_MARKER   As String = "LinguExxMarkerCm"
+Const OPT_MAX_CM   As Double = 10.0
+
 ' Column boundaries closer together than this are the same boundary.
 Const GRID_TOL_CM  As Double = 0.015
 
@@ -194,6 +205,14 @@ End Sub
 ' the brackets.  One tree with no letter is just the one-item case.
 Sub TreeSelection
     Call LxExampleCommand(True, "Typeset tree")
+End Sub
+
+
+' The lengths of an example that are a matter of house style rather than of
+' measurement: the three indents and the space above and below.  See the
+' layout section for where each is kept and why.
+Sub LayoutSettings
+    Call LxLayoutCommand()
 End Sub
 
 
@@ -505,6 +524,7 @@ End Function
 Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Dim oFont As Object, dPxPerCm As Double
     Dim dAvail As Double, dNumber As Double, dJudg As Double, dMarker As Double
+    Dim dIndent As Double, dTable As Double
     Dim aWordW() As Double, nWords As Integer
     Dim aBandStart() As Integer, nBands As Integer
     Dim aColW() As Double, nCols As Integer
@@ -531,7 +551,21 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     If LxBodyPt <= 0 Then LxBodyPt = 12
 
     ' The text block comes from the page in front of us, not from a flag.
+    ' What the example may use of it is that less the indent the document
+    ' asks for, and the table itself is that wide — every width below is
+    ' measured inside it, so the indent has to come off before anything is
+    ' packed rather than after.
+    '
+    ' Half the text block is as far in as an example will go, whatever it
+    ' was asked for.  Not a house-style decision, and not reachable from
+    ' the dialog either: it is the floor under a property typed by hand
+    ' into File ▸ Properties on a narrow page, where the alternative is a
+    ' table with no room left to put an example in.
     dAvail = LxTextWidthCm(oDoc)
+    dIndent = LxOpt(oDoc, OPT_INDENT, 0)
+    dIndent = LxMax(0, LxMin(dIndent, dAvail / 2))
+    dAvail = dAvail - dIndent
+    dTable = dAvail
 
     aItem = aItems(0)
     bSub = (Len(aItem(IT_MARKER)) > 0)
@@ -558,7 +592,11 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Next k
     dJudg = dJudg + JUDG_GAP_CM
 
-    dNumber = LxMax(NUMBER_CM, LxWidth(oFont, dPxPerCm, "(00)") + PAD_CM) + dJudg
+    ' The configured indents are floors, not exact distances: a column
+    ' narrower than the number it has to hold would put "(100)" under the
+    ' first word of the example.
+    dNumber = LxMax(LxOpt(oDoc, OPT_NUMBER, NUMBER_CM), _
+                    LxWidth(oFont, dPxPerCm, "(00)") + PAD_CM) + dJudg
 
     ' The marker column is carved out of in the same way, and the number
     ' column keeps its full width.  That is what puts a sub-example letter
@@ -569,7 +607,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
             aItem = aItems(k)
             dMarker = LxMax(dMarker, LxWidth(oFont, dPxPerCm, aItem(IT_MARKER)))
         Next k
-        dMarker = LxMax(MARKER_CM, dMarker + PAD_CM) + dJudg
+        dMarker = LxMax(LxOpt(oDoc, OPT_MARKER, MARKER_CM), dMarker + PAD_CM) + dJudg
     End If
 
     nLead = 2
@@ -643,7 +681,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
 
     Call LxEmitTable(oDoc, oRange, aItems, aBandStart(), nBands, aColW(), nCols, _
                      aWordCol(), aWordSpan(), nWords, _
-                     dNumber, dMarker, dJudg, dFiller, nLead)
+                     dNumber, dMarker, dJudg, dFiller, nLead, dIndent, dTable)
 End Sub
 
 
@@ -652,7 +690,8 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                 aColW() As Double, nCols As Integer, _
                 aWordCol() As Integer, aWordSpan() As Integer, nWords As Integer, _
                 dNumber As Double, dMarker As Double, dJudg As Double, _
-                dFiller As Double, nLead As Integer)
+                dFiller As Double, nLead As Integer, _
+                dIndent As Double, dTable As Double)
     Dim oTable As Object
     Dim nRows As Integer, nTotalCols As Integer, nFill As Integer
     Dim b As Integer, t As Integer, i As Integer, c As Integer, k As Integer
@@ -718,7 +757,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     For i = 0 To nTotalCols - 1
         dSum = dSum + aWidths(i)
     Next i
-    Call LxSetColumns(oTable, aWidths(), nTotalCols, dSum)
+    Call LxSetColumns(oTable, aWidths(), nTotalCols, dSum, dIndent, dTable)
 
     nRow = 2
     bFirstOfAll = True
@@ -1787,13 +1826,27 @@ End Sub
 ' reading TableColumnSeparators off a table whose columns are still evenly
 ' spaced yields nothing at all, and assigning that to a variable fails with
 ' "Object variable not set".
-Sub LxSetColumns(oTable As Object, aWidths() As Double, nCols As Integer, dSum As Double)
+'
+' Unindented, the table spans the text block (HoriOrient FULL) so that it
+' rescales with the page rather than running off it.  An indented one
+' cannot: FULL means "the whole text block" and there is no margin to give
+' it, so the table is placed and sized outright instead.  That is the one
+' thing an indent costs — such an example holds its width when the page
+' changes, where an unindented one follows it.
+Sub LxSetColumns(oTable As Object, aWidths() As Double, nCols As Integer, _
+                 dSum As Double, dIndent As Double, dTable As Double)
     Dim aSep() As Variant
     Dim i As Integer
     Dim dAcc As Double
     Dim nSum As Long
 
-    oTable.HoriOrient = com.sun.star.text.HoriOrientation.FULL
+    If dIndent > 0 Then
+        oTable.HoriOrient = com.sun.star.text.HoriOrientation.LEFT_AND_WIDTH
+        oTable.LeftMargin = CLng(dIndent * 1000)
+        oTable.Width = CLng(dTable * 1000)
+    Else
+        oTable.HoriOrient = com.sun.star.text.HoriOrientation.FULL
+    End If
     If nCols < 2 Or dSum <= 0 Then Exit Sub
 
     nSum = oTable.TableColumnRelativeSum
@@ -1885,6 +1938,417 @@ Sub LxEnsureChildStyle(oDoc As Object, oFam As Object, sName As String)
     oStyle.ParentStyle = SPACE_PARA
     oFam.insertByName(sName, oStyle)
 End Sub
+
+
+' =============================================================== layout ===
+'
+' The lengths that are a matter of house style rather than of measurement,
+' and where each of them is kept.
+'
+' Three are horizontal, and each is measured from the one before it:
+'
+'     |<- indent ->|(1)|<- number ->|a.|<- marker ->|Esto es un ejemplo
+'
+' so `indent` moves the whole example in from the margin, `number` says how
+' far the sub-example letter — and therefore a main example's own text —
+' sits from the number, and `marker` how far a sub-example's text sits from
+' its letter.  They are kept as user-defined document properties (File ▸
+' Properties ▸ Custom Properties), because there is nowhere better: a
+' column width is worked out afresh for every example and no style holds
+' one.
+'
+' The two vertical ones are not kept here at all.  The space above and
+' below an example already *is* a paragraph style — LxExampleSpace and its
+' two children — so writing the height down a second time would give the
+' document two answers and let them drift the moment someone edited the
+' style in the sidebar.  The dialog reads and writes the style itself.
+'
+' Which is the one asymmetry worth knowing about, and the dialog says so:
+' changing the spacing restyles every example in the document at once,
+' because it is a style; changing an indent shows up only in examples built
+' afterwards, because the ones already built are tables whose columns are
+' already set.
+'
+' All of it is per document, deliberately.  The styles are per document and
+' a paper has one geometry; a linguist who wants the same in every paper
+' should set it in the template they start from.
+'
+' OPT_INDENT, OPT_NUMBER, OPT_MARKER and OPT_MAX_CM are declared at the top
+' of the module rather than here, because Basic resolves constants in
+' source order.
+
+Sub LxLayoutCommand()
+    Dim oDoc As Object, oUndo As Object
+    Dim dIndent As Double, dNumber As Double, dMarker As Double
+    Dim dAbove As Double, dBelow As Double
+
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+    If Not oDoc.supportsService("com.sun.star.text.TextDocument") Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+
+    Call LxReadLayout(oDoc, dIndent, dNumber, dMarker, dAbove, dBelow)
+    If Not LxAskLayout(dIndent, dNumber, dMarker, dAbove, dBelow) Then Exit Sub
+
+    oUndo = oDoc.getUndoManager()
+    oUndo.enterUndoContext("LinguExx layout")
+    On Error Goto Cleanup
+    Call LxWriteLayout(oDoc, dIndent, dNumber, dMarker, dAbove, dBelow)
+Cleanup:
+    oUndo.leaveUndoContext()
+    If Err <> 0 Then Call LxSay(Error$ & " (line " & Erl & ")")
+End Sub
+
+
+' What this document is set to now — its own values where it has them, the
+' defaults everywhere else.  A document that has never had an example built
+' in it has neither property nor style, and answers with the defaults.
+Sub LxReadLayout(oDoc As Object, ByRef dIndent As Double, _
+                 ByRef dNumber As Double, ByRef dMarker As Double, _
+                 ByRef dAbove As Double, ByRef dBelow As Double)
+    dIndent = LxOpt(oDoc, OPT_INDENT, 0)
+    dNumber = LxOpt(oDoc, OPT_NUMBER, NUMBER_CM)
+    dMarker = LxOpt(oDoc, OPT_MARKER, MARKER_CM)
+    dAbove = LxSpaceOf(oDoc, SPACE_ABOVE)
+    dBelow = LxSpaceOf(oDoc, SPACE_BELOW)
+End Sub
+
+
+' Refuses out of range rather than clamping: a value silently made
+' something else is worse than one the user is asked to type again.
+Sub LxWriteLayout(oDoc As Object, dIndent As Double, dNumber As Double, _
+                  dMarker As Double, dAbove As Double, dBelow As Double)
+    Dim i As Integer
+    Dim aValue(4) As Double
+
+    aValue(0) = dIndent : aValue(1) = dNumber : aValue(2) = dMarker
+    aValue(3) = dAbove  : aValue(4) = dBelow
+    For i = 0 To 4
+        If aValue(i) < 0 Or aValue(i) > OPT_MAX_CM Then
+            Call LxSay("Every length has to be between 0 and " & _
+                       Format(OPT_MAX_CM, "0") & " cm.")
+            Exit Sub
+        End If
+    Next i
+
+    Call LxOptSet(oDoc, OPT_INDENT, dIndent)
+    Call LxOptSet(oDoc, OPT_NUMBER, dNumber)
+    Call LxOptSet(oDoc, OPT_MARKER, dMarker)
+    Call LxApplySpacing(oDoc, dAbove, dBelow)
+End Sub
+
+
+' ------------------------------------------------------------- the store ---
+
+Function LxOpt(oDoc As Object, sName As String, dDefault As Double) As Double
+    Dim oProps As Object
+    Dim dValue As Double
+
+    LxOpt = dDefault
+    On Error Resume Next
+    oProps = oDoc.getDocumentProperties().getUserDefinedProperties()
+    If IsNull(oProps) Then Exit Function
+    If Not oProps.getPropertySetInfo().hasPropertyByName(sName) Then Exit Function
+    dValue = CDbl(oProps.getPropertyValue(sName))
+    If Err <> 0 Then Exit Function            ' someone typed prose into it
+    If dValue >= 0 And dValue <= OPT_MAX_CM Then LxOpt = dValue
+End Function
+
+
+' Two things here are not optional, and both were found the hard way.
+'
+' REMOVEABLE: LibreOffice refuses to add a user-defined property without it.
+'
+' CreateUnoValue: a user-defined property may hold a string, a boolean, a
+' date, a duration or a *double*, and nothing else.  Basic hands a Double
+' whose value happens to be integral across as a Long, so storing 2 cm
+' raised IllegalTypeException where storing 0.9 cm had just worked —
+' 1.1 and 0.7, the defaults, hid it perfectly.  The value object says
+' "double" and means it.
+Sub LxOptSet(oDoc As Object, sName As String, dValue As Double)
+    Dim oProps As Object
+    Dim aVal As Variant
+
+    oProps = oDoc.getDocumentProperties().getUserDefinedProperties()
+    aVal = CreateUnoValue("double", dValue)
+    If oProps.getPropertySetInfo().hasPropertyByName(sName) Then
+        oProps.setPropertyValue(sName, aVal)
+    Else
+        oProps.addProperty(sName, _
+                           com.sun.star.beans.PropertyAttribute.REMOVEABLE, aVal)
+    End If
+End Sub
+
+
+' The fixed line height of a spacing style, in cm.  A child that declares
+' nothing of its own reports what it inherits, which is exactly the answer
+' wanted: what this side of an example currently measures.
+Function LxSpaceOf(oDoc As Object, sStyle As String) As Double
+    Dim oFam As Object, oStyle As Object
+    Dim aSp As Variant
+
+    LxSpaceOf = SPACE_CM
+    On Error Resume Next
+    oFam = oDoc.getStyleFamilies().getByName("ParagraphStyles")
+    If IsNull(oFam) Then Exit Function
+    If Not oFam.hasByName(sStyle) Then Exit Function
+    oStyle = oFam.getByName(sStyle)
+    aSp = oStyle.ParaLineSpacing
+    If Err <> 0 Then Exit Function
+    If aSp.Mode = com.sun.star.style.LineSpacingMode.FIX Then
+        LxSpaceOf = aSp.Height / 1000.0
+    End If
+End Function
+
+
+' The two sides, kept the way styles.py writes them for the converter: equal
+' heights live on the parent with both children inheriting, so one sidebar
+' edit of LxExampleSpace still moves both sides; unequal ones break each
+' child away on its own.
+Sub LxApplySpacing(oDoc As Object, dAbove As Double, dBelow As Double)
+    Call LxEnsureStyles(oDoc)
+    If Abs(dAbove - dBelow) < 0.001 Then
+        Call LxSetSpace(oDoc, SPACE_PARA, dAbove, False)
+        Call LxSetSpace(oDoc, SPACE_ABOVE, 0, True)
+        Call LxSetSpace(oDoc, SPACE_BELOW, 0, True)
+    Else
+        Call LxSetSpace(oDoc, SPACE_ABOVE, dAbove, False)
+        Call LxSetSpace(oDoc, SPACE_BELOW, dBelow, False)
+    End If
+End Sub
+
+
+Sub LxSetSpace(oDoc As Object, sStyle As String, dCm As Double, bInherit As Boolean)
+    Dim oFam As Object, oStyle As Object
+    Dim aSp As New com.sun.star.style.LineSpacing
+
+    oFam = oDoc.getStyleFamilies().getByName("ParagraphStyles")
+    If Not oFam.hasByName(sStyle) Then Exit Sub
+    oStyle = oFam.getByName(sStyle)
+    If bInherit Then
+        oStyle.setPropertyToDefault("ParaLineSpacing")
+    Else
+        aSp.Mode = com.sun.star.style.LineSpacingMode.FIX
+        aSp.Height = CInt(dCm * 1000)
+        oStyle.ParaLineSpacing = aSp
+    End If
+End Sub
+
+
+' ------------------------------------------------------------ the dialog ---
+
+' Built here rather than shipped as a .xdl, so that the one file that ships
+' is still the one file the tests drive: a dialog in the extension's dialog
+' library would not exist when LinguExx.bas is pasted into an IDE or loaded
+' straight into a Basic library, which is how everything else here is run.
+'
+' The model is built apart from being shown, so that the building can be
+' tested: everything that can go wrong here — a mistyped control property,
+' a field left holding another field's value — goes wrong while the model
+' is assembled, and a headless test can assemble one and read it back
+' without a window server to execute() in.
+Function LxLayoutModel(dIndent As Double, dNumber As Double, _
+                       dMarker As Double, dAbove As Double, _
+                       dBelow As Double) As Object
+    Dim oModel As Object, oNote As Object
+
+    oModel = createUnoService("com.sun.star.awt.UnoControlDialogModel")
+    oModel.Title = "LinguExx — example layout"
+    oModel.Width = 214
+    oModel.Height = 172
+
+    Call LxDlgRow(oModel, "indent", "Indent to the example number (cm)", _
+                  "From the left margin to the ""(1)"".", 8, dIndent)
+    Call LxDlgRow(oModel, "number", "Indent to the sub-example letter (cm)", _
+                  "From the number to the ""a."" — and so to where a main " & _
+                  "example's own text begins.  A floor: a number too wide " & _
+                  "for it still gets its room.", 26, dNumber)
+    Call LxDlgRow(oModel, "marker", "Indent to the sub-example text (cm)", _
+                  "From the ""a."" to the text beside it.  A floor, as above.", _
+                  44, dMarker)
+    Call LxDlgRow(oModel, "above", "Space above an example (cm)", _
+                  "The height of the LxExampleSpaceAbove style.", 70, dAbove)
+    Call LxDlgRow(oModel, "below", "Space below an example (cm)", _
+                  "The height of the LxExampleSpaceBelow style.", 88, dBelow)
+
+    oNote = oModel.createInstance("com.sun.star.awt.UnoControlFixedTextModel")
+    oModel.insertByName("note", oNote)
+    oNote.PositionX = 8
+    oNote.PositionY = 112
+    oNote.Width = 198
+    oNote.Height = 32
+    oNote.MultiLine = True
+    oNote.Label = "The indents apply to examples built from now on.  The " & _
+                  "spacings are styles, so they restyle every example in " & _
+                  "this document at once." & Chr(10) & _
+                  "Defaults: 0, 1.1, 0.7, 0.18, 0.18 cm."
+
+    Call LxDlgButton(oModel, "ok", "OK", com.sun.star.awt.PushButtonType.OK, 106)
+    Call LxDlgButton(oModel, "cancel", "Cancel", _
+                     com.sun.star.awt.PushButtonType.CANCEL, 158)
+    LxLayoutModel = oModel
+End Function
+
+
+Function LxAskLayout(ByRef dIndent As Double, ByRef dNumber As Double, _
+                     ByRef dMarker As Double, ByRef dAbove As Double, _
+                     ByRef dBelow As Double) As Boolean
+    Dim oModel As Object, oDlg As Object
+    Dim bOK As Boolean
+
+    LxAskLayout = False
+    oModel = LxLayoutModel(dIndent, dNumber, dMarker, dAbove, dBelow)
+
+    oDlg = createUnoService("com.sun.star.awt.UnoControlDialog")
+    oDlg.setModel(oModel)
+    oDlg.setVisible(False)
+    oDlg.createPeer(createUnoService("com.sun.star.awt.Toolkit"), Null)
+    bOK = (oDlg.execute() = 1)
+    If bOK Then
+        dIndent = oDlg.getControl("indent").getModel().Value
+        dNumber = oDlg.getControl("number").getModel().Value
+        dMarker = oDlg.getControl("marker").getModel().Value
+        dAbove = oDlg.getControl("above").getModel().Value
+        dBelow = oDlg.getControl("below").getModel().Value
+    End If
+    oDlg.dispose()
+    LxAskLayout = bOK
+End Function
+
+
+' One labelled length.  A numeric field rather than a text box on purpose:
+' it takes no parsing, and so no view about whether this user's decimal
+' separator is a point or a comma.
+Sub LxDlgRow(oModel As Object, sName As String, sLabel As String, _
+             sHelp As String, nY As Integer, dValue As Double)
+    Dim oLabel As Object, oField As Object
+
+    oLabel = oModel.createInstance("com.sun.star.awt.UnoControlFixedTextModel")
+    oModel.insertByName("lbl_" & sName, oLabel)
+    oLabel.PositionX = 8
+    oLabel.PositionY = nY + 2
+    oLabel.Width = 130
+    oLabel.Height = 10
+    oLabel.Label = sLabel
+    oLabel.HelpText = sHelp
+
+    oField = oModel.createInstance("com.sun.star.awt.UnoControlNumericFieldModel")
+    oModel.insertByName(sName, oField)
+    oField.PositionX = 144
+    oField.PositionY = nY
+    oField.Width = 62
+    oField.Height = 13
+    oField.DecimalAccuracy = 2
+    oField.ValueMin = 0
+    oField.ValueMax = OPT_MAX_CM
+    oField.ValueStep = 0.05
+    oField.Spin = True
+    oField.Value = dValue
+    oField.HelpText = sHelp
+End Sub
+
+
+' nType is left untyped so the PushButtonType constant reaches the property
+' as whatever it is, rather than being narrowed on the way in.
+Sub LxDlgButton(oModel As Object, sName As String, sLabel As String, _
+                nType, nX As Integer)
+    Dim oBtn As Object
+    oBtn = oModel.createInstance("com.sun.star.awt.UnoControlButtonModel")
+    oModel.insertByName(sName, oBtn)
+    oBtn.PositionX = nX
+    oBtn.PositionY = 150
+    oBtn.Width = 48
+    oBtn.Height = 14
+    oBtn.Label = sLabel
+    oBtn.PushButtonType = nType
+    oBtn.DefaultButton = (sName = "ok")
+End Sub
+
+
+' ----------------------------------------------------------- the quiet door ---
+
+' For non-interactive callers, as GlossSelectionQuiet is for examples: the
+' same settings without the dialog, the message back instead of a box.
+Function LayoutSettingsQuiet(dIndent As Double, dNumber As Double, _
+                             dMarker As Double, dAbove As Double, _
+                             dBelow As Double) As String
+    Dim oDoc As Object
+
+    LxSilent = True
+    LxLastMessage = ""
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        Call LxSay("Run this in a Writer document.")
+    Else
+        ' Trapped, as the interactive command traps it: a caller that cannot
+        ' see a dialog cannot see an untrapped runtime error either, and
+        ' would be told the settings took when they had not.
+        On Error Goto Trouble
+        Call LxWriteLayout(oDoc, dIndent, dNumber, dMarker, dAbove, dBelow)
+        Goto Done
+Trouble:
+        Call LxSay(Error$ & " (line " & Erl & ")")
+Done:
+        On Error Goto 0
+    End If
+    LxSilent = False
+    LayoutSettingsQuiet = LxLastMessage
+    LxLastMessage = ""
+End Function
+
+
+' The five lengths as the dialog would offer them, read back out of the
+' controls it would offer them in.  Builds the whole model and shows none
+' of it, so a headless caller can check that the dialog assembles and that
+' each field is holding this document's own value.
+Function LayoutDialogQuiet() As String
+    Dim oDoc As Object, oModel As Object
+    Dim dIndent As Double, dNumber As Double, dMarker As Double
+    Dim dAbove As Double, dBelow As Double
+    Dim i As Integer, s As String
+    Dim aName As Variant
+
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        LayoutDialogQuiet = ""
+        Exit Function
+    End If
+    Call LxReadLayout(oDoc, dIndent, dNumber, dMarker, dAbove, dBelow)
+    oModel = LxLayoutModel(dIndent, dNumber, dMarker, dAbove, dBelow)
+
+    aName = Array("indent", "number", "marker", "above", "below")
+    s = ""
+    For i = 0 To UBound(aName)
+        If i > 0 Then s = s & ";"
+        s = s & Trim(Str(oModel.getByName(aName(i)).Value))
+    Next i
+    LayoutDialogQuiet = s
+End Function
+
+
+' The five lengths of the current document, in the order the dialog shows
+' them.  Str() rather than Format(), so the caller reading them back is not
+' handed a decimal comma.
+Function LayoutQuiet() As String
+    Dim oDoc As Object
+    Dim dIndent As Double, dNumber As Double, dMarker As Double
+    Dim dAbove As Double, dBelow As Double
+
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        LayoutQuiet = ""
+        Exit Function
+    End If
+    Call LxReadLayout(oDoc, dIndent, dNumber, dMarker, dAbove, dBelow)
+    LayoutQuiet = Trim(Str(dIndent)) & ";" & Trim(Str(dNumber)) & ";" & _
+                  Trim(Str(dMarker)) & ";" & Trim(Str(dAbove)) & ";" & _
+                  Trim(Str(dBelow))
+End Function
 
 
 ' ----------------------------------------------------------------- util ---

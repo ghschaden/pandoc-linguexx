@@ -75,7 +75,8 @@ DESCRIPTION_TXT = (
     "language over glosses, a free translation, hanging judgment marks, and "
     "sub-example paradigms. Column widths are measured against the real "
     "font. Example numbers are live fields, so inserting an example "
-    "renumbers the rest.\n"
+    "renumbers the rest. The indents and the space above and below are "
+    "set from the menu; everything else is a named style.\n"
 )
 
 MANIFEST = """<?xml version="1.0" encoding="UTF-8"?>
@@ -171,6 +172,26 @@ ADDONS_XCU = """<?xml version="1.0" encoding="UTF-8"?>
             <prop oor:name="Title" oor:type="xs:string">
               <value xml:lang="en-US">Typeset unnumbered tree</value>
               <value xml:lang="fr">Composer l'arbre sans numéro</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m04" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>private:separator</value>
+            </prop>
+          </node>
+          <node oor:name="m05" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>vnd.sun.star.script:{library}.{module}.LayoutSettings?language=Basic&amp;location=application</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Example layout…</value>
+              <value xml:lang="fr">Mise en page des exemples…</value>
             </prop>
             <prop oor:name="Target" oor:type="xs:string">
               <value>_self</value>
