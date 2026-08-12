@@ -31,7 +31,9 @@ import pytest
 
 from linguexx2odt.emit_odt import Emitter, Grid, text_width_cm
 from linguexx2odt.extract import parse
-from linguexx2odt.styles import Layout
+from linguexx2odt.styles import (
+    BAND_PARA, SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, Layout,
+)
 
 
 def positions(grid: Grid) -> dict[int, float]:
@@ -165,3 +167,34 @@ def test_split_table_rows_all_have_the_same_column_count() -> None:
         plain = row.count("<table:table-cell ") - row.count("number-columns-spanned")
         covered = spanned + plain
         assert covered == ncols, f"row {n} covers {covered} of {ncols} columns"
+
+
+def test_continuation_bands_are_marked() -> None:
+    """A band's first row says it is one, and a tier row does not.
+
+    Nothing else in a finished table can tell the two apart — both are
+    built the same way and start in the same column — so the macro's
+    Untypeset reads this mark to know whether four rows are four tiers of
+    one band or two tiers of two bands.  See styles.BAND_PARA.
+    """
+    e = Emitter(layout=Layout(text_width_cm=17.0))
+    ex = parse(LONG).examples[0]
+    e.prepare([ex])
+    rows = e.example(ex).split("<table:table-row>")[1:]
+
+    # the spacer rows top and tail it; the translation has its own row
+    body = [r for r in rows
+            if TRANSLATION_PARA not in r and SPACE_ABOVE_PARA not in r
+            and SPACE_BELOW_PARA not in r]
+    tiers = 2                                   # \gll: object and gloss
+    bands = len(body) // tiers
+    assert bands >= 2, "this example is meant to be a split one"
+
+    marked = [n for n, row in enumerate(body) if BAND_PARA in row]
+    assert marked == [n * tiers for n in range(1, bands)], (
+        "the mark belongs on the first row of every band after the first, "
+        f"got rows {marked} of {len(body)}")
+    for n in marked:
+        assert body[n].count(BAND_PARA) > 1, (
+            "a marked row is marked across the row, so a reader finds it on "
+            "whichever cell it looks at")

@@ -27,6 +27,7 @@ not a Python re-implementation of it.
 
 from __future__ import annotations
 
+import os
 import re
 import socket
 import subprocess
@@ -1804,6 +1805,669 @@ def check_tree_items(ctx) -> int:
     return bad
 
 
+# --- an example that already has a number ------------------------------
+#
+# Cross-references bind to the ref-name of the NumEx field, not to the
+# number it shows, so an example rebuilt with a *new* field takes every
+# reference to it down with it.  These documents are written as flat ODF
+# rather than assembled over UNO because the references then are the ones
+# a real document has — a GetReference built over the bridge resolves
+# against nothing until the file has been through the ODF import.
+
+FODT = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+ xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+ xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+ xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+ xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+ office:version="1.3"
+ office:mimetype="application/vnd.oasis.opendocument.text">
+ <office:body><office:text>
+  <text:sequence-decls>
+   <text:sequence-decl text:display-outline-level="0" text:name="NumEx"/>
+  </text:sequence-decls>
+%s
+ </office:text></office:body>
+</office:document>
+"""
+
+
+def numex(ref: str, shown: int) -> str:
+    "An example number, as linguexx2odt writes one."
+    # The number is written out as well as computed, exactly as the
+    # converter does it: a field nothing has touched still displays, so a
+    # stale example elsewhere in the fixture cannot be mistaken for the
+    # rebuilt one having gone wrong.
+    return (f'<text:sequence text:ref-name="{ref}" text:name="NumEx"'
+            ' text:formula="ooow:NumEx+1" style:num-format="1">'
+            f'{shown}</text:sequence>')
+
+
+def numref(ref: str, shown: int) -> str:
+    "A cross-reference to one — what a \\ref becomes."
+    # A reference whose target is gone renders "Error: Reference source not
+    # found" over the top of this, which is what the check is looking for.
+    return ('<text:sequence-ref text:reference-format="value"'
+            f' text:ref-name="{ref}">{shown}</text:sequence-ref>')
+
+
+def load_doc(ctx, path: Path, paras: list[str]):
+    "A document written as flat ODF, loaded the way the user's would be."
+    path.write_text(FODT % "\n".join(f"  <text:p>{p}</text:p>" for p in paras),
+                    encoding="utf-8")
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", ctx)
+    return desktop.loadComponentFromURL(path.as_uri(), "_blank", 0, ())
+
+
+def select_paras(doc, lo: int, hi: int) -> None:
+    paras = [p for p in paragraphs(doc)
+             if p.supportsService("com.sun.star.text.Paragraph")]
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(paras[lo].getStart(), False)
+    vc.gotoRange(paras[hi].getEnd(), True)
+
+
+def numex_ids(doc) -> list:
+    "The identity of every example number in the document."
+    # SequenceValue is the ref-name every cross-reference points at.  It is
+    # the whole of what has to survive a rebuild, so it is what the test
+    # asks about — not the number the field happens to display, which is
+    # stale until the document is laid out.
+    out, it = [], doc.getTextFields().createEnumeration()
+    while it.hasMoreElements():
+        fld = it.nextElement()
+        if not fld.supportsService("com.sun.star.text.TextField.SetExpression"):
+            continue
+        try:
+            if fld.TextFieldMaster.Name == "NumEx":
+                out.append(fld.SequenceValue)
+        except Exception:                 # not a dependent field after all
+            pass
+    return sorted(out)
+
+
+# An example carrying a number, a second example, and a paragraph
+# referring to both.  Paragraphs 0-2 are the first example.
+REFERENCED = [
+    f"({numex('refNumEx0', 1)})\tEsto es un ejemplo glosado",
+    "this is a example glossed",
+    "'This is a glossed example.'",
+    f"({numex('refNumEx1', 2)})\tOtro ejemplo.",
+    f"See ({numref('refNumEx0', 1)}) and ({numref('refNumEx1', 2)}).",
+]
+
+
+def check_number_adoption(ctx, out: Path, profile: Path) -> int:
+    """A number in the selection is taken over, not remade.
+
+    The point of the rule: an example can be rebuilt — retypeset, turned
+    into a tree, re-banded — without breaking a single cross-reference to
+    it.  Both halves are pinned, because either alone can pass while the
+    document is broken: the field's identity must be the old one
+    (structure), and the reference must still render as the example's
+    number rather than "Error: Reference source not found" (behaviour).
+    """
+    print("--- number_adoption")
+    bad = 0
+
+    doc = load_doc(ctx, out / "adopt.fodt", REFERENCED)
+    before = numex_ids(doc)
+    select_paras(doc, 0, 2)
+    msg = run(ctx)
+    after = numex_ids(doc)
+    tables = doc.getTextTables().getCount()
+    odt = out / "adopt.odt"
+    doc.storeToURL(odt.as_uri(), (PropertyValue("FilterName", 0, "writer8", 0),))
+    doc.dispose()
+    text = " ".join(t for t, _x, _y in words_of(render(profile, odt)))
+
+    if msg:
+        print(f"    FAIL: macro said {msg!r}")
+        bad += 1
+    elif tables != 1:
+        print(f"    FAIL: built {tables} table(s)")
+        bad += 1
+    elif after != before:
+        print(f"    FAIL: the number's identity changed: {before} -> {after}")
+        bad += 1
+    elif "See (1) and (2)." not in " ".join(text.split()):
+        print(f"    FAIL: the references did not survive: {text[:120]!r}")
+        bad += 1
+    elif not " ".join(text.split()).startswith("(1) Esto es un ejemplo"):
+        # The parentheses the old number sat in are the macro's own, and
+        # are written again with the new field.  Left in the text they
+        # would come out as the first word of the example: "() Esto".
+        print(f"    FAIL: the example does not begin cleanly: {text[:120]!r}")
+        bad += 1
+    else:
+        print(f"    ok — rebuilt as (1), identities {after}, references intact")
+
+    # The same rule under the numbered-tree command, which shares the path.
+    doc = load_doc(ctx, out / "adopt_tree.fodt",
+                   [f"({numex('refNumEx0', 1)})\t[DP [D the] [NP [N tree]]]",
+                    f"See ({numref('refNumEx0', 1)})."])
+    select_paras(doc, 0, 0)
+    msg = run(ctx, "TreeSelectionQuiet")
+    after = numex_ids(doc)
+    drawn = doc.getDrawPage().getCount()
+    doc.dispose()
+    if msg or drawn != 1 or after != [0]:
+        print(f"    FAIL: numbered tree: {drawn} tree(s), identities {after}, "
+              f"said {msg!r}")
+        bad += 1
+    else:
+        print("    ok — a numbered tree takes the number over too")
+
+    # And what it refuses.  Each must leave the document as it found it:
+    # a refusal that has already destroyed the field is no refusal.
+    refuse = {
+        "two_numbers": (REFERENCED, (0, 3), "GlossSelectionQuiet"),
+        "number_part_way": ([
+            "Esto es un ejemplo glosado",
+            f"({numex('refNumEx0', 1)})\tthis is a example glossed",
+        ], (0, 1), "GlossSelectionQuiet"),
+        "bare_tree": ([
+            f"({numex('refNumEx0', 1)})\t[DP [D the] [NP [N tree]]]",
+        ], (0, 0), "TreeSelectionBareQuiet"),
+    }
+    for name, (paras, (lo, hi), macro) in refuse.items():
+        doc = load_doc(ctx, out / f"adopt_{name}.fodt", paras)
+        before = numex_ids(doc)
+        select_paras(doc, lo, hi)
+        msg = run(ctx, macro)
+        made = doc.getTextTables().getCount() + doc.getDrawPage().getCount()
+        after = numex_ids(doc)
+        doc.dispose()
+        if not msg or made or after != before:
+            print(f"    FAIL: {name}: built {made}, identities {before} -> "
+                  f"{after}, said {msg!r}")
+            bad += 1
+        else:
+            print(f"    ok — {name}: refused, {msg.splitlines()[0][:44]!r}")
+    return bad
+
+
+# --- untypeset: the example back as the lines it was built from --------
+#
+# (lines in, lines out).  Out is what the example has to come back as,
+# leading number aside — the same text, the braces that made a column,
+# the letter and the judgment mark back at the head of their item.
+UNTYPESET_CASES = {
+    "plain": ([
+        "Esto es un ejemplo glosado",
+        "this is a example glossed",
+        "'This is a glossed example.'",
+    ], None),
+    "judged": ([
+        "*Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "'The little child sleeps.'",
+    ], None),
+    "braces": ([
+        "Ich {habe geschlafen}",
+        "I {have slept}",
+        "'I slept.'",
+    ], None),
+    "unglossed": (["A simple example."], None),
+    "unglossed_translated": ([
+        "Ein einfaches Beispiel.",
+        "'A simple example.'",
+    ], None),
+    "sub_examples": ([
+        "a. Esto es un ejemplo",
+        "this is a example",
+        "'This is an example.'",
+        "b. Otro ejemplo aqui",
+        "another example here",
+        "'Another example here.'",
+    ], None),
+    "sub_judged": ([
+        "a. *Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "b. Das kleine Kind schlaeft",
+        "the little child sleeps",
+    ], None),
+    # The one that needs the band mark: without it every band comes back
+    # as another gloss tier, and this example returns six lines instead of
+    # three.
+    "banded": ([
+        "Este es un ejemplo mucho mas largo que no cabe en una sola linea "
+        "de texto de esta pagina y por eso se parte en bandas",
+        "this is a example much more long that not fits in a single line "
+        "of text of this page and for that reason it splits in bands",
+        "'A long one.'",
+    ], None),
+}
+
+
+def body_lines(doc) -> list[str]:
+    "The document's paragraphs, as a reader sees them."
+    return [p.getString() for p in paragraphs(doc)
+            if p.supportsService("com.sun.star.text.Paragraph")]
+
+
+NUMBER_AT_FRONT = re.compile(r"^\(\d+\)\s*")
+
+
+def check_wide_example(ctx) -> int:
+    "An example wider than 26 columns builds at all."
+    # Writer names the 27th column "a" and not "AA" — A..Z, then lowercase,
+    # then AA.  The macro generated base-26 names, so the first cell past Z
+    # named no cell and the whole build died on it with "Object variable
+    # not set", leaving half a table behind.  One column per word means 26
+    # words, which is a long example but not a strange one.
+    # Not simply "an example of 30 words": that bands, and a band is only
+    # as wide as the line.  What goes past Z is the *union* of the bands'
+    # boundaries, which is wider than any one of them — so the case that
+    # gets there is a long example whose two tiers break in different
+    # places, which is to say an ordinary long glossed example.
+    print("--- wide_example")
+    doc = make_doc(ctx, UNTYPESET_CASES["banded"][0])
+    msg = run(ctx)
+    cols = 0
+    if doc.getTextTables().getCount():
+        cols = doc.getTextTables().getByIndex(0).getColumns().getCount()
+    doc.dispose()
+    if msg or cols <= 26:
+        print(f"    FAIL: said {msg!r}, built a table of {cols} columns")
+        return 1
+    print(f"    ok — {cols} columns, built and named right past Z")
+    return 0
+
+
+def check_untypeset(ctx, out: Path, profile: Path) -> int:
+    """An example comes back as the lines it was built from.
+
+    Both directions matter and are checked together, because the pair is
+    the feature: text that comes back but cannot be typeset again is no
+    use, and a round trip that quietly renumbers the example breaks every
+    reference to it — which is the thing this whole path exists to stop.
+    """
+    print("--- untypeset")
+    bad = 0
+
+    for name, (lines, expected) in UNTYPESET_CASES.items():
+        doc = make_doc(ctx, lines)
+        msg = run(ctx)
+        if msg:
+            print(f"    FAIL: {name}: typesetting said {msg!r}")
+            doc.dispose()
+            bad += 1
+            continue
+        before = numex_ids(doc)
+        table = doc.getTextTables().getByIndex(0)
+        vc = doc.getCurrentController().getViewCursor()
+        vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+        msg = run(ctx, "UntypesetSelectionQuiet")
+        got = [ln for ln in body_lines(doc) if ln.strip()]
+        after = numex_ids(doc)
+        tables = doc.getTextTables().getCount()
+
+        # and back again: the same example, keeping its number
+        again = ""
+        if not msg and got:
+            select_paras(doc, 0, len(got) - 1)
+            again = run(ctx)
+        rebuilt = numex_ids(doc)
+        n_tables = doc.getTextTables().getCount()
+        doc.dispose()
+
+        want = expected if expected is not None else lines
+        got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in got]
+        if msg:
+            print(f"    FAIL: {name}: {msg!r}")
+            bad += 1
+        elif tables:
+            print(f"    FAIL: {name}: the table is still there")
+            bad += 1
+        elif got != [ln.strip() for ln in want]:
+            print(f"    FAIL: {name}: came back as {got}, wanted {want}")
+            bad += 1
+        elif after != before:
+            print(f"    FAIL: {name}: the number changed: {before} -> {after}")
+            bad += 1
+        elif again or n_tables != 1 or rebuilt != before:
+            print(f"    FAIL: {name}: rebuilding said {again!r}, "
+                  f"{n_tables} table(s), numbers {rebuilt}")
+            bad += 1
+        else:
+            print(f"    ok — {name}: {len(got)} line(s) back, number kept")
+
+    bad += check_untypeset_references(ctx, out, profile)
+    bad += check_untypeset_adjacent(ctx)
+    bad += check_untypeset_converted(ctx, out)
+    bad += check_untypeset_trees(ctx)
+    bad += check_untypeset_formatting(ctx)
+    bad += check_untypeset_refusals(ctx)
+    return bad
+
+
+def check_untypeset_references(ctx, out: Path, profile: Path) -> int:
+    """The whole point, end to end: an example is changed and the
+    cross-references to it still resolve."""
+    doc = load_doc(ctx, out / "roundtrip.fodt", REFERENCED)
+    select_paras(doc, 0, 2)
+    msgs = [run(ctx)]                       # typeset, taking the number over
+    table = doc.getTextTables().getByIndex(0)
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msgs.append(run(ctx, "UntypesetSelectionQuiet"))
+
+    # the linguist changes the example: a new object line, a new gloss
+    paras = [p for p in paragraphs(doc)
+             if p.supportsService("com.sun.star.text.Paragraph")]
+    paras[0].getEnd().setString(" completamente distinto")
+    select_paras(doc, 0, 2)
+    msgs.append(run(ctx))                   # and typeset it again
+
+    ids = numex_ids(doc)
+    odt = out / "roundtrip.odt"
+    doc.storeToURL(odt.as_uri(), (PropertyValue("FilterName", 0, "writer8", 0),))
+    doc.dispose()
+    text = " ".join(" ".join(t for t, _x, _y in words_of(render(profile, odt))).split())
+
+    if any(msgs):
+        print(f"    FAIL: references: the macro said {msgs!r}")
+        return 1
+    if ids != [0, 1]:
+        print(f"    FAIL: references: the numbers came out {ids}, wanted [0, 1]")
+        return 1
+    if "See (1) and (2)." not in text:
+        print(f"    FAIL: references: did not survive the round trip: "
+              f"{text[:140]!r}")
+        return 1
+    if "completamente distinto" not in text:
+        print(f"    FAIL: references: the edit is not in the rebuilt example")
+        return 1
+    print("    ok — changed an example and its references still resolve")
+    return 0
+
+
+def check_untypeset_adjacent(ctx) -> int:
+    """An example with another example butted straight up against it.
+
+    Two examples in a row have no paragraph between them — the converter
+    emits exactly this, and so does anyone who typesets two examples one
+    after the other — so there is nowhere to write the text back to until
+    Writer is asked to make room.  The first attempt at this refused the
+    commonest arrangement in a linguistics paper.
+    """
+    doc = make_doc(ctx, ["Primero ejemplo aqui", "first example here",
+                         "Segundo ejemplo aqui", "second example here"])
+    msgs = []
+    for lo, hi in ((2, 3), (0, 1)):        # bottom one first
+        select_paras(doc, lo, hi)
+        msgs.append(run(ctx))
+    tables = doc.getTextTables().getCount()
+
+    # untypeset the *first* of the two, which is followed by a table.
+    # In document order: getTextTables() is in the order they were built,
+    # and the bottom one was built first.
+    if tables == 2:
+        table = [el for el in paragraphs(doc)
+                 if el.supportsService("com.sun.star.text.TextTable")][0]
+        vc = doc.getCurrentController().getViewCursor()
+        vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+        msgs.append(run(ctx, "UntypesetSelectionQuiet"))
+    lines = [ln for ln in body_lines(doc) if ln.strip()]
+    left = doc.getTextTables().getCount()
+    doc.dispose()
+
+    if any(msgs):
+        print(f"    FAIL: adjacent: the macro said {msgs!r}")
+        return 1
+    if tables != 2 or left != 1:
+        print(f"    FAIL: adjacent: built {tables} table(s), {left} left")
+        return 1
+    got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in lines]
+    if got != ["Primero ejemplo aqui", "first example here"]:
+        print(f"    FAIL: adjacent: came back as {got}")
+        return 1
+    print("    ok — an example with another one right after it")
+    return 0
+
+
+CONVERTED = r"""\begin{document}
+Some prose before it.
+
+\ex. \gll Esto es un ejemplo glosado que resulta bastante largo para llenar toda la linea entera del bloque de texto \\
+     this is a example glossed that turns.out rather long to fill all the line whole of.the block of text \\
+\glt `A long converted example.'
+
+\ex. \gll Ich habe geschlafen \\
+     I have slept \\
+\glt `I slept.'
+
+Prose after it.
+\end{document}"""
+
+
+def check_untypeset_converted(ctx, out: Path) -> int:
+    """A document the *converter* made, taken apart by the macro.
+
+    The two build their tables by different routes — one writes ODF, the
+    other drives Writer — so reading one with the other is the claim that
+    they are the same object, and this is where it is tested rather than
+    asserted.  The example chosen is a banded one, because the band mark
+    is the only thing in the table that had to be agreed between them.
+    """
+    tex = out / "converted.tex"
+    tex.write_text(CONVERTED, encoding="utf-8")
+    odt = out / "converted.odt"
+    built = subprocess.run(
+        [sys.executable, "-m", "linguexx2odt.cli", str(tex), "-o", str(odt)],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    if built.returncode or not odt.is_file():
+        # pandoc is the converter's own dependency, not this harness's
+        print(f"    skipped — the converter did not run: "
+              f"{(built.stdout + built.stderr).strip()[:80]!r}")
+        return 0
+
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", ctx)
+    doc = desktop.loadComponentFromURL(odt.as_uri(), "_blank", 0, ())
+    before = numex_ids(doc)
+    table = [el for el in paragraphs(doc)
+             if el.supportsService("com.sun.star.text.TextTable")][0]
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msg = run(ctx, "UntypesetSelectionQuiet")
+    lines = [ln for ln in body_lines(doc) if ln.strip()]
+
+    again = ""
+    if not msg and len(lines) >= 4:
+        select_paras(doc, 1, 3)                  # the example, not the prose
+        again = run(ctx)
+    after = numex_ids(doc)
+    tables = doc.getTextTables().getCount()
+    doc.dispose()
+
+    if msg:
+        print(f"    FAIL: converted: {msg!r}")
+        return 1
+    # three lines back, not six: the converter marks its continuation
+    # bands and the macro reads the marks
+    got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in lines]
+    if len(got) != 5 or not got[1].startswith("Esto es un ejemplo"):
+        print(f"    FAIL: converted: came back as {got}")
+        return 1
+    if again or tables != 2 or after != before:
+        print(f"    FAIL: converted: rebuilding said {again!r}, {tables} "
+              f"table(s), numbers {before} -> {after}")
+        return 1
+    print("    ok — a converted document untypesets and rebuilds, bands and all")
+    return 0
+
+
+# A tree comes back as the brackets it was drawn from, which the drawing
+# carries.  (lines in, lines out, trees drawn)
+UNTYPESET_TREES = {
+    "one_tree": (["[DP [D the] [NP [N tree]]]"], None, 1),
+    "judged": (["*[S [NP him] [VP [V left]]]"], None, 1),
+    "with_movement": ([
+        "[CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
+        "move t -> w",
+    ], None, 1),
+    "paradigm": ([
+        "a. [DP [D the] [NP [N tree]]]",
+        "b. [DP [D a] [NP [N cat]]]",
+    ], None, 2),
+    "paradigm_judged_with_move": ([
+        "a. *[CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
+        "move t -> w",
+        "b. [DP [D a] [NP [N cat]]]",
+    ], None, 2),
+    "with_translation": ([
+        "[DP [D the] [NP [N tree]]]",
+        "'the tree'",
+    ], None, 1),
+}
+
+
+def check_untypeset_trees(ctx) -> int:
+    """A drawn tree comes back as its brackets, and draws again.
+
+    The drawing cannot be read back — shapes have positions, not
+    structure — so the tree carries its own source, and this is the pin on
+    that: what comes out has to be what went in, letters and move lines
+    included, and it has to draw the same tree again afterwards.
+    """
+    bad = 0
+    for name, (lines, expected, trees) in UNTYPESET_TREES.items():
+        doc = make_doc(ctx, lines)
+        msg = run(ctx, "TreeSelectionQuiet")
+        before = numex_ids(doc)
+        if not msg:
+            table = doc.getTextTables().getByIndex(0)
+            vc = doc.getCurrentController().getViewCursor()
+            vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+            msg = run(ctx, "UntypesetSelectionQuiet")
+        got = [ln for ln in body_lines(doc) if ln.strip()]
+        drawn = doc.getDrawPage().getCount()
+
+        again = ""
+        if not msg and got:
+            select_paras(doc, 0, len(got) - 1)
+            again = run(ctx, "TreeSelectionQuiet")
+        rebuilt = numex_ids(doc)
+        redrawn = doc.getDrawPage().getCount()
+        tables = doc.getTextTables().getCount()
+        doc.dispose()
+
+        want = [ln.strip() for ln in (expected if expected is not None else lines)]
+        got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in got]
+        if msg:
+            print(f"    FAIL: tree {name}: {msg!r}")
+            bad += 1
+        elif drawn:
+            print(f"    FAIL: tree {name}: {drawn} drawing(s) left behind")
+            bad += 1
+        elif got != want:
+            print(f"    FAIL: tree {name}: came back as {got}, wanted {want}")
+            bad += 1
+        elif again or redrawn != trees or tables != 1 or rebuilt != before:
+            print(f"    FAIL: tree {name}: redrawing said {again!r}, "
+                  f"{redrawn} tree(s) of {trees}, {tables} table(s), "
+                  f"numbers {before} -> {rebuilt}")
+            bad += 1
+        else:
+            print(f"    ok — tree {name}: {len(got)} line(s) back, "
+                  f"{redrawn} redrawn, number kept")
+    return bad
+
+
+def check_untypeset_formatting(ctx) -> int:
+    "Small caps went into the table and small caps come back out of it."
+    # The gloss tier is the one linguists format, and it is the one a
+    # careless round trip flattens: the text would look right and the
+    # LxLeipzig-style small caps would be gone.
+    doc = make_doc(ctx, [
+        "Ich habe geschlafen",
+        [("ich ", False), ("1sg", True), (" have-", False), ("prf", True)],
+        "'I slept.'",
+    ])
+    msg = run(ctx)
+    table = doc.getTextTables().getByIndex(0)
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msg = msg or run(ctx, "UntypesetSelectionQuiet")
+
+    small: list[str] = []
+    for par in paragraphs(doc):
+        if not par.supportsService("com.sun.star.text.Paragraph"):
+            continue
+        it = par.createEnumeration()
+        while it.hasMoreElements():
+            por = it.nextElement()
+            if por.CharCaseMap == SMALLCAPS and por.getString().strip():
+                small.append(por.getString().strip())
+    doc.dispose()
+
+    if msg:
+        print(f"    FAIL: formatting: {msg!r}")
+        return 1
+    if small != ["1sg", "prf"]:
+        print(f"    FAIL: formatting: small caps came back as {small}")
+        return 1
+    print("    ok — formatting survives the round trip")
+    return 0
+
+
+def check_untypeset_refusals(ctx) -> int:
+    """What it will not take apart.  Each must leave the document alone:
+    this command deletes a table, so a wrong yes is unrecoverable."""
+    bad = 0
+
+    # not in a table at all
+    doc = make_doc(ctx, ["Esto es un ejemplo", "this is a example"])
+    msg = run(ctx, "UntypesetSelectionQuiet")
+    lines = len([ln for ln in body_lines(doc) if ln.strip()])
+    doc.dispose()
+    if not msg or lines != 2:
+        print(f"    FAIL: outside a table: said {msg!r}, {lines} line(s) left")
+        bad += 1
+    else:
+        print(f"    ok — outside a table: refused, {msg.splitlines()[0][:40]!r}")
+
+    # the linguist's own table
+    doc = make_doc(ctx, ["Something."])
+    text = doc.getText()
+    table = doc.createInstance("com.sun.star.text.TextTable")
+    table.initialize(2, 2)
+    text.insertTextContent(text.getEnd(), table, False)
+    table.getCellByName("A1").setString("data")
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A1").getText().getStart(), False)
+    msg = run(ctx, "UntypesetSelectionQuiet")
+    kept = doc.getTextTables().getCount()
+    doc.dispose()
+    if not msg or kept != 1:
+        print(f"    FAIL: a plain table: said {msg!r}, {kept} table(s) left")
+        bad += 1
+    else:
+        print(f"    ok — a plain table: refused, {msg.splitlines()[0][:40]!r}")
+
+    # a drawing that is not one of ours: a tree carries the brackets it was
+    # drawn from, and anything that carries none cannot be given back
+    doc = make_doc(ctx, ["[DP [D the] [NP [N tree]]]"])
+    msg = run(ctx, "TreeSelectionQuiet")
+    doc.getDrawPage().getByIndex(0).Title = "holiday photo"   # not ours now
+    table = doc.getTextTables().getByIndex(0)
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msg = run(ctx, "UntypesetSelectionQuiet")
+    kept = doc.getTextTables().getCount() + doc.getDrawPage().getCount()
+    doc.dispose()
+    if not msg or kept != 2:
+        print(f"    FAIL: a foreign drawing: said {msg!r}, {kept} left of 2")
+        bad += 1
+    else:
+        print(f"    ok — a foreign drawing: refused, {msg.splitlines()[0][:40]!r}")
+    return bad
+
+
 def check_undo(ctx) -> int:
     "One Ctrl+Z takes the whole thing back, whatever was built."
     # Promised in the docs and pinned by nothing until now.  The specific
@@ -1849,6 +2513,30 @@ def check_undo(ctx) -> int:
     if not bad:
         print("    ok — example, tree, tree with movement and bare tree "
               "each come back in one step")
+
+    # Untypeset undoes in one step too, and it has more moving parts than
+    # any of the above: it asks Writer for a paragraph, writes the lines
+    # and takes the table away, and all three are one Ctrl+Z.
+    doc = make_doc(ctx, ["Esto es un ejemplo", "this is a example"])
+    msg = run(ctx)
+    built = doc.getText().getString().strip()
+    table = doc.getTextTables().getByIndex(0)
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msg = msg or run(ctx, "UntypesetSelectionQuiet")
+    doc.getUndoManager().undo()
+    tables = doc.getTextTables().getCount()
+    after = doc.getText().getString().strip()
+    doc.dispose()
+    if msg:
+        print(f"    FAIL: untypeset: {msg!r}")
+        bad += 1
+    elif tables != 1 or after != built:
+        print(f"    FAIL: untypeset: one undo left {tables} table(s) and "
+              f"{after[:40]!r}")
+        bad += 1
+    else:
+        print("    ok — untypeset comes back in one step as well")
     return bad
 
 
@@ -2017,6 +2705,9 @@ def main() -> int:
         failures += check_bands("banded", odt, render(profile, odt))
     failures += check_guards(ctx)
     failures += check_tree_items(ctx)
+    failures += check_number_adoption(ctx, out, profile)
+    failures += check_wide_example(ctx)
+    failures += check_untypeset(ctx, out, profile)
     failures += check_undo(ctx)
     failures += check_extension(out)
     print("\nOK" if not failures else f"\n{failures} FAILURE(S)")

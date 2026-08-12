@@ -218,9 +218,10 @@ unopkg add dist/linguexx-0.1.0.oxt
 ```
 
 Un menu **LinguExx** apparaît dans Writer : **Composer l'exemple**, les deux
-commandes d'arbre, et **Mise en page des exemples…**, qui règle les retraits
+commandes d'arbre, **Décomposer l'exemple** (§ B.4), et **Mise en page des
+exemples…**, qui règle les retraits
 de l'exemple et l'espace au-dessus et au-dessous (voir
-[`manuel-extension-fr.md`](manuel-extension-fr.md), § 7). Une extension
+[`manuel-extension-fr.md`](manuel-extension-fr.md), § 8). Une extension
 installée ne
 déclenche **aucun avertissement de sécurité**, contrairement aux macros
 incorporées dans un document — c'est la seule méthode raisonnable pour
@@ -369,7 +370,19 @@ Points à connaître :
 - **Chaque item peut porter son propre jugement.**
 - Chaque item peut avoir sa propre traduction.
 
-## B.4 Ce que la macro refuse
+## B.4 Modifier un exemple composé
+
+**Décomposer l'exemple** rend un exemple composé aux lignes dont il a été
+fait, **le numéro en tête de la première** — et ce numéro est le champ
+vivant auquel renvoient tous les `\ref` du document. On modifie donc un
+exemple ainsi : décomposer, corriger le texte, recomposer. Même exemple,
+même numéro, **mêmes renvois** — là où composer un remplaçant donnait un
+numéro neuf et cassait tous les renvois qui le visaient. N'importe quelle
+commande de composition reprend le texte, de sorte qu'un exemple glosé peut
+revenir en arbre ou en paradigme. Voir
+[`manuel-extension-fr.md`](manuel-extension-fr.md) § 5.
+
+## B.5 Ce que la macro refuse
 
 Elle ne devine pas quand la sélection est ambiguë :
 
@@ -378,7 +391,7 @@ Elle ne devine pas quand la sélection est ambiguë :
 | rien n'est sélectionné | demande de sélectionner la ou les lignes de l'exemple |
 | une lettre de sous-exemple apparaît **en cours** de sélection alors que la sélection ne commence pas par une lettre | demande de commencer à la première lettre |
 
-## B.5 Annuler
+## B.6 Annuler
 
 Toute la construction est **une seule étape d'annulation** : un Ctrl+Z
 reprend l'exemple entier, il n'est pas nécessaire de défaire ligne par

@@ -47,13 +47,14 @@ arrive surtout sous Linux) :
 4. **Fermez et rouvrez LibreOffice** — le menu n'apparaît qu'au
    redémarrage.
 
-Une fois installée, l'extension ajoute un menu à trois commandes, plus un
+Une fois installée, l'extension ajoute un menu à quatre commandes, plus un
 réglage :
 
 > **LinguExx ▸ Composer l'exemple**
 > **LinguExx ▸ Composer l'arbre numéroté**
 > **LinguExx ▸ Composer l'arbre sans numéro**
-> **LinguExx ▸ Mise en page des exemples…** (§ 7)
+> **LinguExx ▸ Décomposer l'exemple** (§ 5)
+> **LinguExx ▸ Mise en page des exemples…** (§ 8)
 
 ### 2.2 En ligne de commande
 
@@ -441,7 +442,72 @@ Toute la construction est **une seule étape d'annulation**. Un **Ctrl+Z**
 
 ---
 
-## 5. La renumérotation automatique
+## 5. Modifier un exemple déjà composé
+
+**LinguExx ▸ Décomposer l'exemple** fait le chemin inverse : placez le
+curseur n'importe où dans un exemple composé, et il redevient les lignes
+dont il a été fait —
+
+```
+(7)  Esto es un ejemplo glosado
+     this is a example glossed
+     'This is a glossed example.'
+```
+
+redevient trois paragraphes ordinaires, le **numéro** en tête du premier.
+Ce numéro est toujours le champ vivant auquel renvoient tous les renvois du
+document. Modifiez le texte, sélectionnez-le, recomposez-le : c'est le même
+exemple, avec le même numéro et **les mêmes renvois**.
+
+C'est ainsi qu'on modifie un exemple. Le corriger sur place oblige à
+travailler cellule par cellule, et un mot ajouté demande une colonne que le
+tableau n'a pas ; en composer un nouveau à la place lui donnait un numéro
+neuf, et tous les `\ref` qui le visaient tombaient en panne
+(*Erreur : source du renvoi introuvable*).
+
+Le trajet aller-retour ne sert pas qu'à corriger une coquille :
+
+- **N'importe quelle commande de composition reprend le texte** : un
+  exemple glosé peut revenir en arbre numéroté, ou en paradigme
+  `a. … b. …`, avec son numéro.
+- **Tout est remesuré** sur la page et la police que vous avez maintenant,
+  et le découpage en bandes est refait.
+- Tout revient : les lettres de sous-exemples, les jugements, la
+  traduction, les `{groupes entre accolades}` qui ne faisaient qu'une
+  colonne, et la mise en forme de chaque passage.
+
+Les lignes prennent le style de paragraphe du texte où elles atterrissent,
+comme si vous y tapiez.
+
+**Un arbre dessiné revient sous forme de crochets**, lignes `move`
+comprises : le dessin conserve la notation dont il est issu, dans sa
+**description** (Format ▸ Description — c'est aussi le texte alternatif que
+demande un PDF balisé). Recomposez-le avec **Composer l'arbre numéroté** :
+ici comme ailleurs, c'est la commande qui décide, jamais le texte.
+
+> **La mise en forme des étiquettes ne revient pas.** Une description est
+> du texte brut, et les marques qui transportent la mise en forme dans
+> cette macro sont des caractères à usage privé qui s'y afficheraient comme
+> des carrés. Une étiquette en italique le reste dans le dessin et revient
+> en texte simple.
+
+### Ce que la commande refuse
+
+| situation | pourquoi |
+|---|---|
+| l'exemple contient un **dessin sans source** — une image, ou un arbre dessiné avant que les arbres ne conservent leurs crochets | il n'y a rien à rendre, et décomposer le perdrait |
+| le tableau **n'est pas un exemple** | un exemple est encadré par les deux lignes d'espacement, et rien d'autre ne produit de telles lignes ; il s'agit donc d'un tableau que vous avez fait vous-même |
+| l'exemple n'a **ni colonne de jugement ni traduction** | ce sont les deux choses qui disent où commence le texte de l'exemple ; seul un document converti qui ne juge jamais rien peut se présenter ainsi |
+
+> **Documents antérieurs.** Un exemple trop long découpé en bandes et
+> composé avant cette version ne porte pas la marque qui signale le début
+> d'une bande : ses lignes de continuation reviennent comme des lignes de
+> glose supplémentaires. Rassemblez-les à la main avant de recomposer —
+> l'exemple recomposé, lui, portera la marque.
+
+---
+
+## 6. La renumérotation automatique
 
 C'est l'intérêt principal du dispositif.
 
@@ -452,7 +518,7 @@ Tous les numéros suivants se décalent d'un cran.
 
 ---
 
-## 6. Mise en forme : tout passe par des styles
+## 7. Mise en forme : tout passe par des styles
 
 L'extension n'utilise aucun formatage direct. Tout est un **style nommé**,
 donc vous pouvez remettre en forme **tous les exemples du document d'un
@@ -463,13 +529,14 @@ coup** depuis le volet Styles (**F11**, rubrique *Styles personnalisés*).
 | `LxExampleCell` | toutes les cellules : langue objet, gloses, numéro |
 | `LxTranslation` | la ligne de traduction libre |
 | `LxJudgmentCell` | la colonne des jugements |
+| `LxExampleBand` | la première ligne d'une bande de continuation ; il ne déclare rien et ne se voit pas — c'est une marque, qui permet de retrouver le découpage en bandes (§ 5) |
 | `LxExampleSpace` | **la hauteur des deux espaces**, au-dessus et au-dessous |
 | `LxExampleSpaceAbove` | hérite du précédent ; pour l'espace du haut seulement |
 | `LxExampleSpaceBelow` | idem, pour l'espace du bas seulement |
 
 ### Changer l'espace autour des exemples
 
-Le plus simple : **LinguExx ▸ Mise en page des exemples…** (§ 7), qui écrit
+Le plus simple : **LinguExx ▸ Mise en page des exemples…** (§ 8), qui écrit
 ces styles pour vous.
 
 À la main : modifiez le style **`LxExampleSpace`** : onglet **Retraits et
@@ -489,7 +556,7 @@ l'extension sont le même objet et obéissent aux mêmes styles.
 
 ---
 
-## 7. Régler la mise en page des exemples
+## 8. Régler la mise en page des exemples
 
 **LinguExx ▸ Mise en page des exemples…** ouvre une boîte de dialogue qui
 règle les cinq longueurs relevant de la maison d'édition plutôt que de la
@@ -531,7 +598,7 @@ voulu :**
   réaligne un exemple quand vous en modifiez un mot. Recomposez-le depuis
   son texte source si vous voulez qu'il bouge.
 - **Les espaces, eux, remettent en forme tout le document d'un coup**,
-  parce qu'ils *sont* les styles `LxExampleSpace*` (§ 6) : la boîte de
+  parce qu'ils *sont* les styles `LxExampleSpace*` (§ 7) : la boîte de
   dialogue n'est qu'une autre façon de les modifier. Deux valeurs égales
   sont écrites sur le style parent, dont les deux enfants héritent — une
   modification ultérieure du parent depuis le volet Styles déplace donc
@@ -558,7 +625,7 @@ n'est modifié.
 
 ---
 
-## 8. Ce que l'extension refuse de faire
+## 9. Ce que l'extension refuse de faire
 
 Elle ne devine pas quand la sélection est ambiguë :
 
@@ -570,7 +637,7 @@ Elle ne devine pas quand la sélection est ambiguë :
 
 ---
 
-## 9. Dépannage
+## 10. Dépannage
 
 ### L'extension est installée mais le menu n'apparaît pas
 
@@ -611,7 +678,7 @@ Utile pour signaler un problème ou repartir de zéro :
 
 ---
 
-## 10. Fabriquer le fichier `.oxt` soi-même
+## 11. Fabriquer le fichier `.oxt` soi-même
 
 Seulement utile si vous travaillez sur le code source. Depuis la racine du
 dépôt :

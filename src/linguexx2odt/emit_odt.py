@@ -38,8 +38,8 @@ from dataclasses import dataclass, field, replace
 from .inline import InlineRenderer, esc
 from .ir import Body, Example, Item
 from .styles import (
-    CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME, SPACE_ABOVE_PARA,
-    SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
+    BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME,
+    SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
 )
 
 
@@ -484,13 +484,19 @@ class Emitter:
             return "".join(out)
 
         if body.tiers:
-            for band in grid.bands:
+            for b, band in enumerate(grid.bands):
                 if band[0] >= body.width:
                     continue  # this body has no words this far right
-                for tier in body.tiers:
+                for t, tier in enumerate(body.tiers):
+                    # The first row of a continuation band says so, because
+                    # nothing else in the finished table can: a band's rows
+                    # are built exactly like a tier's and start in the same
+                    # column.  The macro's Untypeset reads this to tell one
+                    # from the other.  See styles.BAND_PARA.
+                    style = BAND_PARA if b and not t else CELL_PARA
                     rows.append(
                         "<table:table-row>" + lead_cells(not head_used)
-                        + self._band_cells(tier.cells, band, grid, filler)
+                        + self._band_cells(tier.cells, band, grid, filler, style)
                         + "</table:table-row>"
                     )
                     head_used = True
@@ -512,17 +518,23 @@ class Emitter:
             )
         return rows
 
-    def _band_cells(self, cells, band, grid, filler: int) -> str:
+    def _band_cells(self, cells, band, grid, filler: int,
+                    style: str = CELL_PARA) -> str:
         """One tier's cells for one band, each spanning the grid columns it
-        covers, then empty cells padding the row to the full grid width."""
+        covers, then empty cells padding the row to the full grid width.
+
+        *style* marks the whole row, padding included, so a reader can find
+        the mark on any cell of it rather than having to know which cells a
+        short tier left empty."""
         start, stop = band
         out, covered = [], 0
         for j in range(start, stop):
             span = grid.span(j)
             content = self.inline.render(cells[j]) if j < len(cells) else ""
-            out.append(self._cell(content, span=span))
+            out.append(self._cell(content, span=span, style=style))
             covered += span
-        out += [self._cell("")] * (len(grid.columns) + filler - covered)
+        out += [self._cell("", style=style)] * (
+            len(grid.columns) + filler - covered)
         return "".join(out)
 
     def _body_text_only(self, body: Body) -> str:

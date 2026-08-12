@@ -229,6 +229,16 @@ you run is the whole of the decision: *Typeset example* never draws a tree,
 so labelled bracketing like `[TP [DP John] [VP left]]` stays the text you
 typed.
 
+*Untypeset example* is the way back: put the cursor in a built example and
+it becomes the lines it was built from again, with its number — the live
+field every cross-reference points at — at the head of the first one. Edit
+the text, select it, typeset it again, and it is the same example with the
+same number, so **an example can be changed without breaking a single
+`\ref` to it**. Any of the building commands will take the text back, so a
+glossed example can come back as a tree or as a paradigm. Drawn trees come
+back too: the group of shapes carries the bracket notation it was drawn
+from in its alt text, since shapes have positions and not structure.
+
 Formatting you applied by hand comes through — small caps on a Leipzig
 gloss, italics, bold, superscripts — and each run is measured in the font
 it will be drawn in, which matters more than it sounds: small caps are

@@ -67,6 +67,7 @@ Option Explicit
 Const CELL_PARA   As String = "LxExampleCell"
 Const TRANS_PARA  As String = "LxTranslation"
 Const JUDG_PARA   As String = "LxJudgmentCell"
+Const BAND_PARA   As String = "LxExampleBand"
 Const SPACE_PARA  As String = "LxExampleSpace"
 Const SPACE_ABOVE As String = "LxExampleSpaceAbove"
 Const SPACE_BELOW As String = "LxExampleSpaceBelow"
@@ -241,6 +242,13 @@ Sub LxExampleCommand(bTreeOnly As Boolean, sUndo As String)
     oRange = oSel.getByIndex(0)
 
     aLines = LxSelectedLines(oRange)
+    ' Trouble with a number the selection carries is reported before
+    ' anything is built: the alternative is an example that took a number
+    ' off another one, which is exactly the breakage this is here to stop.
+    If Len(LxNumErr) > 0 Then
+        Call LxSay(LxNumErr)
+        Exit Sub
+    End If
     nLines = UBound(aLines) + 1
     ' One line is a perfectly good example — an unglossed one, which is the
     ' commonest kind there is.  Requiring two was a leftover from when this
@@ -777,6 +785,13 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                             bFirstOfItem = False
                             bFirstOfAll = False
                         End If
+                        ' The first row of a continuation band says so.
+                        ' Nothing else in the finished table can: this row
+                        ' is built exactly like a tier row and starts in the
+                        ' same column, so a reader counting rows cannot tell
+                        ' three tiers of one band from one tier of three.
+                        If b > 0 And t = 0 Then _
+                            Call LxMarkBand(oTable, nRow, nLead, nCols + nFill)
                         ' Walk the band's whole word range, not just this
                         ' tier's: every tier row must end up with the same
                         ' cell structure, or the rows stop lining up.
@@ -845,6 +860,26 @@ Sub LxHead(oDoc As Object, oTable As Object, nRow As Integer, _
 End Sub
 
 
+' Mark a whole row as beginning a band — padding cells included, so the
+' mark can be looked for on any cell of the row rather than on the one a
+' short tier happened to leave empty.  Called before the row's words are
+' written and its cells merged, while every cell of it still exists.
+Sub LxMarkBand(oTable As Object, nRow As Integer, nLead As Integer, nSpan As Integer)
+    Dim oCell As Object
+    Dim i As Integer
+    For i = nLead To nLead + nSpan - 1
+        oCell = Nothing
+        On Error Resume Next
+        oCell = oTable.getCellByName(LxCell(i, nRow))
+        On Error Goto 0
+        ' A merge earlier in the table can leave a name with no cell behind
+        ' it; the mark only has to land somewhere on the row.
+        If Not IsNull(oCell) Then _
+            oCell.getText().createTextCursor().ParaStyleName = BAND_PARA
+    Next i
+End Sub
+
+
 Sub LxWideCell(oTable As Object, nRow As Integer, nLead As Integer, _
                nSpan As Integer, sText As String, sStyle As String)
     Dim oCur As Object
@@ -891,6 +926,11 @@ Sub LxWideCellTree(oDoc As Object, oTable As Object, nRow As Integer, _
     oCur = oText.createTextCursor()
     oCur.gotoEnd(False)
     oGroup = LxTreeDraw(oDoc, oText, oCur, nRoot, LxBodyFont, LxBodyPt)
+    ' The lines as the linguist typed them — judgment mark, move lines and
+    ' all — so that Untypeset can give the tree back as what made it.  The
+    ' sub-example letter is not among them: it was taken off before the
+    ' item was made, and Untypeset puts it back from its own column.
+    Call LxTreeSource(oGroup, aLines)
 
     ' Said, not silently produced: a tree wider than its cell hangs off the
     ' page, and shortening a label is the user's call.
@@ -970,10 +1010,15 @@ Function LxSelectedLines(oRange As Object) As Variant
     Dim s As String, sLine As String, sType As String
     Dim aRaw As Variant, aOut() As String
     Dim i As Integer, n As Integer
+    Dim bCloser As Boolean
 
     LxFmtN = 0
+    LxNumHas = False
+    LxNumId = 0
+    LxNumErr = ""
 
     s = ""
+    bCloser = False
     oParEnum = Nothing
     On Error Resume Next
     oParEnum = oRange.createEnumeration()
@@ -991,8 +1036,19 @@ Function LxSelectedLines(oRange As Object) As Variant
                     On Error Goto 0
                     If sType = "LineBreak" Then
                         s = s & Chr(10)
+                        bCloser = False
+                    ElseIf sType = "TextField" And LxIsNumberField(oPor) Then
+                        ' An example number: taken over rather than read as
+                        ' a word.  Its own presentation ("7") would
+                        ' otherwise lead the object language.
+                        Call LxTakeNumber(oPor, s)
+                        bCloser = True
                     Else
                         sLine = oPor.getString()
+                        If bCloser Then
+                            If Left(sLine, 1) = ")" Then sLine = Mid(sLine, 2)
+                            bCloser = False
+                        End If
                         If Len(sLine) > 0 Then _
                             s = s & LxTagged(sLine, LxFormatIndex(oPor))
                     End If
@@ -1031,6 +1087,111 @@ Function LxSelectedLines(oRange As Object) As Variant
         ReDim Preserve aOut(n - 1)
         LxSelectedLines = aOut()
     End If
+End Function
+
+
+' ----------------------------------------------------------- the number ---
+
+' An example number the selection already carries, waiting to be taken over.
+'
+' A cross-reference binds to the *identity* of a NumEx field — its
+' ref-name, which UNO calls SequenceValue — and not to the number it
+' happens to show.  So an example that is rebuilt must not be handed a new
+' field: every reference to it would resolve to "Error: Reference source
+' not found", and there is no way to point them back.  A number found in
+' the selection is therefore taken over rather than remade, and
+' LxInsertNumber transplants its identity into the field it creates.
+'
+' That is the whole of the rule: the number an example is built with is
+' the one it was given, if it was given one.
+Dim LxNumId  As Long          ' SequenceValue of the number to take over
+Dim LxNumHas As Boolean
+Dim LxNumErr As String        ' read by the commands, as LxTErr is
+
+
+' The drawings found in the example being untypesetted: which cell each
+' sits in, and the bracket notation it was drawn from.  Read once, before
+' the rows are walked, because a shape knows its cell but a cell does not
+' know its shapes.
+Const SHAPE_MAX As Integer = 60           ' trees in one example
+Dim LxShCell(SHAPE_MAX) As String
+Dim LxShSrc(SHAPE_MAX)  As String
+Dim LxShN               As Integer
+
+
+' Is this portion an example number — a NumEx field of the kind
+' LxInsertNumber makes?
+'
+' A cross-reference *to* an example is a GetReference field and answers
+' False, so a selection that refers to other examples is untouched; so is
+' every other field a document may have in it.
+Function LxIsNumberField(oPor As Object) As Boolean
+    Dim oFld As Object
+    Dim sName As String
+
+    LxIsNumberField = False
+    oFld = Nothing
+    On Error Resume Next
+    oFld = oPor.TextField
+    On Error Goto 0
+    If IsNull(oFld) Then Exit Function
+    If Not oFld.supportsService("com.sun.star.text.TextField.SetExpression") _
+        Then Exit Function
+
+    sName = ""
+    On Error Resume Next
+    sName = oFld.TextFieldMaster.Name
+    On Error Goto 0
+    LxIsNumberField = (sName = SEQ_NAME)
+End Function
+
+
+' Take the number over, and take it out of the text.
+'
+' The literal "(" in front of it goes with it — LxInsertNumber writes the
+' parentheses itself, and left in they would become the first word of the
+' example.  The ")" after it is dropped by the caller, which is holding the
+' portion it leads.
+Sub LxTakeNumber(oPor As Object, ByRef s As String)
+    Dim oFld As Object
+
+    If LxNumHas Then
+        LxNumErr = "The selection carries two example numbers." & _
+                   Chr(10) & Chr(10) & _
+                   "An example has one.  Typeset one example at a time."
+        Exit Sub
+    End If
+
+    ' The number leads the example it belongs to.  One found after the text
+    ' has started belongs to something else — most likely a second example
+    ' further down the selection — and taking it over would move a number
+    ' from one example to another silently.
+    If Not LxOnlyOpener(s) Then
+        LxNumErr = "An example number appears part-way through the " & _
+                   "selection." & Chr(10) & Chr(10) & _
+                   "The number an example takes over has to lead it.  " & _
+                   "Start the selection at the number, or leave the number " & _
+                   "out and a new one is made."
+        Exit Sub
+    End If
+
+    oFld = oPor.TextField
+    LxNumId = oFld.SequenceValue
+    LxNumHas = True
+    If Right(s, 1) = "(" Then s = Left(s, Len(s) - 1)
+End Sub
+
+
+' Is there nothing in the text so far but the opening parenthesis of the
+' number about to be read?  Format marks do not count as text, and neither
+' does a blank line above the example.
+Function LxOnlyOpener(s As String) As Boolean
+    Dim t As String
+    t = LxStrip(s)
+    t = Replace(t, "(", "")
+    t = Replace(t, Chr(9), "")
+    t = Replace(t, Chr(10), "")
+    LxOnlyOpener = (Len(Trim(t)) = 0)
 End Function
 
 
@@ -1678,7 +1839,20 @@ End Function
 ' ------------------------------------------------------------ ODF bits ---
 
 Sub LxInsertNumber(oDoc As Object, oCell As Object)
-    Dim oMaster As Object, oField As Object, oText As Object
+    Dim oText As Object, oCur As Object
+    oText = oCell.getText()
+    oText.setString("")
+    oCur = oText.createTextCursor()
+    Call LxPutNumber(oDoc, oText, oCur)
+End Sub
+
+
+' The number itself, written at a cursor: in the cell of a table being
+' built, or — when an example is untypeset — into the line of text the
+' example comes back as, where it goes on standing for that example until
+' the example is built again.
+Sub LxPutNumber(oDoc As Object, oText As Object, oCur As Object)
+    Dim oMaster As Object, oField As Object
     Dim sMaster As String
 
     sMaster = "com.sun.star.text.FieldMaster.SetExpression." & SEQ_NAME
@@ -1695,13 +1869,23 @@ Sub LxInsertNumber(oDoc As Object, oCell As Object)
     oField.NumberingType = com.sun.star.style.NumberingType.ARABIC
     oField.attachTextFieldMaster(oMaster)
 
+    ' The identity of the number the selection carried, if it carried one:
+    ' this field becomes the one the cross-references were already pointing
+    ' at, and they keep resolving.  Set after the master is attached and
+    ' before the field is inserted, which is the order that was measured to
+    ' work; LibreOffice does hand out the freed identity by itself when the
+    ' old field is the only one gone, but that is luck rather than a
+    ' promise, and two examples in flight would break it.
+    If LxNumHas Then oField.SequenceValue = LxNumId
+
     ' Literal parentheses around a live number-range field: renumbering
     ' then costs nothing but F9, and \label/\ref written by linguexx2odt
     ' into the same NumEx sequence keep pointing at the right example.
-    oText = oCell.getText()
-    oText.setString("(")
-    oText.insertTextContent(oText.createTextCursorByRange(oText.getEnd()), oField, False)
-    oText.insertString(oText.getEnd(), ")", False)
+    oCur.collapseToEnd()
+    oText.insertString(oCur, "(", False)
+    oText.insertTextContent(oCur, oField, False)
+    oCur.collapseToEnd()
+    oText.insertString(oCur, ")", False)
 End Sub
 
 
@@ -1749,14 +1933,23 @@ End Sub
 ' the sub-example brackets) does not, and is left to the cell style.
 Sub LxPut(oCell As Object, sText As String)
     Dim oText As Object, oCur As Object
-    Dim i As Integer, nFmt As Integer
-    Dim c As String, sRun As String
 
     oText = oCell.getText()
     oText.setString("")
     If Len(LxStrip(sText)) = 0 Then Exit Sub
 
     oCur = oText.createTextCursor()
+    Call LxPutTagged(oText, oCur, sText)
+End Sub
+
+
+' The same, written at a cursor in any text rather than into a cell of its
+' own — which is what Untypeset needs, putting an example back into the
+' body text it came from.
+Sub LxPutTagged(oText As Object, oCur As Object, sText As String)
+    Dim i As Integer, nFmt As Integer
+    Dim c As String, sRun As String
+
     sRun = "" : nFmt = -1
     For i = 1 To Len(sText)
         c = Mid(sText, i, 1)
@@ -1772,13 +1965,16 @@ Sub LxPut(oCell As Object, sText As String)
 End Sub
 
 
+' collapseToEnd, not gotoEnd: in a cell of its own the two are the same,
+' but written into body text gotoEnd would jump to the end of the document
+' and put the rest of the example there.
 Sub LxPutRun(oText As Object, oCur As Object, sRun As String, nFmt As Integer)
     If Len(sRun) = 0 Then Exit Sub
-    oCur.gotoEnd(False)
+    oCur.collapseToEnd()
     oText.insertString(oCur, sRun, False)
     oCur.goLeft(Len(sRun), True)              ' select what was just written
     Call LxApplyFmt(oCur, nFmt)
-    oCur.gotoEnd(False)
+    oCur.collapseToEnd()
 End Sub
 
 
@@ -1867,12 +2063,27 @@ Function LxCell(nCol As Integer, nRow As Integer) As String
 End Function
 
 
+' The name Writer gives the nth column, counting from 0.
+'
+' Not base 26.  Writer runs A..Z and then *lowercase* a..z before it uses
+' two letters at all — A, …, Z, a, …, z, AA, …, AZ, Aa, …, Az, BA — so the
+' 27th column is "a" and not "AA".  Measured, on a table of 120 columns.
+'
+' This was base 26, and every example wider than 26 columns died on the
+' first cell past Z with "Object variable not set": the name it asked for
+' belonged to no cell.  A long glossed example reaches 26 columns easily —
+' one column per word — so it was not an exotic case.
 Function LxColName(nCol As Integer) As String
-    Dim s As String, n As Integer
+    Dim s As String, n As Integer, r As Integer
     n = nCol : s = ""
     Do
-        s = Chr(65 + (n Mod 26)) & s
-        n = n \ 26 - 1
+        r = n Mod 52
+        If r < 26 Then
+            s = Chr(65 + r) & s
+        Else
+            s = Chr(97 + r - 26) & s
+        End If
+        n = n \ 52 - 1
     Loop While n >= 0
     LxColName = s
 End Function
@@ -1911,6 +2122,15 @@ Sub LxEnsureStyles(oDoc As Object)
         oStyle.ParaAdjust = com.sun.star.style.ParagraphAdjust.RIGHT
     End If
 
+    ' Declares nothing, so it is CELL_PARA in every visible respect.  It is
+    ' a mark rather than a look: it says "this row starts a new band", which
+    ' a finished table cannot otherwise tell anyone — see LxRowIsBand.
+    If Not oFam.hasByName(BAND_PARA) Then
+        oStyle = oDoc.createInstance("com.sun.star.style.ParagraphStyle")
+        oStyle.ParentStyle = CELL_PARA
+        oFam.insertByName(BAND_PARA, oStyle)
+    End If
+
     ' The space around an example: a fixed line height on an empty spacer
     ' row.  A table margin would work too, but LibreOffice ignores
     ' style:parent-style-name on table styles, so it could never be a style
@@ -1937,6 +2157,726 @@ Sub LxEnsureChildStyle(oDoc As Object, oFam As Object, sName As String)
     oStyle = oDoc.createInstance("com.sun.star.style.ParagraphStyle")
     oStyle.ParentStyle = SPACE_PARA
     oFam.insertByName(sName, oStyle)
+End Sub
+
+
+' ============================================================ untypeset ===
+'
+' An example, back as the lines it was built from.
+'
+' This is what makes a typeset example changeable.  A built example is a
+' table whose columns are already set: editing it in place means editing
+' cell by cell, and a word added or removed needs a column the table has
+' not got.  Building a replacement was worse — a new example takes a new
+' number, and every cross-reference to the old one dies with it.
+'
+' So the example comes back as text, with its number still at the head of
+' the first line, and the number is taken over again when it is built
+' afresh (see LxTakeNumber).  Edit the text as text, select it, typeset it:
+' the same example, the same number, the same references — and any of the
+' building commands will take it, so a glossed example can come back as a
+' tree or a paradigm.
+'
+' What it reads is the table, and only the table.  Nothing was written down
+' at build time to be read back here, because a second copy of the example
+' would start drifting from the first the moment anyone edited a cell.  The
+' one thing the table cannot say for itself is where a band begins — its
+' rows are built exactly like tier rows — and that is recorded as a *style*
+' on the row, which is structure rather than a copy of anything.  See
+' BAND_PARA.
+'
+' Deliberately not handled: an example holding a drawn tree.  The drawing
+' is shapes, and the bracket notation it was drawn from is not in them; the
+' command says so rather than handing back an example with the tree quietly
+' missing from it.
+
+Sub UntypesetSelection
+    Call LxUntypesetCommand()
+End Sub
+
+
+Function UntypesetSelectionQuiet() As String
+    LxSilent = True
+    LxLastMessage = ""
+    Call UntypesetSelection
+    LxSilent = False
+    UntypesetSelectionQuiet = LxLastMessage
+    LxLastMessage = ""
+End Function
+
+
+Sub LxUntypesetCommand()
+    Dim oDoc As Object, oTable As Object, oText As Object
+    Dim oCur As Object, oUndo As Object
+    Dim aLines As Variant
+    Dim nLines As Integer
+    Dim sErr As String
+    Dim bLead As Boolean
+
+    oDoc = ThisComponent
+    If IsNull(oDoc) Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+    If Not oDoc.supportsService("com.sun.star.text.TextDocument") Then
+        Call LxSay("Run this in a Writer document.")
+        Exit Sub
+    End If
+
+    oTable = Nothing
+    On Error Resume Next
+    oTable = oDoc.getCurrentController().getViewCursor().TextTable
+    On Error Goto 0
+    If IsNull(oTable) Then
+        Call LxSay("Put the cursor in the example you want back as text.")
+        Exit Sub
+    End If
+
+    If Not LxIsExampleTable(oTable) Then
+        Call LxSay("That table is not an example." & Chr(10) & Chr(10) & _
+                   "An example is topped and tailed by the spacer rows " & _
+                   "that carry the space around it, and this one is not — " & _
+                   "so taking it apart would be taking apart a table you " & _
+                   "built yourself.")
+        Exit Sub
+    End If
+
+    ' A tree comes back as the brackets it was drawn from, which the
+    ' drawing carries.  One that carries none cannot: refusing keeps it,
+    ' where going ahead would hand back an example with the drawing
+    ' silently gone out of it.
+    If Not LxReadShapes(oDoc, oTable) Then
+        Call LxSay("That example holds a drawing this cannot read back." & _
+                   Chr(10) & Chr(10) & _
+                   "A tree keeps the bracket notation it was drawn from, " & _
+                   "and this drawing has none: a picture put into the " & _
+                   "example, or a tree drawn before trees kept theirs.  " & _
+                   "Untypesetting it would lose it.")
+        Exit Sub
+    End If
+
+    aLines = LxReadTable(oTable, sErr)
+    If Len(sErr) > 0 Then
+        Call LxSay(sErr)
+        Exit Sub
+    End If
+    nLines = UBound(aLines) + 1
+    If nLines < 1 Then
+        Call LxSay("There is nothing in that example to give back.")
+        Exit Sub
+    End If
+
+    oText = LxHostText(oDoc, oTable)
+    oUndo = oDoc.getUndoManager()
+    oUndo.enterUndoContext("Untypeset example")
+    On Error Goto Cleanup
+
+    ' Room for the text, in front of the table and inside the undo context
+    ' — it is part of the same one step.  A cursor made here goes on
+    ' pointing at the same place after the table is removed (measured).
+    oCur = LxPlaceBefore(oDoc, oText, oTable, bLead)
+    If IsNull(oCur) Then
+        oUndo.leaveUndoContext()
+        Call LxSay("There is nowhere to put the text: Writer would not " & _
+                   "make a paragraph in front of that example.")
+        Exit Sub
+    End If
+    ' The table goes first, so that at no moment do two fields claim the
+    ' same identity: the number written back takes the old one's, and the
+    ' old one has to be gone before it does.
+    oText.removeTextContent(oTable)
+    Call LxWriteLines(oDoc, oText, oCur, aLines, nLines, bLead)
+Cleanup:
+    oUndo.leaveUndoContext()
+    If Err <> 0 Then Call LxSay(Error$ & " (line " & Erl & ")")
+End Sub
+
+
+' ------------------------------------------------------ reading it back ---
+
+' Every line of the example: one per tier, one per translation, the
+' sub-example letter and judgment mark back at the head of their item's
+' first line, and the bands joined back onto the tiers they were split off.
+Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
+    Dim aOut() As String
+    Dim aCells As Variant
+    Dim aTree As Variant
+    Dim nRows As Integer, nLead As Integer, nRow As Integer
+    Dim nOut As Integer, nBase As Integer, nTier As Integer
+    Dim n As Integer, j As Integer, nMax As Integer
+    Dim bJudg As Boolean, bMarker As Boolean, bBand0 As Boolean, bStart As Boolean
+    Dim sLine As String, sMark As String, sJudg As String, sPre As String
+    Dim sTree As String
+
+    sErr = ""
+    LxFmtN = 0                                ' formats are read afresh
+    LxNumHas = False
+    LxNumId = 0
+
+    nRows = oTable.getRows().getCount()
+    nLead = LxLeadColumns(oTable, nRows, bJudg, bMarker)
+    If nLead < 1 Then
+        sErr = "That example does not say where its text begins." & _
+               Chr(10) & Chr(10) & _
+               "It has neither a judgment column nor a translation, which " & _
+               "are the two things that give it away.  A converted " & _
+               "document whose examples are never judged can look like " & _
+               "this; typeset one example by hand and this will read it."
+        LxReadTable = Array()
+        Exit Function
+    End If
+
+    ' One line per row, and a row holding a tree gives back as many lines
+    ' as its brackets were typed over.
+    nMax = nRows
+    For n = 0 To LxShN - 1
+        nMax = nMax + UBound(Split(LxShSrc(n), Chr(10))) + 1
+    Next n
+    ReDim aOut(nMax)
+    nOut = 0 : nBase = 0 : nTier = 0 : bBand0 = True
+
+    For nRow = 1 To nRows
+        aCells = LxRowCells(oTable, nRow)
+        If UBound(aCells) < 0 Then
+            ' nothing in this row to read
+        ElseIf LxRowHasStyle(oTable, aCells, SPACE_ABOVE) _
+            Or LxRowHasStyle(oTable, aCells, SPACE_BELOW) Then
+            ' a spacer row: height, and nothing else
+        ElseIf LxRowHasStyle(oTable, aCells, TRANS_PARA) Then
+            ' The translation is running text in a cell of its own, so it
+            ' comes back as it stands — no columns to rejoin, no braces.
+            sLine = LxRowText(oTable, aCells, nLead, False)
+            If Len(LxStrip(sLine)) > 0 Then
+                aOut(nOut) = sLine
+                nOut = nOut + 1
+            End If
+        Else
+            ' The item's head cells.  A letter in the marker column starts a
+            ' new item; so does the first content row, which has the number.
+            sMark = ""
+            If bMarker Then sMark = LxStrip(LxCellText(oTable, 1, nRow))
+            sJudg = ""
+            If bJudg Then sJudg = LxStrip(LxCellText(oTable, nLead - 1, nRow))
+            bStart = (nOut = 0) Or (Len(sMark) > 0)
+            If nOut = 0 Then Call LxTakeCellNumber(oTable, nRow)
+
+            If bStart Then
+                nBase = nOut : nTier = 0 : bBand0 = True
+            ElseIf LxRowHasStyle(oTable, aCells, BAND_PARA) Then
+                nTier = 0 : bBand0 = False    ' a band, not another tier
+            End If
+
+            sTree = LxRowTree(aCells, nLead)
+            If Len(sTree) > 0 Then
+                ' A drawn tree gives back the lines it was drawn from, which
+                ' may be several: the brackets, and a "move a -> b" under
+                ' them.  The judgment mark is *not* put back in front of
+                ' them — it led those lines when they were read and leads
+                ' them still — but the letter is, because that was taken off
+                ' before the item was made.
+                aTree = Split(sTree, Chr(10))
+                For j = 0 To UBound(aTree)
+                    sLine = Trim(aTree(j))
+                    If j = 0 And Len(sMark) > 0 Then sLine = sMark & " " & sLine
+                    If Len(sLine) > 0 Then
+                        aOut(nOut) = sLine
+                        nOut = nOut + 1
+                    End If
+                Next j
+            Else
+                sLine = LxRowText(oTable, aCells, nLead, True)
+                If bStart Then
+                    ' The letter leads its item's first line and the mark is
+                    ' glued to the first word, which is how they were typed
+                    ' and how LxParseItems reads them again.
+                    sPre = ""
+                    If Len(sMark) > 0 Then sPre = sMark & " "
+                    sPre = sPre & sJudg
+                    sLine = sPre & sLine
+                End If
+
+                If bBand0 Then
+                    aOut(nOut) = sLine
+                    nOut = nOut + 1
+                ElseIf Len(LxStrip(sLine)) > 0 Then
+                    ' This band's share of a tier already written: it belongs
+                    ' on the end of that line, not on a line of its own.
+                    n = nBase + nTier
+                    If n < nOut Then
+                        aOut(n) = aOut(n) & " " & sLine
+                    Else
+                        aOut(nOut) = sLine    ' more tiers than the first
+                        nOut = nOut + 1       ' band had: not ours, keep it
+                    End If
+                End If
+            End If
+            nTier = nTier + 1
+        End If
+    Next nRow
+
+    LxReadTable = LxNonEmpty(aOut(), nOut)
+End Function
+
+
+' The lines that have something in them, in order.
+Function LxNonEmpty(aLines() As String, nLines As Integer) As Variant
+    Dim aOut() As String
+    Dim i As Integer, n As Integer
+    ReDim aOut(LxMaxI(nLines - 1, 0))
+    n = 0
+    For i = 0 To nLines - 1
+        If Len(LxStrip(LxTrimTagged(aLines(i)))) > 0 Then
+            aOut(n) = LxTrimTagged(aLines(i))
+            n = n + 1
+        End If
+    Next i
+    If n = 0 Then
+        LxNonEmpty = Array()
+    Else
+        ReDim Preserve aOut(n - 1)
+        LxNonEmpty = aOut()
+    End If
+End Function
+
+
+' How many columns come before the example's own text, and which of them
+' are what.
+'
+' The judgment column answers it outright wherever there is one, and this
+' macro reserves one in every example it builds.  Where there is none — a
+' converted document that judges nothing has no judgment column at all —
+' the wide cell of a translation row starts exactly where the text does,
+' which is the same answer from the other side.  Nothing is inferred from
+' what a cell happens to *contain*: a first word that reads like "a." would
+' otherwise turn an example into a paradigm.
+Function LxLeadColumns(oTable As Object, nRows As Integer, _
+                       ByRef bJudg As Boolean, ByRef bMarker As Boolean) As Integer
+    Dim aCells As Variant
+    Dim nRow As Integer, i As Integer, nLead As Integer, nHead As Integer
+    Dim sStyle As String
+
+    bJudg = False : bMarker = False
+    nLead = -1
+    For nRow = 1 To nRows
+        aCells = LxRowCells(oTable, nRow)
+        For i = 0 To UBound(aCells)
+            sStyle = LxCellStyle(oTable.getCellByName(aCells(i)))
+            If sStyle = JUDG_PARA Then
+                bJudg = True
+                nLead = LxCellColOf(aCells(i)) + 1
+                Exit For
+            ElseIf sStyle = TRANS_PARA And nLead < 0 Then
+                nLead = LxCellColOf(aCells(i))
+            End If
+        Next i
+        If bJudg Then Exit For
+    Next nRow
+
+    If nLead >= 1 Then
+        nHead = nLead                         ' the columns before the text,
+        If bJudg Then nHead = nHead - 1       ' less the judgment column:
+        bMarker = (nHead >= 2)                ' number alone, or number and
+    End If                                    ' letter
+    LxLeadColumns = nLead
+End Function
+
+
+' One row of the example, as text.
+'
+' A cell holding two words in a row of many is a {braced group} — it was
+' one column because the braces said so, and it has to say so again or it
+' comes back as two columns.  A row of *one* cell is the merged wide cell
+' of an unglossed item or a translation, which is running text and must not
+' be braced: hence bBrace, which the caller knows and this cannot.
+Function LxRowText(oTable As Object, aCells As Variant, nLead As Integer, _
+                   bBrace As Boolean) As String
+    Dim i As Integer, nCount As Integer
+    Dim s As String, sCell As String, sPlain As String
+
+    nCount = 0
+    For i = 0 To UBound(aCells)
+        If LxCellColOf(aCells(i)) >= nLead Then nCount = nCount + 1
+    Next i
+
+    s = ""
+    For i = 0 To UBound(aCells)
+        If LxCellColOf(aCells(i)) >= nLead Then
+            sCell = LxTrimTagged(LxReadText(oTable.getCellByName(aCells(i)).getText()))
+            sPlain = LxStrip(sCell)
+            If Len(sPlain) > 0 Then
+                If bBrace And nCount > 1 And InStr(sPlain, " ") > 0 Then _
+                    sCell = "{" & sCell & "}"
+                If Len(s) > 0 Then s = s & " "
+                s = s & sCell
+            End If
+        End If
+    Next i
+    LxRowText = s
+End Function
+
+
+' Text with its formatting marked, the way LxSelectedLines reads a
+' selection — so what comes out of a cell can go straight back through the
+' same splitting, banding and measuring as text a linguist typed.
+'
+' The number field is skipped: it is read for its identity, by
+' LxTakeCellNumber, and would otherwise arrive as a word saying "7".
+Function LxReadText(oText As Object) As String
+    Dim oParEnum As Object, oPorEnum As Object
+    Dim oPar As Object, oPor As Object
+    Dim s As String, sTxt As String, sType As String
+
+    s = ""
+    oParEnum = oText.createEnumeration()
+    Do While oParEnum.hasMoreElements()
+        oPar = oParEnum.nextElement()
+        If oPar.supportsService("com.sun.star.text.Paragraph") Then
+            If Len(s) > 0 Then s = s & " "
+            oPorEnum = oPar.createEnumeration()
+            Do While oPorEnum.hasMoreElements()
+                oPor = oPorEnum.nextElement()
+                sType = ""
+                On Error Resume Next
+                sType = oPor.TextPortionType
+                On Error Goto 0
+                If sType = "LineBreak" Then
+                    s = s & " "
+                ElseIf sType = "TextField" And LxIsNumberField(oPor) Then
+                    ' its identity is taken elsewhere; its text is not text
+                Else
+                    sTxt = oPor.getString()
+                    If Len(sTxt) > 0 Then s = s & LxTagged(sTxt, LxFormatIndex(oPor))
+                End If
+            Loop
+        End If
+    Loop
+    LxReadText = s
+End Function
+
+
+' The example's number, taken out of the first cell of its first row: not
+' the digit, which is a field's presentation and means nothing, but the
+' identity every cross-reference to this example points at.
+Sub LxTakeCellNumber(oTable As Object, nRow As Integer)
+    Dim oCell As Object, oParEnum As Object, oPorEnum As Object
+    Dim oPar As Object, oPor As Object
+    Dim s As String
+
+    oCell = Nothing
+    On Error Resume Next
+    oCell = oTable.getCellByName(LxCell(0, nRow))
+    On Error Goto 0
+    If IsNull(oCell) Then Exit Sub
+
+    oParEnum = oCell.getText().createEnumeration()
+    Do While oParEnum.hasMoreElements()
+        oPar = oParEnum.nextElement()
+        If oPar.supportsService("com.sun.star.text.Paragraph") Then
+            oPorEnum = oPar.createEnumeration()
+            Do While oPorEnum.hasMoreElements()
+                oPor = oPorEnum.nextElement()
+                If LxIsNumberField(oPor) Then
+                    s = ""                    ' LxTakeNumber wants the text
+                    Call LxTakeNumber(oPor, s)  ' before it, and there is none
+                    Exit Sub
+                End If
+            Loop
+        End If
+    Loop
+End Sub
+
+
+' --------------------------------------------------------- table pieces ---
+
+' An example, or a table the linguist built?  The spacer rows say which:
+' this macro and the converter both top and tail an example with a row
+' whose only job is to be the space above or below it, and nothing else
+' makes a row like that.  Getting this wrong would take a real table apart.
+Function LxIsExampleTable(oTable As Object) As Boolean
+    Dim nRows As Integer
+    LxIsExampleTable = False
+    nRows = oTable.getRows().getCount()
+    If nRows < 3 Then Exit Function
+    If Not LxRowHasStyle(oTable, LxRowCells(oTable, 1), SPACE_ABOVE) Then Exit Function
+    LxIsExampleTable = LxRowHasStyle(oTable, LxRowCells(oTable, nRows), SPACE_BELOW)
+End Function
+
+
+' The drawings in this table, each with the cell it sits in and the bracket
+' notation it was drawn from.  False means one of them carries no source —
+' a picture somebody put in an example, or a tree drawn before trees kept
+' their brackets — and the caller refuses rather than lose it.
+'
+' A tree is a group of shapes anchored in a cell, and the anchor knows both
+' which table and which cell.
+Function LxReadShapes(oDoc As Object, oTable As Object) As Boolean
+    Dim oPage As Object, oShape As Object
+    Dim i As Integer
+    Dim sName As String, sCell As String, sSrc As String
+
+    LxShN = 0
+    LxReadShapes = True
+    oPage = oDoc.getDrawPage()
+    For i = 0 To oPage.getCount() - 1
+        oShape = oPage.getByIndex(i)
+        sName = "" : sCell = ""
+        On Error Resume Next
+        sName = oShape.getAnchor().TextTable.Name
+        sCell = oShape.getAnchor().Cell.CellName
+        On Error Goto 0
+        If Len(sName) > 0 And sName = oTable.Name Then
+            sSrc = LxShapeSource(oShape)
+            If Len(sSrc) = 0 Or LxShN > SHAPE_MAX Then
+                LxReadShapes = False
+                Exit Function
+            End If
+            LxShCell(LxShN) = sCell
+            LxShSrc(LxShN) = sSrc
+            LxShN = LxShN + 1
+        End If
+    Next i
+End Function
+
+
+' What was drawn in this cell, or "" for a cell with nothing drawn in it.
+Function LxCellTree(sCell As String) As String
+    Dim i As Integer
+    LxCellTree = ""
+    If Len(sCell) = 0 Then Exit Function
+    For i = 0 To LxShN - 1
+        If LxShCell(i) = sCell Then
+            LxCellTree = LxShSrc(i)
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+' The tree drawn in this row, if one is.
+Function LxRowTree(aCells As Variant, nLead As Integer) As String
+    Dim i As Integer
+    Dim s As String
+    LxRowTree = ""
+    For i = 0 To UBound(aCells)
+        If LxCellColOf(aCells(i)) >= nLead Then
+            s = LxCellTree(aCells(i))
+            If Len(s) > 0 Then
+                LxRowTree = s
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
+
+
+' The cells of one row, in column order.  The names a table hands out are
+' already in that order, and a merged-away cell is simply not among them —
+' which is exactly what "this row has one wide cell" looks like here.
+Function LxRowCells(oTable As Object, nRow As Integer) As Variant
+    Dim aNames As Variant, aOut() As String
+    Dim i As Integer, n As Integer
+
+    aNames = oTable.getCellNames()
+    ReDim aOut(UBound(aNames))
+    n = 0
+    For i = 0 To UBound(aNames)
+        If LxCellRowOf(aNames(i)) = nRow Then
+            aOut(n) = aNames(i)
+            n = n + 1
+        End If
+    Next i
+    If n = 0 Then
+        LxRowCells = Array()
+    Else
+        ReDim Preserve aOut(n - 1)
+        LxRowCells = aOut()
+    End If
+End Function
+
+
+Function LxRowHasStyle(oTable As Object, aCells As Variant, sStyle As String) As Boolean
+    Dim i As Integer
+    LxRowHasStyle = False
+    For i = 0 To UBound(aCells)
+        If LxCellStyle(oTable.getCellByName(aCells(i))) = sStyle Then
+            LxRowHasStyle = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+Function LxCellStyle(oCell As Object) As String
+    Dim oEnum As Object
+    LxCellStyle = ""
+    If IsNull(oCell) Then Exit Function
+    oEnum = oCell.getText().createEnumeration()
+    If oEnum.hasMoreElements() Then LxCellStyle = oEnum.nextElement().ParaStyleName
+End Function
+
+
+' The plain text of one cell by position, or "" where a merge has left no
+' cell at all.
+Function LxCellText(oTable As Object, nCol As Integer, nRow As Integer) As String
+    Dim oCell As Object
+    oCell = Nothing
+    On Error Resume Next
+    oCell = oTable.getCellByName(LxCell(nCol, nRow))
+    On Error Goto 0
+    If IsNull(oCell) Then
+        LxCellText = ""
+    Else
+        LxCellText = oCell.getString()
+    End If
+End Function
+
+
+Function LxCellRowOf(sName As String) As Integer
+    Dim i As Integer
+    Dim c As String, s As String
+    s = ""
+    For i = 1 To Len(sName)
+        c = Mid(sName, i, 1)
+        If c >= "0" And c <= "9" Then s = s & c
+    Next i
+    If Len(s) = 0 Then LxCellRowOf = -1 Else LxCellRowOf = CInt(s)
+End Function
+
+
+' The inverse of LxColName: "A" is 0, "Z" is 25, "a" is 26, "AA" is 52.
+Function LxCellColOf(sName As String) As Integer
+    Dim i As Integer, v As Integer
+    Dim n As Long
+    Dim c As String
+
+    n = 0
+    For i = 1 To Len(sName)
+        c = Mid(sName, i, 1)
+        If c >= "A" And c <= "Z" Then
+            v = Asc(c) - 64                   ' A is 1
+        ElseIf c >= "a" And c <= "z" Then
+            v = Asc(c) - 96 + 26              ' a is 27
+        Else
+            Exit For                          ' the row number
+        End If
+        n = n * 52 + v
+    Next i
+    LxCellColOf = CInt(n - 1)
+End Function
+
+
+' ------------------------------------------------------ writing it back ---
+
+' The text the table sits in — the body, or whatever else it was built in.
+Function LxHostText(oDoc As Object, oTable As Object) As Object
+    Dim o As Object
+    o = Nothing
+    On Error Resume Next
+    o = oTable.getAnchor().getText()
+    On Error Goto 0
+    If IsNull(o) Then o = oDoc.getText()
+    LxHostText = o
+End Function
+
+
+' A cursor at the end of the paragraph immediately in front of the table,
+' and whether the first line needs a paragraph break in front of it.
+'
+' Write there and take the table away, and the text has landed exactly
+' where the table stood.  The paragraph before it is used when there is
+' one — appended to, so the prose above the example keeps its own line —
+' and when there is not, Writer is asked for one the way a linguist would
+' ask: the cursor at the very start of the first cell, then Enter, which is
+' what .uno:InsertPara does.  That is exactly the case Writer makes a
+' paragraph in; with one already there it does nothing, which is why this
+' does not simply always ask.
+'
+' Nothing simpler works.  A table's own anchor is not a range that can be
+' inserted at — insertString there silently does nothing, measured — and
+' reaching for the paragraph *after* the table fails on the commonest
+' arrangement in a linguistics paper: two examples one after the other,
+' with no paragraph between them at all.
+Function LxPlaceBefore(oDoc As Object, oText As Object, oTable As Object, _
+                       ByRef bLead As Boolean) As Object
+    Dim oVC As Object, oDisp As Object, oPar As Object
+    Dim aNames As Variant
+
+    LxPlaceBefore = Nothing
+    bLead = False
+
+    oPar = LxParagraphBefore(oText, oTable)
+    If IsNull(oPar) Then
+        aNames = oTable.getCellNames()
+        If UBound(aNames) < 0 Then Exit Function
+        oVC = oDoc.getCurrentController().getViewCursor()
+        oVC.gotoRange(oTable.getCellByName(aNames(0)).getText().getStart(), False)
+        oDisp = createUnoService("com.sun.star.frame.DispatchHelper")
+        oDisp.executeDispatch(oDoc.getCurrentController().getFrame(), _
+                              ".uno:InsertPara", "", 0, Array())
+        oPar = LxParagraphBefore(oText, oTable)
+        If IsNull(oPar) Then Exit Function
+        ' Whatever came back has to be empty: a paragraph with something in
+        ' it was already there, and writing into it would put the example
+        ' in the middle of somebody's sentence.
+        If Len(oPar.getString()) > 0 Then Exit Function
+    Else
+        bLead = (Len(oPar.getString()) > 0)
+    End If
+
+    LxPlaceBefore = oText.createTextCursorByRange(oPar.getEnd())
+End Function
+
+
+' The paragraph immediately before the table, or Nothing if what comes
+' before it is another table or the start of the text.
+Function LxParagraphBefore(oText As Object, oTable As Object) As Object
+    Dim oEnum As Object, oEl As Object, oPrev As Object
+
+    LxParagraphBefore = Nothing
+    oPrev = Nothing
+    oEnum = oText.createEnumeration()
+    Do While oEnum.hasMoreElements()
+        oEl = oEnum.nextElement()
+        If oEl.supportsService("com.sun.star.text.TextTable") Then
+            If oEl.Name = oTable.Name Then
+                LxParagraphBefore = oPrev
+                Exit Function
+            End If
+            oPrev = Nothing
+        ElseIf oEl.supportsService("com.sun.star.text.Paragraph") Then
+            oPrev = oEl
+        End If
+    Loop
+End Function
+
+
+' The lines, one paragraph each, the number at the head of the first.
+'
+' They take the paragraph style of the text they are written into, as
+' typing there would.  Imposing one would be worse: a document whose body
+' style is not "Standard" would get an example back in a style it uses
+' nowhere else.
+Sub LxWriteLines(oDoc As Object, oText As Object, oCur As Object, _
+                 aLines As Variant, nLines As Integer, bLead As Boolean)
+    Dim i As Integer
+
+    For i = 0 To nLines - 1
+        ' Breaks go *between* the lines, and one in front of the first only
+        ' when the paragraph written into has text in it already: the last
+        ' line belongs in the paragraph the example was given, so a
+        ' trailing break would leave an empty one behind.
+        If i > 0 Or bLead Then
+            oCur.collapseToEnd()
+            oText.insertControlCharacter(oCur, _
+                com.sun.star.text.ControlCharacter.PARAGRAPH_BREAK, False)
+        End If
+        If i = 0 And LxNumHas Then
+            Call LxPutNumber(oDoc, oText, oCur)
+            oCur.collapseToEnd()
+            oText.insertString(oCur, Chr(9), False)
+        End If
+        Call LxPutTagged(oText, oCur, aLines(i))
+    Next i
 End Sub
 
 
@@ -2445,6 +3385,22 @@ Sub LxBareTreeCommand()
     ' is a "move a -> b" line, which is about the tree rather than part of
     ' it and is set aside here.
     aLines = LxSelectedLines(oRange)
+    If Len(LxNumErr) > 0 Then
+        Call LxSay(LxNumErr)
+        Exit Sub
+    End If
+    ' A bare tree has no number, so there is nowhere for one it was handed
+    ' to go.  Drawing it anyway would destroy the field and every
+    ' cross-reference to it, silently — the one thing this must not do.
+    If LxNumHas Then
+        Call LxSay("The selection carries an example number, and a tree " & _
+                   "without a number has nowhere to put it." & _
+                   Chr(10) & Chr(10) & _
+                   "Drawing it would break every cross-reference to that " & _
+                   "example.  Use Typeset numbered tree, or delete the " & _
+                   "number first and lose the references deliberately.")
+        Exit Sub
+    End If
     If UBound(aLines) < 0 Then
         Call LxSay("Select the bracket notation of the tree first.")
         Exit Sub
@@ -2482,7 +3438,7 @@ Sub LxBareTreeCommand()
     oUndo = oDoc.getUndoManager()
     oUndo.enterUndoContext("Typeset tree")
     On Error Goto Cleanup
-    Call LxEmitBareTree(oDoc, oRange, nRoot, sMark)
+    Call LxEmitBareTree(oDoc, oRange, nRoot, sMark, aLines)
 Cleanup:
     oUndo.leaveUndoContext()
     If Err <> 0 Then Call LxSay(Error$ & " (line " & Erl & ")")
@@ -3140,7 +4096,7 @@ End Function
 ' where they stand and is anchored as a character in that same paragraph,
 ' so whatever was either side of the notation stays either side of the tree.
 Sub LxEmitBareTree(oDoc As Object, oRange As Object, nRoot As Integer, _
-                   sMark As String)
+                   sMark As String, aLines As Variant)
     Dim oText As Object, oCur As Object, oGroup As Object, oTail As Object
     Dim sFont As String
     Dim dPt As Double, dWidth As Double, dAvail As Double
@@ -3181,6 +4137,11 @@ Sub LxEmitBareTree(oDoc As Object, oRange As Object, nRoot As Integer, _
         Call LxSay(LxTErr)
         Exit Sub
     End If
+    ' A bare tree keeps its source too.  Nothing reads it back yet — there
+    ' is no table to untypeset — but a drawing that says what it is costs
+    ' one line, and the two kinds of tree should not differ in what they
+    ' carry.
+    Call LxTreeSource(oGroup, aLines)
 
     dWidth = LxTreeWidth(nRoot) / 1000.0
     If dWidth > dAvail Then
@@ -3226,6 +4187,63 @@ Function LxTreeShapes(oDoc As Object, oText As Object, oWhere As Object, _
     oGroup = oDoc.getDrawPage().group(oShapes)
     oGroup.AnchorType = com.sun.star.text.TextContentAnchorType.AS_CHARACTER
     LxTreeShapes = oGroup
+End Function
+
+
+' The name every tree this macro draws answers to, and the one thing that
+' tells one of our drawings from a picture somebody put in an example.
+Const TREE_TITLE As String = "LinguExx tree"
+
+
+' Keep the bracket notation the tree was drawn from, on the drawing.
+'
+' A group of shapes cannot be read back into brackets — shapes have
+' positions, not structure — so without this a tree in an example could not
+' be untypesetted at all, and its number was stuck inside it.  The source
+' goes in the group's Description, which is Writer's alt text: the one
+' field a drawing has for saying what it is, and this is what it is.  It
+' doubles as the alt text a tagged PDF wants.
+'
+' It is a copy of something, which everything else here avoids — but the
+' alternative is not "no copy", it is "no way back", and the drawing was
+' already not the source: the docs have always said a tree is re-run from
+' its brackets rather than from what was drawn last time.  Drag a node and
+' the drawing changes while this does not, exactly as dragging one has
+' always left the layout it came from behind.
+'
+' Formatting is not kept.  Alt text is plain text, and the marks that carry
+' formatting through this macro are private-use codepoints that would show
+' up as boxes in Format ▸ Description.  A label's italics survive in the
+' drawing and are lost when the brackets come back.
+Sub LxTreeSource(oGroup As Object, aLines As Variant)
+    Dim s As String
+    Dim i As Integer
+
+    If IsNull(oGroup) Then Exit Sub
+    s = ""
+    For i = 0 To UBound(aLines)
+        If i > 0 Then s = s & Chr(10)
+        s = s & LxStrip(aLines(i))
+    Next i
+
+    On Error Resume Next
+    oGroup.Title = TREE_TITLE
+    oGroup.Description = s
+    On Error Goto 0
+End Sub
+
+
+' The source a drawing carries, or "" for a drawing that is not one of
+' ours.  The title is what says so: a picture with alt text on it must not
+' be read as bracket notation.
+Function LxShapeSource(oShape As Object) As String
+    Dim sTitle As String, sDesc As String
+    sTitle = "" : sDesc = ""
+    On Error Resume Next
+    sTitle = oShape.Title
+    sDesc = oShape.Description
+    On Error Goto 0
+    If sTitle = TREE_TITLE Then LxShapeSource = sDesc Else LxShapeSource = ""
 End Function
 
 

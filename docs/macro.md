@@ -37,10 +37,10 @@ python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt
 ```
 
-It appears as a **LinguExx** menu in Writer, with three commands —
-*Typeset example*, *Typeset numbered tree* and *Typeset unnumbered
-tree* — and, below a separator, *Example layout…*. An installed
-extension raises
+It appears as a **LinguExx** menu in Writer, with four commands —
+*Typeset example*, *Typeset numbered tree*, *Typeset unnumbered tree* and
+*Untypeset example* — and, below a separator, *Example layout…*. An
+installed extension raises
 no macro-security warning, and it is the only sensible thing to hand to
 someone who is not going to paste Basic into an IDE.
 
@@ -82,6 +82,9 @@ example*.
   for what goes in it. See [What is not carried](#what-is-not-carried).
 - **Splits overlong examples into bands**, each starting back at the left
   edge, and can redo it at any time: nothing is frozen at conversion time.
+- **Takes over a number the selection already carries**, so an example can
+  be rebuilt without breaking the cross-references to it. See [An example
+  that already has a number](#an-example-that-already-has-a-number).
 - **Hangs judgment marks.** A leading `*`, `??`, `#`, `%` or `!` goes into
   its own column, carved out of the number column, so a judged and an
   unjudged example begin at exactly the same x.
@@ -129,6 +132,127 @@ A simple example.
 becomes `(1)  A simple example.`, numbered like any other. It stays running
 text in one cell rather than being split one word per column. Add a quoted
 line under it and that becomes the translation.
+
+## Changing an example
+
+**LinguExx ▸ Untypeset example** gives an example back as the lines it was
+built from. Put the cursor anywhere in it and run it:
+
+```
+(7)  Esto es un ejemplo glosado
+     this is a example glossed
+     'This is a glossed example.'
+```
+
+becomes three ordinary paragraphs, with the number — still the live field,
+still the thing every cross-reference points at — at the head of the first
+one. Edit them as text, select them, and typeset them again: the same
+example, the same number, the same references.
+
+That is the whole of how an example is changed. Editing a built example in
+place means editing cell by cell, and a word added or taken away needs a
+column the table has not got; building a replacement used to mean a new
+number and a document full of *Error: Reference source not found*.
+
+The round trip is not only for fixing a typo:
+
+- **Any of the building commands will take the text back.** A glossed
+  example can come back as a numbered tree, or as an `a. … b. …` paradigm,
+  keeping its number.
+- **It re-bands and re-measures**, against the page and font in front of
+  you now rather than the ones the example was built under.
+- Everything comes back: the sub-example letters, the judgment marks, the
+  translation, the `{braced groups}` that made one column, and the
+  formatting of every run.
+
+The lines take the paragraph style of the text they land in, as typing
+there would, and they land exactly where the table stood — including when
+the example has another example butted straight up against it, which two
+consecutive examples always do. (A table's own anchor is not a range that
+can be written at: `insertString` there silently does nothing. Where there
+is a paragraph in front of the example the lines are appended to it; where
+there is not, Writer is asked for one the way pressing Enter at the start
+of the first cell asks for it.)
+
+**It reads the table, and only the table.** Nothing is written down at
+build time to be read back — a second copy of the example would start
+drifting from the first the moment anyone edited a cell. The one thing a
+finished table cannot say for itself is where a *band* begins, because a
+band's rows are built exactly like tier rows and start in the same column;
+that is recorded as a paragraph style on the row (`LxExampleBand`, which
+declares nothing and looks like `LxExampleCell`), which is structure rather
+than a copy of anything. The converter marks its bands the same way, so a
+converted document untypesets too.
+
+**A drawn tree comes back as its brackets**, `move` lines and all, because
+the drawing carries them — see [Trees keep their
+source](#trees-keep-their-source). Rebuild it with *Typeset numbered tree*:
+the command decides and the text never does, here as everywhere else.
+
+### What it refuses
+
+- **A drawing that carries no source** — a picture put into an example, or
+  a tree drawn before trees kept their brackets. There is nothing to give
+  back, and untypesetting would lose it.
+- **A table that is not an example** — one you built yourself. An example
+  is topped and tailed by the spacer rows that carry the space around it,
+  and nothing else makes a row like that.
+- **An example with neither a judgment column nor a translation**, which is
+  the one shape whose columns cannot be read: those two are what say where
+  the example's own text begins. Only a converted document that judges
+  nothing anywhere can produce it; anything this macro built has a judgment
+  column, always.
+
+**Bands in a document built before this existed** carry no band mark, so
+their continuation rows come back as extra gloss tiers. Join them by hand
+before typesetting again — and once you have, the rebuilt example carries
+the marks.
+
+### An example that already has a number
+
+**If the selection carries an example number, that number is taken over
+rather than a new one made.** A number is a live `NumEx` field — the thing
+inside the parentheses — and a cross-reference points at *it*, by name, not
+at the digit it shows. So an example rebuilt with a fresh field takes every
+`\ref` to it down with it: they all become *Error: Reference source not
+found*, with nothing left to point them back at.
+
+Put the number at the head of the lines and typeset them, and the example
+comes back with the same number and every reference to it still resolving.
+The parentheses around it are the macro's own and are written again; you do
+not have to remove them.
+
+```
+(7)  Esto es un ejemplo glosado
+     this is a example glossed
+     'This is a glossed example.'
+```
+
+That is what makes an example changeable. Until now a typeset example could
+only be edited in place, cell by cell, because building a replacement broke
+the references to it. Now the number can be moved out of an old example into
+the new text — cut it out of the number cell, or (once *Untypeset* lands)
+have the example handed back to you as text with its number already at the
+front — and the rebuilt example is the same example as far as the rest of
+the document is concerned.
+
+The number goes wherever it is needed: a glossed example rebuilt as a
+paradigm, or a glossed example rebuilt as a **numbered tree**, keeps it.
+
+Refused, rather than guessed at:
+
+- **Two numbers in one selection.** An example has one; that selection is
+  two examples.
+- **A number part-way through the selection.** The number an example takes
+  over has to lead it. One found after the text has started belongs to
+  something else, and taking it would move a number off another example in
+  silence.
+- **A number handed to *Typeset unnumbered tree*.** A bare tree has nowhere
+  to put it, and drawing it would destroy the field. Use *Typeset numbered
+  tree*, or delete the number first and lose the references deliberately.
+
+A cross-reference in the selection is left alone — it is a different kind of
+field, and nothing here reads it.
 
 ## Trees
 
@@ -300,6 +424,27 @@ you can drag a node afterwards. Nothing re-runs the layout if you do, in
 exactly the way a built example does not re-align itself; run it again on
 the source instead.
 
+### Trees keep their source
+
+The group carries the bracket notation it was drawn from, in its
+**Description** — Writer's alt text, under Format ▸ Description. That is
+what lets *Untypeset* give a tree back: shapes have positions, not
+structure, and no amount of reading them recovers `[DP [D the] [NP [N
+tree]]]`. Without it the tree was the one example that could not be
+changed, and its number was stuck inside it.
+
+It is a copy of something, which this design otherwise refuses. The
+alternative was not "no copy" but "no way back", and the drawing was never
+the source anyway: dragging a node has always changed the drawing without
+changing what it was drawn from, and re-running has always meant re-running
+the brackets. The alt text is also what a tagged PDF wants, so it earns its
+place twice.
+
+**Formatting is not carried back.** Alt text is plain text, and the marks
+this macro carries formatting with are private-use codepoints that would
+show up as boxes in the Description dialog. An italicised label stays
+italic in the drawing and comes back as plain text.
+
 Node labels are the one thing in this macro not governed by a paragraph
 style, because Writer has no style family for draw-shape text (there is no
 `graphics` family in a text document — only `ParagraphStyles`,
@@ -444,8 +589,10 @@ nothing is changed when one is.
 | text width | `--text-width` | the actual page style |
 | indents and spacing | command-line flags | **LinguExx ▸ Example layout…** |
 | band grid | union of the bands' boundaries | the same |
+| band marks | written, so the macro can read them back | written and read |
 | judgment column | reserved only if the document judges something | always reserved |
 | sub-examples | yes | yes — one marker column, as the converter has |
+| back to text | no | **LinguExx ▸ Untypeset example** |
 
 The judgment row is a deliberate simplification: the column is always
 reserved because a macro sees one selection where the converter sees the
@@ -531,9 +678,75 @@ model and shows none of it: a headless LibreOffice has nothing to
 its neighbour's value goes wrong while the model is assembled, which is
 where it is caught.
 
+`check_untypeset` covers the round trip, and covers it as a round trip:
+eight examples — plain, judged, braced, unglossed, two paradigms, one with
+a translation and one banded — are built, untypesetted, compared line by
+line against what went in, and then **built again**, because text that
+comes back but cannot be typeset again is no use. The banded case is the
+one the band mark exists for: without it every continuation row comes back
+as another gloss tier and the example returns six lines instead of three.
+`check_untypeset_references` does the whole thing end to end on a document
+with real cross-references — typeset, untypeset, *edit the example*,
+typeset again — and pins that the references still resolve in the rendered
+PDF and that the edit is in the rebuilt example.
+`check_untypeset_adjacent` pins the arrangement that the first attempt at
+this refused — an example with another example directly after it, which is
+what two consecutive examples always look like and what the converter
+always emits. `check_untypeset_converted` runs the **converter** over a
+LaTeX document and takes one of *its* examples apart with the macro: the
+two build their tables by different routes, so reading one with the other
+is where the claim that they are the same object is tested rather than
+asserted, and the example it uses is a banded one because the band mark is
+the only thing in the table the two had to agree about. It skips itself,
+rather than failing, where pandoc is not installed — that is the
+converter's dependency, not this harness's.
+`check_untypeset_trees` covers the tree round trip over six shapes — one
+tree, a judged one, one with movement, a paradigm, a judged paradigm item
+with a `move` line under it, and one with a translation — and pins all
+three halves: the lines that come back are the lines that went in, no
+drawing is left behind, and *Typeset numbered tree* draws the same number
+of trees again with the number unchanged.
+`check_untypeset_formatting` pins that small caps go into the table and
+come back out of it, which a round trip through plain strings would
+silently flatten. Three refusals are pinned to leave the document exactly
+as they found it, which matters more here than anywhere else in the suite —
+this command deletes a table, so a wrong yes cannot be recovered from: a
+cursor outside any table, a table the linguist built, and an example
+holding a drawing that carries no source — a tree whose title has been
+changed away from the one this macro gives it, which is what a picture and
+a tree from an older version both look like from here.
+
+`check_wide_example` pins that an example wider than 26 columns builds at
+all. Writer names the 27th column `a`, not `AA` — A…Z, then lowercase, then
+AA — and the macro generated base-26 names, so the first cell past Z named
+no cell and the build died on it with *Object variable not set*, leaving
+half a table behind. The case that gets there is not 27 words but a long
+example whose tiers band in different places: the grid is the union of the
+bands' boundaries, and that is wider than any one band.
+
+`check_number_adoption` covers taking a number over. Its documents are
+written as **flat ODF** and loaded, rather than assembled over the bridge,
+because the cross-references then are the ones a real document has: a
+`GetReference` built over UNO resolves against nothing until the file has
+been through the ODF import, so a test that made its own references would
+pass while proving nothing. It pins both halves, because either alone passes
+on a broken document — the rebuilt field's identity must be the *old*
+`SequenceValue`, which is what a reference points at, and the reference must
+still render as the example's number in the PDF rather than as *Error:
+Reference source not found*. Each fixture also writes its number out as well
+as computing it, exactly as the converter does, so an untouched example
+elsewhere in the document cannot be mistaken for the rebuilt one having gone
+wrong. Three refusals are pinned to leave the document exactly as they found
+it — two numbers, a number part-way through, and a number handed to the
+unnumbered-tree command — because a refusal that has already destroyed the
+field is no refusal.
+
 `check_undo` pins what the docs promise about Ctrl+Z: one step takes back
 an example, a tree, a tree with movement or a bare tree, and no style
-creation is left outside the undo context to be unwound separately.
+creation is left outside the undo context to be unwound separately. It
+covers *Untypeset* too, which has more moving parts than any of them — it
+asks Writer for a paragraph, writes the lines and takes the table away, and
+all three are one step.
 
 `check_extension` builds the `.oxt`, checks every command the menu offers
 names a Sub that exists — all four of them, which is what catches a typo in

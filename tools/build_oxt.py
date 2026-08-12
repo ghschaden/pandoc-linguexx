@@ -182,10 +182,25 @@ ADDONS_XCU = """<?xml version="1.0" encoding="UTF-8"?>
           </node>
           <node oor:name="m04" oor:op="replace">
             <prop oor:name="URL" oor:type="xs:string">
-              <value>private:separator</value>
+              <value>vnd.sun.star.script:{library}.{module}.UntypesetSelection?language=Basic&amp;location=application</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Untypeset example</value>
+              <value xml:lang="fr">Décomposer l'exemple</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
             </prop>
           </node>
           <node oor:name="m05" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>private:separator</value>
+            </prop>
+          </node>
+          <node oor:name="m06" oor:op="replace">
             <prop oor:name="URL" oor:type="xs:string">
               <value>vnd.sun.star.script:{library}.{module}.LayoutSettings?language=Basic&amp;location=application</value>
             </prop>

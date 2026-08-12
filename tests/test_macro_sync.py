@@ -77,3 +77,17 @@ def test_shared_lengths_are_actually_used() -> None:
     body = source.split("' --- END GENERATED", 1)[1]
     for const in MACRO_LENGTHS:
         assert const in body, f"{const} is declared but never used"
+
+
+def test_shared_names_are_actually_used() -> None:
+    """The same for the style names, and for the same reason.
+
+    A style the macro writes but never reads back — or the other way
+    round — is drift that shows up as behaviour rather than as a
+    mismatch: BAND_PARA marks where a band begins, and an Untypeset that
+    never looked for it would quietly hand back an example with its bands
+    as extra gloss tiers.
+    """
+    body = writermacro.source().split("' --- END GENERATED", 1)[1]
+    for const in MACRO_NAMES:
+        assert const in body, f"{const} is declared but never used"

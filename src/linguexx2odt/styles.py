@@ -43,6 +43,17 @@ CELL_PARA = "LxExampleCell"
 TRANSLATION_PARA = "LxTranslation"
 JUDGMENT_PARA = "LxJudgmentCell"
 
+#: The first row of a *continuation* band, and nothing else.
+#:
+#: It declares nothing and looks exactly like CELL_PARA, because that is
+#: all it is for: recording where a band begins.  A finished table cannot
+#: otherwise say whether three rows are three tiers of one band or one
+#: tier of three bands — the rows are built alike and start at the same
+#: column — and the macro's Untypeset has to know which, or it hands back
+#: an example with its bands as extra gloss tiers.  Structure, not a copy
+#: of anything: nothing here can drift out of step with the text.
+BAND_PARA = "LxExampleBand"
+
 #: The space around an example.  SPACE_PARA carries the height and the two
 #: others inherit it unchanged, so editing the parent in the sidebar moves
 #: both sides at once and editing a child moves one side only.
@@ -72,6 +83,7 @@ MACRO_NAMES: dict[str, str] = {
     "CELL_PARA": CELL_PARA,
     "TRANS_PARA": TRANSLATION_PARA,
     "JUDG_PARA": JUDGMENT_PARA,
+    "BAND_PARA": BAND_PARA,
     "SPACE_PARA": SPACE_PARA,
     "SPACE_ABOVE": SPACE_ABOVE_PARA,
     "SPACE_BELOW": SPACE_BELOW_PARA,
@@ -213,6 +225,9 @@ def named_styles(layout: Layout) -> str:
             f' style:parent-style-name="{CELL_PARA}">'
             f'<style:paragraph-properties fo:margin-top="0.1cm"/>'
             f"</style:style>",
+            # Declares nothing: it is a mark, not a look.  See BAND_PARA.
+            f'<style:style style:name="{BAND_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}"/>',
             # The judgment mark hangs at the right edge of its column, so it
             # sits snug against the text it judges — as linguexx \llap's it.
             f'<style:style style:name="{JUDGMENT_PARA}" style:family="paragraph"'
