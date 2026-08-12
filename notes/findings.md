@@ -1519,3 +1519,81 @@ Built at run time rather than shipped as a `.xdl` in the extension's dialog
 library: everything here loads `LinguExx.bas` into a Basic library, which
 carries no dialogs, so a `.xdl` would exist only in the packaged form —
 the one file that ships would stop being the one file the tests drive.
+
+---
+
+## 2026-08-12 — Impress: the examples cannot be the same object; the trees could be
+
+`spikes/impress_probe.py`, against a real `private:factory/simpress`.
+
+Asked because a linguist wants glossed examples on slides as much as in a
+paper.  The macro stands on five things, and a slide has two of them.
+
+| what the macro stands on | Impress |
+|---|---|
+| named paragraph styles | **absent** |
+| the `NumEx` sequence field | **absent** |
+| a text table | **absent** (a *drawing* table exists) |
+| measuring by rendering | **the same** |
+| a draw page, and grouping | **the same**, minus the anchor |
+
+Measured, one by one:
+
+- **Style families are `graphics`, `cell`, `table`, `Default`.** There is
+  no `ParagraphStyles` family and `com.sun.star.style.ParagraphStyle` is
+  an unknown service.  A cell of a drawing table refuses `ParaStyleName`
+  outright (`AttributeError`).  So `LxEnsureStyles` has nowhere to write,
+  and everything it governs — `LxExampleCell`, `LxTranslation`,
+  `LxJudgmentCell`, the two spacer heights — would become direct
+  formatting on every cell.  That ends the one promise this converter and
+  this macro are both built around: restyle every example in the document
+  from the sidebar.
+- **There are no `SetExpression` fields, and no field masters at all** —
+  `com.sun.star.text.FieldMaster.SetExpression` and
+  `com.sun.star.text.TextField.SetExpression` are unknown services, and
+  the document has no `getTextFieldMasters` method to hang them on.
+  Impress has presentation fields (header, page number, date), and that is
+  the whole list.  A number on a slide is therefore typed text: no F9
+  renumbering, no cross-references — and so nothing for *Untypeset* to
+  hand back and nothing for the adoption rule to take over.  The two
+  features this macro grew for the sake of are meaningless there.
+- **No `com.sun.star.text.TextTable`.**  A `com.sun.star.drawing.TableShape`
+  works — rows and columns insert, cells take strings — but it is
+  addressed by index rather than by cell name, and see the styles above.
+- **Measuring by rendering is identical.**  A scratch `TextShape` with
+  `TextAutoGrowWidth` returned `DP` 884, `the tree` 2155 and
+  `a much longer label` 5544 (1/100 mm).  This is exactly what `LxTMeasure`
+  does, so the tree layout's one measurement primitive ports untouched.
+- **Grouping works; anchoring does not.**  `page.group()` returns a group,
+  and `AnchorType = AS_CHARACTER` is refused (`AttributeError`) — slide
+  shapes are positioned, not anchored.
+- **The selection reads the same.**  A selected text shape enumerates
+  paragraphs and then portions with `TextPortionType` and `CharCaseMap`
+  intact: bracket notation with a small-caps label came back as three
+  portions, the middle one `CharCaseMap = 4`.  `LxSelectedLines` and
+  `LxFormatIndex` need only a different way in — the selection is a shape,
+  not a text range.
+
+**Consequence — examples: no.**  Not "hard": there is nothing there to
+build the same object out of.  What would remain is the column
+arithmetic, which is most of the cleverness and the least of the value.
+
+**Consequence — trees: possible, not done.**  Everything from
+`LxTreeParse` through `LxTreeLayout` to `LxTEmitArrows` is parsing,
+geometry and shape-making that never asks what kind of document it is in,
+and both primitives underneath it behave the same on a slide.  What would
+have to be written is host code, and little of it: the draw page comes
+from the controller's current slide rather than `getDrawPage()`,
+`LxEmitBareTree` positions instead of anchoring, `LxTextWidthCm` reads the
+page's own width, the entry guards accept
+`com.sun.star.presentation.PresentationDocument`, and the same `.oxt` adds
+an Impress menu by changing one `Context` string per node in `Addons.xcu`.
+
+The open question is not code but **where the tree goes**: Writer has an
+anchor and a slide has coordinates, so replacing the text box, keeping its
+top-left, or centring on the slide is a decision someone has to make.
+Deferred rather than answered.
+
+Not probed: Draw, which shares the drawing model and would be expected to
+answer as Impress does; and the *example* path's measuring, which goes
+through a font device rather than a shape.

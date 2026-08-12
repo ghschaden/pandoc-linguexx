@@ -578,6 +578,20 @@ below)` applies the five without a dialog and returns the message
 centimetres. A length outside 0–10 cm is refused rather than clamped, and
 nothing is changed when one is.
 
+## Writer only, and why
+
+**Not Impress.** A slide has no paragraph styles, no number-range fields
+and no text tables — measured, `spikes/impress_probe.py` — so an example
+built there could not be the same object: every named style would become
+direct formatting, and the number would be typed text with no F9 and no
+cross-references, which leaves *Untypeset* and the adoption rule with
+nothing to do. What Impress does have is the two things the **trees** are
+built from: measuring by rendering, and a group of shapes. So the tree
+commands could be ported and the example commands could not; the tree port
+is deferred rather than refused, and its real question is where a tree
+should go on a slide, since a slide has coordinates where Writer has an
+anchor. See [`notes/findings.md`](../notes/findings.md), 2026-08-12.
+
 ## Differences from `linguexx2odt`
 
 | | converter | macro |
