@@ -489,8 +489,11 @@ b. Otro ejemplo aqui
    'Another example here.'
 ```
 
-The letters go in their own column, the paradigm carries **one** number,
-and every item shares one column grid. A letter may lead the object
+The letters go in their own column and the paradigm carries **one**
+number. Each item is measured and banded **on its own words**: a short
+item is not stretched to fit a long one beside it, and the single column
+grid of the table is the union of what every item and every band produces,
+each word spanning the columns it covers. A letter may lead the object
 language as above or stand alone on its line.
 
 - **Markers** are a single letter or a roman numeral followed by `.` or
@@ -509,6 +512,11 @@ language as above or stand alone on its line.
 - **A sub-example letter sits exactly where a main example's text
   begins** — linguexx's own geometry. That is why the judgment column is
   carved out of the column to its left rather than inserted after it.
+- **An item's columns are its own.** `a.` and `b.` do not align word for
+  word, because they are different sentences; aligning them would give a
+  three-word item a gap in the middle wherever a longer word sat under it
+  in another. What *does* align is each item's glosses under its own
+  words, which is the alignment that means something.
 - **Items may be glossed or not, in the same paradigm** — or be trees. An
   unglossed item is running text in one merged cell, not one word per
   column: splitting it would align words that have nothing to do with each

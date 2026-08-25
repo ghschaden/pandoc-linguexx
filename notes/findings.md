@@ -372,6 +372,8 @@ itself and a warning, rather than being merged into a neighbour.
   every body, so a sub-example paradigm keeps its columns aligned across
   `a.`/`b.`; banding then partitions that shared width vector by word
   index, which is what lets bodies of different lengths sit in one grid.
+  *(Superseded 2026-08-25 — see "each item of a paradigm gets its own
+  widths". The sharing was the bug, not the feature.)*
 - The number cell is filled on the **first row of the first band** only;
   continuation bands leave number, letter and judgment empty — as in the
   reference.
@@ -602,6 +604,8 @@ all collapses to a single wide column, as `Emitter._table` does.
 with fewer words contributes no rows to a later band
 (`if aBandStart(b) < nMax`). `LxItemRows` must agree exactly with what
 `LxEmitTable` then writes, or the table is created at the wrong height.
+*(Superseded 2026-08-25 — bands are per item now, so every band of an item
+holds words of it and `LxItemRows` is just `bands × tiers`.)*
 
 **Translation detection changed.** It used to require more than two lines,
 so a two-line selection could not lose its only gloss tier to a quoted
@@ -1597,3 +1601,49 @@ Deferred rather than answered.
 Not probed: Draw, which shares the drawing model and would be expected to
 answer as Impress does; and the *example* path's measuring, which goes
 through a font device rather than a shape.
+
+
+## 2026-08-25 — each item of a paradigm gets its own widths
+
+Reported: a glossed paradigm came out with one set of columns for every
+item, so a short sentence was stretched by a long one beside it.
+
+Measured, `a. Ich habe geschlafen` over `b. Der ausserordentlich lange
+Beispielsatz hier`, rendered and read off the PDF:
+
+| | before | after |
+|---|---|---|
+| converter, `geschlafen` | 216 | **156** |
+| macro, `geschlafen` | 230.2 | **173.2** |
+| either, `lange` (item b, word 3) | 216 / 230.2 | unchanged |
+
+Before, item a's third word sat at exactly item b's third word — one
+column, one width, `max`'d per word index. `Ich habe · · · geschlafen`
+had a gap in the middle for no reason a reader could see, because
+`ausserordentlich` sits under `habe` in a different sentence.
+
+**The union was already the answer; it was just drawn too narrow.** Bands
+were exempt from the coupling from the start: a band starts back at the
+left edge, so its boundaries fall elsewhere, and the grid is the union of
+every band's boundaries with each word spanning what it covers. The items
+of a paradigm start at the left edge for exactly the same reason and
+wanted exactly the same treatment. So the change is not a new mechanism —
+it widens the existing union from *bands of one width vector* to *bands of
+one width vector per item*.
+
+- Converter: `Grid` takes a list of plans, one `(word_widths, bands)` per
+  body, and `_placement` is keyed `(body, word)`. `Emitter._table` measures
+  and bands each body separately.
+- Macro: `aItemW(k, i)`, `aBandStart(k, b)`, `aWordCol/aWordSpan(k, i)`;
+  `LxBuildGrid` unions over items as well as bands; `LxPackBands` is
+  called once per item on a 1-D copy of its own widths.
+
+**What still aligns is what should**: each item's glosses under its own
+words, the letters in one column, the number and judgment columns
+untouched. What stops aligning is `a.` word 2 with `b.` word 2, which are
+different words of different sentences and never had a reason to.
+
+Pinned by `test_a_paradigm_item_is_not_stretched_by_its_neighbour`
+(converter, on the grid) and `check_items_keep_their_own_columns` (macro,
+on the rendered PDF). Both fail on the previous code; the macro one reads
+`item a's third word at 230.2, item b's at 230.2` when it does.

@@ -71,11 +71,15 @@ Each example becomes one borderless table, so the columns line up:
 - object-language words sit in individual cells with their glosses in the
   cells directly beneath;
 - an example too wide for the text block is **split into stacked bands**,
-  each band a group of tier rows starting back at the left edge, all
-  sharing one column grid — the pattern item 4 of the reference document
-  specifies. The number appears on the first band only, and the
-  translation once, at the end. `--no-split` squeezes it into a single
-  band instead, wrapping words inside their cells;
+  each band a group of tier rows starting back at the left edge — the
+  pattern item 4 of the reference document specifies. The number appears
+  on the first band only, and the translation once, at the end.
+  `--no-split` squeezes it into a single band instead, wrapping words
+  inside their cells;
+- a sub-example paradigm shares one table but **not one set of widths**:
+  each item is measured and banded on its own words, and the table's
+  column grid is the union of every boundary the items and their bands
+  produce, each word spanning the columns it covers;
 - the free translation occupies a final row of merged cells;
 - `\label`/`\ref` become cross-reference fields that track renumbering,
   including forward references and references to sub-examples — `(9a)`;

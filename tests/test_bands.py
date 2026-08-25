@@ -36,23 +36,23 @@ from linguexx2odt.styles import (
 )
 
 
-def positions(grid: Grid) -> dict[int, float]:
-    """Left edge of each word, derived only from the emitted grid."""
+def positions(grid: Grid, body: int = 0) -> dict[int, float]:
+    """Left edge of each word of *body*, derived only from the emitted grid."""
     starts = {}
     edges = [0.0] + grid.edges
-    for band in grid.bands:
+    for band in grid.bands_of(body):
         col = 0
         for j in range(*band):
             starts[j] = edges[col]
-            col += grid.span(j)
+            col += grid.span(body, j)
     return starts
 
 
 def test_single_band_grid_is_just_the_words() -> None:
     w = [1.0, 2.0, 1.5]
-    grid = Grid(w, [(0, 3)])
+    grid = Grid([(w, [(0, 3)])])
     assert grid.columns == pytest.approx(w)
-    assert [grid.span(j) for j in range(3)] == [1, 1, 1]
+    assert [grid.span(0, j) for j in range(3)] == [1, 1, 1]
     assert grid.total == pytest.approx(4.5)
 
 
@@ -61,7 +61,7 @@ def test_two_bands_share_a_union_grid() -> None:
        Band B: 1.5 | 2.5         (edges 1.5, 4.0)
        union edges: 1.0, 1.5, 3.0, 4.0  -> 4 columns"""
     w = [1.0, 2.0, 1.0, 1.5, 2.5]
-    grid = Grid(w, [(0, 3), (3, 5)])
+    grid = Grid([(w, [(0, 3), (3, 5)])])
     assert grid.edges == pytest.approx([1.0, 1.5, 3.0, 4.0])
     assert len(grid.columns) == 4
     assert grid.total == pytest.approx(4.0)
@@ -69,20 +69,50 @@ def test_two_bands_share_a_union_grid() -> None:
     assert positions(grid) == pytest.approx({0: 0.0, 1: 1.0, 2: 3.0, 3: 0.0, 4: 1.5})
 
 
+def test_two_bodies_share_a_union_grid() -> None:
+    """The same union, across the items of a paradigm rather than bands.
+
+    Item a: 1.0 | 2.0   (edges 1.0, 3.0)
+    Item b: 1.5 | 2.5   (edges 1.5, 4.0)
+    union edges: 1.0, 1.5, 3.0, 4.0
+
+    Each item keeps its *own* widths.  Sharing one width per word index
+    instead is what made a three-word sentence stretch to fit a long word
+    sitting under it in an unrelated one.
+    """
+    grid = Grid([([1.0, 2.0], [(0, 2)]), ([1.5, 2.5], [(0, 2)])])
+    assert grid.edges == pytest.approx([1.0, 1.5, 3.0, 4.0])
+    assert positions(grid, 0) == pytest.approx({0: 0.0, 1: 1.0})
+    assert positions(grid, 1) == pytest.approx({0: 0.0, 1: 1.5})
+    # neither item was widened by the other
+    assert grid.total == pytest.approx(4.0)
+
+
+def test_a_short_item_is_not_stretched_by_a_long_one() -> None:
+    """The regression this union was widened for.
+
+    Item a's second word must start at its own first word's width, not at
+    the width of item b's much longer second word.
+    """
+    grid = Grid([([1.0, 1.0, 1.0], [(0, 3)]), ([1.0, 6.0], [(0, 2)])])
+    assert positions(grid, 0) == pytest.approx({0: 0.0, 1: 1.0, 2: 2.0})
+    assert positions(grid, 1) == pytest.approx({0: 0.0, 1: 1.0})
+
+
 def test_every_band_row_covers_the_whole_grid() -> None:
     """Each table row must account for every column, or the table is
     malformed and cells drift out of their columns."""
     w = [1.0, 2.0, 1.0, 1.5, 2.5]
-    grid = Grid(w, [(0, 3), (3, 5)])
-    for band in grid.bands:
-        covered = sum(grid.span(j) for j in range(*band))
+    grid = Grid([(w, [(0, 3), (3, 5)])])
+    for band in grid.bands_of(0):
+        covered = sum(grid.span(0, j) for j in range(*band))
         assert covered <= len(grid.columns)
 
 
 def test_coincident_boundaries_do_not_create_slivers() -> None:
     """Bands whose words happen to break at the same x share one edge."""
     w = [1.0, 1.0, 2.0]
-    grid = Grid(w, [(0, 2), (2, 3)])
+    grid = Grid([(w, [(0, 2), (2, 3)])])
     assert grid.edges == pytest.approx([1.0, 2.0])
     assert len(grid.columns) == 2
 
@@ -167,6 +197,41 @@ def test_split_table_rows_all_have_the_same_column_count() -> None:
         plain = row.count("<table:table-cell ") - row.count("number-columns-spanned")
         covered = spanned + plain
         assert covered == ncols, f"row {n} covers {covered} of {ncols} columns"
+
+
+UNEQUAL = r"""\begin{document}
+\ex.
+\a. \gll Ich habe geschlafen \\
+         I have slept \\
+\b. \gll Der ausserordentlich lange Beispielsatz hier \\
+         the extraordinarily long example.sentence here \\
+\z.
+
+\end{document}"""
+
+
+def test_a_paradigm_item_is_not_stretched_by_its_neighbour() -> None:
+    """The emitter must plan each item on its own words, not on the widest.
+
+    Word widths used to be computed once for the whole example and shared
+    by every body, so item a's third column had to be as wide as item b's:
+    "Ich habe geschlafen" acquired a gap in the middle because
+    "ausserordentlich" sits under "habe" in an unrelated sentence.  Asserted
+    on where the grid puts each item's words, which is the thing that was
+    wrong — counting columns would not have caught it.
+    """
+    e = Emitter(layout=Layout(text_width_cm=17.0))
+    ex = parse(UNEQUAL).examples[0]
+    e.prepare([ex])
+    e.example(ex)                      # builds and records the grid
+    grid = e.last_grid
+
+    short, wide = positions(grid, 0), positions(grid, 1)
+    # each item's words sit at the sum of *its own* preceding widths
+    assert short[2] == pytest.approx(sum(grid.plans[0][0][:2]))
+    assert wide[2] == pytest.approx(sum(grid.plans[1][0][:2]))
+    # and the short item is genuinely narrower, not merely differently spelt
+    assert short[2] < wide[2] - 1.0
 
 
 def test_continuation_bands_are_marked() -> None:

@@ -385,6 +385,58 @@ def check_sub(name: str, pdf: Path, n_markers: int, glossed: bool) -> int:
     return bad
 
 
+# Two glossed items whose words are wildly unequal in width.  "Ich habe
+# geschlafen" is short where "Der ausserordentlich lange Beispielsatz hier"
+# is long, word for word.
+OWN_COLUMNS = [
+    "a. Ich habe geschlafen",
+    "I have slept",
+    "b. Der ausserordentlich lange Beispielsatz hier",
+    "the extraordinarily long example.sentence here",
+]
+
+
+def check_items_keep_their_own_columns(ctx, out: Path, profile: Path) -> int:
+    """A short glossed item must not be stretched by a longer one beside it.
+
+    The items of a paradigm share one table, and they used to share one
+    width per word index with it: item a's third column had to be as wide
+    as item b's, so "Ich habe geschlafen" acquired a gap in the middle
+    because "ausserordentlich" sits under "habe" in an unrelated sentence.
+    The grid absorbs the difference now, exactly as it already did for the
+    bands of a single item.  tests/test_bands.py pins the same thing for
+    the converter.
+    """
+    doc = make_doc(ctx, OWN_COLUMNS)
+    msg = run(ctx)
+    odt = out / "own_columns.odt"
+    doc.storeToURL(odt.as_uri(), (PropertyValue("FilterName", 0, "writer8", 0),))
+    doc.dispose()
+    print("--- own_columns")
+    if msg:
+        print(f"    FAIL: macro said {msg!r}")
+        return 1
+
+    first: dict[str, float] = {}
+    for t, x, y in sorted(words_of(render(profile, odt)), key=lambda w: (w[2], w[1])):
+        first.setdefault(t, x)
+    short, wide = first["geschlafen"], first["lange"]
+    print(f"    item a's third word at {short:.1f}, item b's at {wide:.1f}")
+    if short >= wide - 10.0:
+        print("    FAIL: the short item was stretched onto the long one's columns")
+        return 1
+
+    # and every gloss still sits under the word it glosses, in both items
+    for obj, gloss in (("Ich", "I"), ("habe", "have"), ("geschlafen", "slept"),
+                       ("Der", "the"), ("lange", "long")):
+        if abs(first[obj] - first[gloss]) > 2.0:
+            print(f"    FAIL: {gloss!r} at {first[gloss]:.1f} is not under "
+                  f"{obj!r} at {first[obj]:.1f}")
+            return 1
+    print("    ok — each item keeps its own widths, glosses still aligned")
+    return 0
+
+
 def check_sub_alignment(ctx, out: Path, profile: Path) -> int:
     """A sub-example letter sits where a main example's *text* begins.
 
@@ -2759,6 +2811,7 @@ def main() -> int:
         failures += check_sub(name, render(profile, odt), n_markers, glossed)
     failures += check_pair(ctx, out, profile)
     failures += check_sub_alignment(ctx, out, profile)
+    failures += check_items_keep_their_own_columns(ctx, out, profile)
     failures += check_layout_settings(ctx, out, profile)
     for name, lines in TRANSLATION_CASES.items():
         doc = make_doc(ctx, lines)

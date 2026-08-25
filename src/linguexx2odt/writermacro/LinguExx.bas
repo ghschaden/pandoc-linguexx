@@ -533,8 +533,9 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Dim oFont As Object, dPxPerCm As Double
     Dim dAvail As Double, dNumber As Double, dJudg As Double, dMarker As Double
     Dim dIndent As Double, dTable As Double
-    Dim aWordW() As Double, nWords As Integer
-    Dim aBandStart() As Integer, nBands As Integer
+    Dim aItemW() As Double, aOneW() As Double, nWords As Integer
+    Dim aBandStart() As Integer, aOneBand() As Integer
+    Dim aNBands() As Integer, aItemNW() As Integer
     Dim aColW() As Double, nCols As Integer
     Dim aWordCol() As Integer, aWordSpan() As Integer
     Dim dTotal As Double, dFiller As Double, dW As Double
@@ -626,51 +627,76 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     ' Column widths come from the glossed items only.  An unglossed item is
     ' one merged cell of running text, so its words must not drag a column
     ' wide enough to hold them.
+    '
+    ' Each glossed item is measured and banded *on its own*.  Sharing one
+    ' width per word index across items — which is what this did — couples
+    ' them: item a's second column has to be as wide as item b's second
+    ' column, so "Ich habe geschlafen" acquires a gap in the middle because
+    ' "ausserordentlich" sits under "habe" in an unrelated sentence.  The
+    ' grid absorbs the difference instead, exactly as it already did for the
+    ' bands of one item, and linguexx2odt's Grid does the same.
+    ReDim aItemNW(nItems - 1)
+    ReDim aNBands(nItems - 1)
     bGlossed = False
     nWords = 0
     For k = 0 To nItems - 1
         aItem = aItems(k)
+        aItemNW(k) = 0
+        aNBands(k) = 0
         If aItem(IT_NTIERS) > 1 Then
             bGlossed = True
-            If LxItemWords(aItem) > nWords Then nWords = LxItemWords(aItem)
+            aItemNW(k) = LxItemWords(aItem)
+            If aItemNW(k) > nWords Then nWords = aItemNW(k)
         End If
     Next k
+    If nWords < 1 Then nWords = 1
 
-    If Not bGlossed Then                      ' nothing glossed: one wide column
-        nWords = 1
-        ReDim aWordW(0)
-        aWordW(0) = dAvail
+    ReDim aItemW(nItems - 1, nWords - 1)
+    ReDim aBandStart(nItems - 1, nWords)
+    ReDim aWordCol(nItems - 1, nWords - 1)
+    ReDim aWordSpan(nItems - 1, nWords - 1)
+
+    If Not bGlossed Then
+        ' Nothing glossed: one wide column, which the merged cell of every
+        ' item then spans.  Item 0 carries it; no item consults the grid.
+        aItemNW(0) = 1
+        aItemW(0, 0) = dAvail
+        aNBands(0) = 1
+        aBandStart(0, 0) = 0
     Else
-        ReDim aWordW(nWords - 1)
-        For i = 0 To nWords - 1
-            dW = 0
-            For k = 0 To nItems - 1
+        For k = 0 To nItems - 1
+            If aItemNW(k) > 0 Then
                 aItem = aItems(k)
-                If aItem(IT_NTIERS) > 1 Then
-                    aTiers = aItem(IT_TIERS)
+                aTiers = aItem(IT_TIERS)
+                ReDim aOneW(aItemNW(k) - 1)
+                For i = 0 To aItemNW(k) - 1
+                    dW = 0
                     For t = 0 To aItem(IT_NTIERS) - 1
                         aWords = aTiers(t)
                         If i <= UBound(aWords) Then
                             dW = LxMax(dW, LxWidth(oFont, dPxPerCm, aWords(i)))
                         End If
                     Next t
-                End If
-            Next k
-            ' Capped like the converter: one very long word must not eat the
-            ' whole line.  Past the cap it wraps inside its cell instead.
-            aWordW(i) = LxMin(MAX_COL_CM, LxMax(MIN_COL_CM, dW + PAD_CM))
-        Next i
+                    ' Capped like the converter: one very long word must not
+                    ' eat the whole line.  Past the cap it wraps in its cell.
+                    aOneW(i) = LxMin(MAX_COL_CM, LxMax(MIN_COL_CM, dW + PAD_CM))
+                    aItemW(k, i) = aOneW(i)
+                Next i
+
+                ' Bands: an item too wide for the text block is broken into
+                ' stacked slices, each starting back at the left edge, the
+                ' way linguexx2odt does it.  Unlike the converter this can be
+                ' redone at any time against the current page, because
+                ' nothing here was frozen at conversion time.
+                aNBands(k) = LxPackBands(aOneW(), aItemNW(k), dAvail, aOneBand())
+                For b = 0 To aNBands(k) - 1
+                    aBandStart(k, b) = aOneBand(b)
+                Next b
+            End If
+        Next k
     End If
 
-    ' Bands: an example too wide for the text block is broken into stacked
-    ' slices, each starting back at the left edge, the way linguexx2odt does
-    ' it.  The band boundaries are shared by every item, as in the converter;
-    ' an item with fewer words simply contributes no rows to a later band.
-    ' Unlike the converter this can be redone at any time against the current
-    ' page, because nothing here was frozen at conversion time.
-    nBands = LxPackBands(aWordW(), nWords, dAvail, aBandStart())
-
-    nCols = LxBuildGrid(aWordW(), nWords, aBandStart(), nBands, _
+    nCols = LxBuildGrid(aItemW(), aItemNW(), aBandStart(), aNBands(), nItems, _
                         aColW(), aWordCol(), aWordSpan())
 
     dTotal = 0
@@ -687,16 +713,17 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     dFiller = 0
     If dTotal <= dAvail - MIN_COL_CM Then dFiller = dAvail - dTotal
 
-    Call LxEmitTable(oDoc, oRange, aItems, aBandStart(), nBands, aColW(), nCols, _
-                     aWordCol(), aWordSpan(), nWords, _
+    Call LxEmitTable(oDoc, oRange, aItems, aBandStart(), aNBands(), aItemNW(), _
+                     aColW(), nCols, aWordCol(), aWordSpan(), _
                      dNumber, dMarker, dJudg, dFiller, nLead, dIndent, dTable)
 End Sub
 
 
 Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
-                aBandStart() As Integer, nBands As Integer, _
+                aBandStart() As Integer, aNBands() As Integer, _
+                aItemNW() As Integer, _
                 aColW() As Double, nCols As Integer, _
-                aWordCol() As Integer, aWordSpan() As Integer, nWords As Integer, _
+                aWordCol() As Integer, aWordSpan() As Integer, _
                 dNumber As Double, dMarker As Double, dJudg As Double, _
                 dFiller As Double, nLead As Integer, _
                 dIndent As Double, dTable As Double)
@@ -717,7 +744,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
 
     nRows = 2                                 ' the two spacer rows
     For k = 0 To nItems - 1
-        nRows = nRows + LxItemRows(aItems(k), aBandStart(), nBands)
+        nRows = nRows + LxItemRows(aItems(k), aNBands(k))
     Next k
 
     oTable = oDoc.createInstance("com.sun.star.text.TextTable")
@@ -775,47 +802,44 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
         bFirstOfItem = True
 
         If aItem(IT_NTIERS) > 1 Then
-            nMax = LxItemWords(aItem)
-            For b = 0 To nBands - 1
-                If aBandStart(b) < nMax Then
-                    For t = 0 To aItem(IT_NTIERS) - 1
-                        aWords = aTiers(t)
-                        If bFirstOfItem Then
-                            Call LxHead(oDoc, oTable, nRow, aItem, bFirstOfAll, nLead)
-                            bFirstOfItem = False
-                            bFirstOfAll = False
+            For b = 0 To aNBands(k) - 1
+                For t = 0 To aItem(IT_NTIERS) - 1
+                    aWords = aTiers(t)
+                    If bFirstOfItem Then
+                        Call LxHead(oDoc, oTable, nRow, aItem, bFirstOfAll, nLead)
+                        bFirstOfItem = False
+                        bFirstOfAll = False
+                    End If
+                    ' The first row of a continuation band says so.
+                    ' Nothing else in the finished table can: this row
+                    ' is built exactly like a tier row and starts in the
+                    ' same column, so a reader counting rows cannot tell
+                    ' three tiers of one band from one tier of three.
+                    If b > 0 And t = 0 Then _
+                        Call LxMarkBand(oTable, nRow, nLead, nCols + nFill)
+                    ' Walk the band's whole word range, not just this
+                    ' tier's: every tier row must end up with the same
+                    ' cell structure, or the rows stop lining up.
+                    nEnd = LxBandEnd(aBandStart(), aNBands(), aItemNW(), k, b)
+                    nShift = 0
+                    For i = aBandStart(k, b) To nEnd - 1
+                        c = nLead + aWordCol(k, i) - nShift
+                        If i <= UBound(aWords) Then
+                            Call LxPut(oTable.getCellByName(LxCell(c, nRow)), aWords(i))
                         End If
-                        ' The first row of a continuation band says so.
-                        ' Nothing else in the finished table can: this row
-                        ' is built exactly like a tier row and starts in the
-                        ' same column, so a reader counting rows cannot tell
-                        ' three tiers of one band from one tier of three.
-                        If b > 0 And t = 0 Then _
-                            Call LxMarkBand(oTable, nRow, nLead, nCols + nFill)
-                        ' Walk the band's whole word range, not just this
-                        ' tier's: every tier row must end up with the same
-                        ' cell structure, or the rows stop lining up.
-                        nEnd = LxBandEnd(aBandStart(), nBands, nWords, b)
-                        nShift = 0
-                        For i = aBandStart(b) To nEnd - 1
-                            c = nLead + aWordCol(i) - nShift
-                            If i <= UBound(aWords) Then
-                                Call LxPut(oTable.getCellByName(LxCell(c, nRow)), aWords(i))
-                            End If
-                            If aWordSpan(i) > 1 Then
-                                ' Merging removes cells, so everything to the
-                                ' right of it shifts left by span-1; the words
-                                ' after this one have to be addressed by their
-                                ' shifted name, not their grid column.
-                                oCur = oTable.createCursorByCellName(LxCell(c, nRow))
-                                oCur.goRight(aWordSpan(i) - 1, True)
-                                oCur.mergeRange()
-                                nShift = nShift + aWordSpan(i) - 1
-                            End If
-                        Next i
-                        nRow = nRow + 1
-                    Next t
-                End If
+                        If aWordSpan(k, i) > 1 Then
+                            ' Merging removes cells, so everything to the
+                            ' right of it shifts left by span-1; the words
+                            ' after this one have to be addressed by their
+                            ' shifted name, not their grid column.
+                            oCur = oTable.createCursorByCellName(LxCell(c, nRow))
+                            oCur.goRight(aWordSpan(k, i) - 1, True)
+                            oCur.mergeRange()
+                            nShift = nShift + aWordSpan(k, i) - 1
+                        End If
+                    Next i
+                    nRow = nRow + 1
+                Next t
             Next b
         Else
             ' Unglossed: running text in one merged cell, not one word per
@@ -960,14 +984,12 @@ End Function
 
 ' How many table rows this item will occupy — must agree exactly with what
 ' LxEmitTable goes on to write, or the table is the wrong height.
-Function LxItemRows(aItem As Variant, aBandStart() As Integer, nBands As Integer) As Integer
-    Dim n As Integer, b As Integer, nMax As Integer
-    n = 0
+Function LxItemRows(aItem As Variant, nBands As Integer) As Integer
+    Dim n As Integer
+    ' Bands are the item's own now, so every one of them holds words of it —
+    ' there is no longer a band it sits out because a longer item made it.
     If aItem(IT_NTIERS) > 1 Then
-        nMax = LxItemWords(aItem)
-        For b = 0 To nBands - 1
-            If aBandStart(b) < nMax Then n = n + aItem(IT_NTIERS)
-        Next b
+        n = nBands * aItem(IT_NTIERS)
     Else
         n = 1
     End If
@@ -1630,41 +1652,47 @@ Function LxPackBands(aWordW() As Double, nWords As Integer, dAvail As Double, _
 End Function
 
 
-' The shared column grid of one example's table.
+' The column grid of one example's table.
 '
-' Bands each start at the left edge, so their word boundaries fall in
-' different places.  A table has one column grid, so the grid is the
-' *union* of every band's boundaries, and each word spans the columns it
-' covers.  Anything simpler couples the bands together: with one
-' rectangular grid, the fifth column of band 2 has to be as wide as the
-' fifth column of band 1, so one long word stretches an unrelated column
-' in another line.  This is what linguexx2odt's Grid class builds, and what
-' merging cells by hand in Writer produces.
-Function LxBuildGrid(aWordW() As Double, nWords As Integer, _
-                     aBandStart() As Integer, nBands As Integer, _
+' Two things start at the left edge and so put their word boundaries in
+' different places: the *bands* an overlong item is broken into, and the
+' separate *items* of a paradigm.  A table has one column grid, so the grid
+' is the *union* of every boundary either produces, and each word spans the
+' columns it covers.  Anything simpler couples them together — with one
+' rectangular grid the fifth column of band 2, or of item b, has to be as
+' wide as the fifth column of band 1, or of item a, so one long word
+' stretches an unrelated column in another line.  This is what
+' linguexx2odt's Grid class builds, and what merging cells by hand in
+' Writer produces.
+Function LxBuildGrid(aItemW() As Double, aItemNW() As Integer, _
+                     aBandStart() As Integer, aNBands() As Integer, _
+                     nItems As Integer, _
                      ByRef aColW() As Double, ByRef aWordCol() As Integer, _
                      ByRef aWordSpan() As Integer) As Integer
     Dim aEdge() As Double, aUniq() As Double
-    Dim nEdges As Integer, nU As Integer
+    Dim nEdges As Integer, nU As Integer, nTot As Integer
     Dim b As Integer, i As Integer, j As Integer, k As Integer
     Dim nEnd As Integer, lo As Integer, hi As Integer
     Dim x As Double, dPrev As Double, dTmp As Double
 
-    ReDim aWordCol(LxMaxI(nWords - 1, 0))
-    ReDim aWordSpan(LxMaxI(nWords - 1, 0))
-
-    ' every band's cumulative boundaries, measured from the left edge
-    ReDim aEdge(LxMaxI(nWords, 1) * LxMaxI(nBands, 1))
+    ' every band of every item, its cumulative boundaries from the left edge
+    nTot = 0
+    For k = 0 To nItems - 1
+        nTot = nTot + aItemNW(k)
+    Next k
+    ReDim aEdge(LxMaxI(nTot, 1))
     nEdges = 0
-    For b = 0 To nBands - 1
-        x = 0
-        nEnd = LxBandEnd(aBandStart(), nBands, nWords, b)
-        For j = aBandStart(b) To nEnd - 1
-            x = x + aWordW(j)
-            aEdge(nEdges) = x
-            nEdges = nEdges + 1
-        Next j
-    Next b
+    For k = 0 To nItems - 1
+        For b = 0 To aNBands(k) - 1
+            x = 0
+            nEnd = LxBandEnd(aBandStart(), aNBands(), aItemNW(), k, b)
+            For j = aBandStart(k, b) To nEnd - 1
+                x = x + aItemW(k, j)
+                aEdge(nEdges) = x
+                nEdges = nEdges + 1
+            Next j
+        Next b
+    Next k
     If nEdges = 0 Then
         ReDim aColW(0)
         aColW(0) = 0
@@ -1702,17 +1730,19 @@ Function LxBuildGrid(aWordW() As Double, nWords As Integer, _
         dPrev = aUniq(i)
     Next i
 
-    For b = 0 To nBands - 1
-        x = 0
-        nEnd = LxBandEnd(aBandStart(), nBands, nWords, b)
-        For j = aBandStart(b) To nEnd - 1
-            lo = LxEdgeIndex(aUniq(), nU, x)
-            x = x + aWordW(j)
-            hi = LxEdgeIndex(aUniq(), nU, x)
-            aWordCol(j) = lo
-            aWordSpan(j) = LxMaxI(1, hi - lo)
-        Next j
-    Next b
+    For k = 0 To nItems - 1
+        For b = 0 To aNBands(k) - 1
+            x = 0
+            nEnd = LxBandEnd(aBandStart(), aNBands(), aItemNW(), k, b)
+            For j = aBandStart(k, b) To nEnd - 1
+                lo = LxEdgeIndex(aUniq(), nU, x)
+                x = x + aItemW(k, j)
+                hi = LxEdgeIndex(aUniq(), nU, x)
+                aWordCol(k, j) = lo
+                aWordSpan(k, j) = LxMaxI(1, hi - lo)
+            Next j
+        Next b
+    Next k
 
     LxBuildGrid = nU
 End Function
@@ -1735,12 +1765,13 @@ Function LxEdgeIndex(aUniq() As Double, nU As Integer, x As Double) As Integer
 End Function
 
 
-Function LxBandEnd(aBandStart() As Integer, nBands As Integer, _
-                   nWords As Integer, b As Integer) As Integer
-    If b + 1 < nBands Then
-        LxBandEnd = LxMinI(aBandStart(b + 1), nWords)
+' Where item k's band b stops — its last word, exclusive.
+Function LxBandEnd(aBandStart() As Integer, aNBands() As Integer, _
+                   aItemNW() As Integer, k As Integer, b As Integer) As Integer
+    If b + 1 < aNBands(k) Then
+        LxBandEnd = LxMinI(aBandStart(k, b + 1), aItemNW(k))
     Else
-        LxBandEnd = nWords
+        LxBandEnd = aItemNW(k)
     End If
 End Function
 

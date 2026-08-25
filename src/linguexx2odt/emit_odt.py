@@ -166,48 +166,63 @@ def runs_width_cm(runs, em_cm: float, sc_ratio: float) -> float:
     )
 
 
-class Grid:
-    """The shared column grid of one example's table.
+#: one body's own layout: its word widths, and the bands they were packed
+#: into.  An unglossed body has neither.
+Plan = tuple[list[float], list[tuple[int, int]]]
 
-    Bands each start at the left edge, so their word boundaries fall at
-    different places.  A single table has one column grid, so the grid is
-    the **union** of every band's boundaries and each word spans the
-    columns it covers — which is precisely the structure that hand-merging
-    cells in Writer produces (reference.odt item 4 reaches 22 columns for a
-    13-word band over a 9-word band).
+
+class Grid:
+    """The column grid of one example's table.
+
+    Two things start at the left edge and so put their word boundaries in
+    different places: the **bands** an overlong body is broken into, and
+    the separate **bodies** of a sub-example paradigm.  A single table has
+    one column grid, so the grid is the **union** of every boundary either
+    produces, and each word spans the columns it covers — precisely the
+    structure that hand-merging cells in Writer produces (reference.odt
+    item 4 reaches 22 columns for a 13-word band over a 9-word band).
+
+    Sharing one *width per word index* across bodies instead — which is
+    what this did until the union was widened to cover them — couples the
+    items together: item a's second column has to be as wide as item b's
+    second column, so a three-word sentence acquires a gap in the middle
+    because a longer word sits under it in an unrelated sentence.  Bands
+    were already exempt from that coupling; items are now too.
     """
 
     TOL = 0.015  # cm; boundaries closer than this are the same boundary
 
-    def __init__(self, word_widths: list[float], bands: list[tuple[int, int]]) -> None:
-        self.word_widths = word_widths
-        self.bands = bands
+    def __init__(self, plans: list[Plan]) -> None:
+        self.plans = plans
 
         edges: list[float] = []
-        for start, stop in bands:
-            x = 0.0
-            for j in range(start, stop):
-                x += word_widths[j]
-                edges.append(x)
+        for word_widths, bands in plans:
+            for start, stop in bands:
+                x = 0.0
+                for j in range(start, stop):
+                    x += word_widths[j]
+                    edges.append(x)
         merged: list[float] = []
         for x in sorted(edges):
             if not merged or x - merged[-1] > self.TOL:
                 merged.append(x)
         self.edges = merged
+        widest = max((sum(w) for w, _ in plans), default=0.0)
         self.columns = [
             b - a for a, b in zip([0.0] + merged, merged)
-        ] or [sum(word_widths)]
-        self.total = merged[-1] if merged else sum(word_widths)
+        ] or [widest]
+        self.total = merged[-1] if merged else widest
 
-        # word index -> (first grid column, span)
-        self._placement: dict[int, tuple[int, int]] = {}
-        for start, stop in bands:
-            x = 0.0
-            for j in range(start, stop):
-                lo = self._edge_index(x)
-                x += word_widths[j]
-                hi = self._edge_index(x)
-                self._placement[j] = (lo, max(1, hi - lo))
+        # (body index, word index) -> (first grid column, span)
+        self._placement: dict[tuple[int, int], tuple[int, int]] = {}
+        for k, (word_widths, bands) in enumerate(plans):
+            for start, stop in bands:
+                x = 0.0
+                for j in range(start, stop):
+                    lo = self._edge_index(x)
+                    x += word_widths[j]
+                    hi = self._edge_index(x)
+                    self._placement[(k, j)] = (lo, max(1, hi - lo))
 
     def _edge_index(self, x: float) -> int:
         """Number of grid columns lying left of position *x*."""
@@ -216,8 +231,11 @@ class Grid:
                 return i + 1
         return sum(1 for e in self.edges if e < x)
 
-    def span(self, word: int) -> int:
-        return self._placement[word][1]
+    def bands_of(self, body: int) -> list[tuple[int, int]]:
+        return self.plans[body][1]
+
+    def span(self, body: int, word: int) -> int:
+        return self._placement[(body, word)][1]
 
 
 def _col_name(ex_index: int, col: int) -> str:
@@ -330,18 +348,25 @@ class Emitter:
         )
         has_marker = ex.body is None
         has_judgment = self.any_judgment
-        words = max((b.width for _, b in bodies), default=1) or 1
 
         lead = self._lead_widths(has_marker, has_judgment)
         available = self.layout.text_width_cm - sum(lead)
 
-        if any(b.tiers for _, b in bodies):
-            word_w = self._word_widths(bodies, words)
-            bands = self._bands(word_w, available, ex)
-        else:  # nothing glossed: one wide text column
-            word_w, bands = [available], [(0, 1)]
+        # One plan per body, each measured and banded on its own words.  A
+        # paradigm's items no longer pull on one another's columns; Grid
+        # unions what they produce, exactly as it already did for bands.
+        plans: list[Plan] = []
+        for _, body in bodies:
+            if body.tiers:
+                word_w = self._word_widths([("", body)], body.width)
+                plans.append((word_w, self._bands(word_w, available, ex)))
+            else:  # unglossed: running text in one merged cell
+                plans.append(([], []))
+        if not any(w for w, _ in plans):  # nothing glossed: one wide column
+            plans = [([available], [(0, 1)]) for _ in bodies]
 
-        grid = Grid(word_w, bands)
+        grid = Grid(plans)
+        self.last_grid = grid                 # what tests measure the layout from
         columns, total = grid.columns, grid.total
         if total > available:
             # only reachable with --no-split, or when a single word is wider
@@ -360,11 +385,9 @@ class Emitter:
         )
 
         rows: list[str] = []
-        first = True
-        for marker, body in bodies:
-            rows += self._body_rows(ex, marker, body, first, grid, filler,
+        for k, (marker, body) in enumerate(bodies):
+            rows += self._body_rows(ex, marker, body, k == 0, grid, k, filler,
                                     has_marker, has_judgment)
-            first = False
 
         span = len(widths)
         rows = (
@@ -463,7 +486,7 @@ class Emitter:
         ]
 
     # -- rows --------------------------------------------------------------
-    def _body_rows(self, ex, marker, body, first, grid, filler,
+    def _body_rows(self, ex, marker, body, first, grid, body_index, filler,
                    has_marker, has_judgment) -> list[str]:
         rows: list[str] = []
         head_used = False
@@ -484,9 +507,7 @@ class Emitter:
             return "".join(out)
 
         if body.tiers:
-            for b, band in enumerate(grid.bands):
-                if band[0] >= body.width:
-                    continue  # this body has no words this far right
+            for b, band in enumerate(grid.bands_of(body_index)):
                 for t, tier in enumerate(body.tiers):
                     # The first row of a continuation band says so, because
                     # nothing else in the finished table can: a band's rows
@@ -496,7 +517,8 @@ class Emitter:
                     style = BAND_PARA if b and not t else CELL_PARA
                     rows.append(
                         "<table:table-row>" + lead_cells(not head_used)
-                        + self._band_cells(tier.cells, band, grid, filler, style)
+                        + self._band_cells(tier.cells, band, grid, body_index,
+                                           filler, style)
                         + "</table:table-row>"
                     )
                     head_used = True
@@ -518,7 +540,7 @@ class Emitter:
             )
         return rows
 
-    def _band_cells(self, cells, band, grid, filler: int,
+    def _band_cells(self, cells, band, grid, body_index: int, filler: int,
                     style: str = CELL_PARA) -> str:
         """One tier's cells for one band, each spanning the grid columns it
         covers, then empty cells padding the row to the full grid width.
@@ -529,7 +551,7 @@ class Emitter:
         start, stop = band
         out, covered = [], 0
         for j in range(start, stop):
-            span = grid.span(j)
+            span = grid.span(body_index, j)
             content = self.inline.render(cells[j]) if j < len(cells) else ""
             out.append(self._cell(content, span=span, style=style))
             covered += span
