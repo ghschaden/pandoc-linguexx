@@ -285,6 +285,27 @@ SUB_CASES = {
                    "ii. Tercer ejemplo aqui", "third example here"], 2, True),
     "sub_marker_alone": (["a.", "Esto es un ejemplo", "this is a example",
                           "b.", "Otro ejemplo aqui", "another example here"], 2, True),
+    # A judgment mark typed straight after the letter, with no space to
+    # split on.  The whole first word is then "b.?Maybe", which is not a
+    # marker, so the line stopped starting an item: it was folded into the
+    # item before it as another gloss tier and a paradigm of judged
+    # one-liners came out as a single word-by-word grid.
+    "sub_judged_glued": (["a.*This one is bad.",
+                          "b.?Maybe this one is fine."], 2, False),
+    # The same, mixed with the spaced form — the shape tests/subexamples_
+    # judged.odt holds.  Here the first line *was* read as a marker, so the
+    # selection looked like a paradigm and only the glued line went astray.
+    "sub_judged_half_glued": (["a. *This one is bad.",
+                               "b.?Maybe this one is fine.",
+                               "c. ?Probably not though."], 3, False),
+    # Writer's French autocorrect replaces the space before a "?" with a
+    # narrow no-break one, and nothing on screen shows which is which.  It
+    # was not a space to the word splitter, so the marker fused to the text
+    # after it; a glossed item must still line its tiers up.  The unglossed
+    # half of this is check_autocorrect_spaces, which has to read the table
+    # rather than the PDF.
+    "sub_judged_nnbsp": (["a.\u202f*Das Kind schlafen", "the child sleep.INF",
+                          "b.\u202fDas Kind schlaeft", "the child sleeps"], 2, True),
 }
 
 # Selections the macro must refuse rather than mis-render, and near misses
@@ -296,6 +317,11 @@ REFUSE = {
 ACCEPT = {
     "abbreviation": ["Dr. Meier kam gestern", "Dr. Meier came yesterday",
                      "'Dr Meier came yesterday.'"],
+    # A marker may be the head of the first word rather than the whole of
+    # it, so that "b.?Maybe" is sub-example b — but only when a judgment
+    # mark follows.  Anything else after the dot is part of the word.
+    "dotted_word": ["Sie hat a.out gestartet", "she has a.out started",
+                    "'She started a.out.'"],
 }
 
 MARKER = re.compile(r"\(?[a-zA-Z]{1,4}[.)]$")
@@ -1665,6 +1691,61 @@ def rows_of(pdf: Path):
     return out
 
 
+# What a judged paradigm looks like when it is typed rather than pasted.
+# Writer's autocorrect replaces the space before "?" and "!" with a
+# no-break one under a French locale — narrow, in recent versions — and
+# nothing on screen tells the two apart.
+AUTOCORRECT_SPACES = {
+    "nbsp": ("\u00a0", "no-break space"),
+    "nnbsp": ("\u202f", "narrow no-break space"),
+}
+
+
+def check_autocorrect_spaces(ctx) -> int:
+    """A space Writer substituted must still separate a marker from its text.
+
+    Read off the table, not the PDF.  pdftotext prints a no-break space as
+    a space, so a paradigm that was never parsed as one can still render
+    close enough to fool a check that measures where the words landed —
+    which is exactly what an earlier version of this test did.
+    """
+    bad = 0
+    want = {"B2": "a.", "C2": "*", "D2": "This one is bad.",
+            "B3": "b.", "C3": "?", "D3": "Maybe this one is fine."}
+    for name, (space, what) in AUTOCORRECT_SPACES.items():
+        doc = make_doc(ctx, [f"a.{space}*This one is bad.",
+                             f"b.{space}?Maybe this one is fine."])
+        msg = run(ctx)
+        tables = doc.getTextTables()
+        count = tables.getCount()
+        got = {}
+        if count == 1:
+            table = tables.getByIndex(0)
+            for cell in table.getCellNames():
+                got[cell] = table.getCellByName(cell).getString()
+        doc.dispose()
+        wrong = {k: got.get(k) for k, v in want.items() if got.get(k) != v}
+        print(f"--- autocorrect_{name}")
+        if msg or count != 1:
+            print(f"    FAIL: built {count} table(s), said {msg!r}")
+            bad += 1
+        elif wrong:
+            print(f"    FAIL: a {what} did not separate the marker — {wrong}")
+            bad += 1
+        else:
+            print(f"    ok — a {what} separates marker, mark and text")
+    return bad
+
+
+def cell_style(table, name: str) -> str:
+    "The paragraph style of a table cell, or '' where a merge left no cell."
+    try:
+        return table.getCellByName(name).getText().createEnumeration(
+            ).nextElement().ParaStyleName
+    except Exception:
+        return ""
+
+
 def check_guards(ctx) -> int:
     bad = 0
     for name, lines in REFUSE.items():
@@ -1680,10 +1761,25 @@ def check_guards(ctx) -> int:
     for name, lines in ACCEPT.items():
         doc = make_doc(ctx, lines)
         msg = run(ctx)
-        tables = doc.getTextTables().getCount()
+        tables = doc.getTextTables()
+        count = tables.getCount()
+        # Where the judgment column landed says whether this was read as a
+        # paradigm: it is the column before the text, so a marker column in
+        # front of it moves it from B to C.  A table was always built either
+        # way, which is why counting tables alone never caught this.
+        columns = set()
+        if count == 1:
+            table = tables.getByIndex(0)
+            for cell in table.getCellNames():
+                if cell_style(table, cell) == "LxJudgmentCell":
+                    columns.add(cell.rstrip("0123456789"))
         doc.dispose()
-        if msg or tables != 1:
+        if msg or count != 1:
             print(f"--- {name}\n    FAIL: refused a valid example ({msg!r})")
+            bad += 1
+        elif columns != {"B"}:
+            print(f"--- {name}\n    FAIL: read as a paradigm — "
+                  f"judgment column {sorted(columns)}, wanted ['B']")
             bad += 1
         else:
             print(f"--- {name}\n    ok — not mistaken for a sub-example")
@@ -1707,6 +1803,11 @@ TREE_ITEM_CASES = {
         ["a. [CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
          "move t -> w", "b. [CP [DP who] [TP [V left]]]"], 2, 2),
     "single_tree": (["[DP [D the] [NP [N tree]]]"], 1, 0),
+    # The tree reader splits on the same spaces the word splitter does, so
+    # a no-break one inside the brackets used to fuse a label to its leaf
+    # and produce one node called "NP him" instead of NP over him.
+    "nbsp_in_brackets": (["a.\u00a0*[S [NP\u00a0him] [VP [V left]]]",
+                          "b. [S [NP he] [VP [V left]]]"], 2, 2),
 }
 
 # Typeset example must never draw a tree, whatever brackets are in it.
@@ -2704,6 +2805,7 @@ def main() -> int:
     else:
         failures += check_bands("banded", odt, render(profile, odt))
     failures += check_guards(ctx)
+    failures += check_autocorrect_spaces(ctx)
     failures += check_tree_items(ctx)
     failures += check_number_adoption(ctx, out, profile)
     failures += check_wide_example(ctx)

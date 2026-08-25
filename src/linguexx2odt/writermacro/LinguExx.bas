@@ -380,7 +380,7 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
                 n = n + 1
             End If
             sLine = LxTrimTagged(aLines(i))
-            sMarker = LxSplitWords(sLine)(0)
+            sMarker = LxMarkerOf(sLine)
             sRest = LxCarryTag(sMarker, LxTrimTagged(Mid(sLine, Len(sMarker) + 1)))
             nBody = 0
             If Len(sRest) > 0 Then             ' "a. Esto es ..." on one line
@@ -1274,6 +1274,43 @@ Function LxTagIndex(c As String) As Integer
 End Function
 
 
+' Is this character a space, for the purpose of splitting text into words?
+'
+' Not only the two ASCII ones.  Writer's autocorrect replaces the space
+' before "?", "!", ";" and ":" with a *no-break* space under a French
+' locale — a narrow one in recent versions — so "c. ?Probably", typed with
+' an ordinary space like any other line, reaches the macro as
+' "c." U+00A0 "?Probably" and comes away as a single word.  The line then
+' stops opening a sub-example, and all of it lands in the text column as
+' one more gloss tier of the item above.  Nothing about that is visible in
+' Writer: the two spaces look alike.
+'
+' A no-break space is not a request to set two words in one column.  The
+' linguist typed a space; autocorrect substituted this behind their back.
+' {braces} stay the way to ask for one column, because that is typed on
+' purpose.
+Function LxIsSpace(c As String) As Boolean
+    Dim n As Long
+
+    LxIsSpace = False
+    If Len(c) <> 1 Then Exit Function
+    If c = " " Or c = Chr(9) Then
+        LxIsSpace = True
+        Exit Function
+    End If
+
+    ' 160 no-break, 8192-8202 en/em/thin/hair and the rest of the general
+    ' punctuation run, 8239 narrow no-break, 8287 medium mathematical,
+    ' 12288 ideographic.  A comment may not follow the "_" of a
+    ' continuation line: Basic reads it as part of the expression and the
+    ' whole module then fails to compile, which headless LibreOffice shows
+    ' as the macro quietly doing nothing.
+    n = Asc(c)
+    LxIsSpace = (n = 160) Or (n >= 8192 And n <= 8202) Or _
+                (n = 8239) Or (n = 8287) Or (n = 12288)
+End Function
+
+
 ' Mark the text, and mark it again after every space — so that whatever
 ' splits it into words, every word comes away knowing its own format.
 Function LxTagged(s As String, nFmt As Integer) As String
@@ -1291,7 +1328,7 @@ Function LxTagged(s As String, nFmt As Integer) As String
     bSpace = False
     For i = 1 To Len(s)
         c = Mid(s, i, 1)
-        If c = " " Or c = Chr(9) Then
+        If LxIsSpace(c) Then
             sOut = sOut & c
             bSpace = True
         Else
@@ -1327,7 +1364,7 @@ Function LxTrimTagged(s As String) As String
     n = Len(s)
     Do While n > 0
         c = Mid(s, n, 1)
-        If c <> " " And c <> Chr(9) Then Exit Do
+        If Not LxIsSpace(c) Then Exit Do
         n = n - 1
     Loop
 
@@ -1337,7 +1374,7 @@ Function LxTrimTagged(s As String) As String
         c = Mid(s, i, 1)
         If LxTagIndex(c) >= 0 Then
             sTag = c
-        ElseIf c <> " " And c <> Chr(9) Then
+        ElseIf Not LxIsSpace(c) Then
             Exit Do
         End If
         i = i + 1
@@ -1377,21 +1414,17 @@ Function LxCarryTag(sFrom As String, s As String) As String
 End Function
 
 
-' Does this line open with a sub-example marker — "a.", "(b)", "iii."?
+' Is this token a sub-example marker — "a.", "(b)", "iii."?
 '
 ' Deliberately narrow, because a false positive refuses to gloss a perfectly
-' good example: the token must be a single letter or a roman numeral, so
-' "Dr." and "no." are not markers while "a." and "ii." are.
-Function LxLooksLikeMarker(sLine As String) As Boolean
-    Dim aWords As Variant
+' good example: what precedes the "." or ")" must be a single letter or a
+' roman numeral, so "Dr." and "no." are not markers while "a." and "ii." are.
+Function LxIsMarker(sWord As String) As Boolean
     Dim s As String, c As String
     Dim i As Integer
 
-    LxLooksLikeMarker = False
-    aWords = LxSplitWords(LxStrip(sLine))
-    If UBound(aWords) < 0 Then Exit Function
-
-    s = aWords(0)
+    LxIsMarker = False
+    s = LxStrip(sWord)
     If Len(s) < 2 Or Len(s) > 6 Then Exit Function
     c = Right(s, 1)
     If c <> "." And c <> ")" Then Exit Function
@@ -1401,14 +1434,62 @@ Function LxLooksLikeMarker(sLine As String) As Boolean
 
     If Len(s) = 1 Then
         c = LCase(s)
-        LxLooksLikeMarker = (c >= "a" And c <= "z")
+        LxIsMarker = (c >= "a" And c <= "z")
         Exit Function
     End If
 
     For i = 1 To Len(s)                       ' roman numeral?
         If InStr("ivxlcdm", LCase(Mid(s, i, 1))) = 0 Then Exit Function
     Next i
-    LxLooksLikeMarker = True
+    LxIsMarker = True
+End Function
+
+
+' The marker this line opens with, exactly as it stands at the head of the
+' line, or "" if the line does not open with one.  The caller cuts the line
+' at Len() of what comes back, so this must stay a literal prefix of it —
+' format marks and all.
+'
+' Usually the whole first word.  The exception is a judgment mark typed
+' straight after the letter — "b.?Maybe this", which is how a linguist
+' writes it when the mark belongs to the example and not to the letter.
+' There is no space there to split on, so the word is "b.?Maybe" and the
+' old test, which asked whether the *whole* first word was a marker, said
+' no.  The line then stopped starting an item and was folded into the one
+' before it as another gloss tier: a paradigm of judged one-liners came out
+' as a single word-by-word grid, "b.?Maybe" sitting under "This".
+'
+' So a marker may also be the head of the first word, up to its "." or ")",
+' when a judgment character follows immediately.  Nothing else may follow:
+' "a.b" is a word, not sub-example a of something called b.
+Function LxMarkerOf(sLine As String) As String
+    Dim aWords As Variant
+    Dim sWord As String, sHead As String, sRest As String, c As String
+    Dim i As Integer
+
+    LxMarkerOf = ""
+    aWords = LxSplitWords(sLine)
+    If UBound(aWords) < 0 Then Exit Function
+
+    sWord = aWords(0)
+    For i = 1 To Len(sWord)
+        c = Mid(sWord, i, 1)
+        If c = "." Or c = ")" Then
+            sHead = Left(sWord, i)
+            sRest = Mid(sWord, i + 1)
+            If Len(sRest) > 0 Then
+                If InStr(JUDG_CHARS, Left(sRest, 1)) = 0 Then Exit Function
+            End If
+            If LxIsMarker(sHead) Then LxMarkerOf = sHead
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+' Does this line open with a sub-example marker?
+Function LxLooksLikeMarker(sLine As String) As Boolean
+    LxLooksLikeMarker = (Len(LxMarkerOf(sLine)) > 0)
 End Function
 
 
@@ -1462,7 +1543,7 @@ Function LxSplitWords(sLine As String) As Variant
             nDepth = nDepth + 1
         ElseIf c = "}" Then
             If nDepth > 0 Then nDepth = nDepth - 1
-        ElseIf (c = " " Or c = Chr(9)) And nDepth = 0 Then
+        ElseIf LxIsSpace(c) And nDepth = 0 Then
             If Len(sCur) > 0 Then
                 n = n + 1 : aOut(n) = LxTrimTags(sCur) : sCur = ""
             End If
@@ -3654,7 +3735,7 @@ End Function
 
 
 Function LxTIsDelim(c As String) As Boolean
-    LxTIsDelim = (InStr("[]{} ", c) > 0 Or c = Chr(9))
+    LxTIsDelim = (InStr("[]{}", c) > 0 Or LxIsSpace(c))
 End Function
 
 
@@ -3669,7 +3750,7 @@ Sub LxTSkip()
         c = Mid(LxTSrc, LxTPos, 1)
         If LxTagIndex(c) >= 0 Then
             LxTTag = c
-        ElseIf c <> " " And c <> Chr(9) Then
+        ElseIf Not LxIsSpace(c) Then
             Exit Do
         End If
         LxTPos = LxTPos + 1

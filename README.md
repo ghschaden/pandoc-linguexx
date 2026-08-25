@@ -286,6 +286,13 @@ glosses sit above their words, that judgment marks do not shift the text,
 and that nothing overflows the margin. They skip cleanly where `soffice`
 is absent.
 
+If a rendering test seems to sit there for ever rather than fail,
+suspect OpenCL: LibreOffice probes it at startup, and a broken entry in
+`/etc/OpenCL/vendors` hangs the probe. `clinfo -l` hanging too confirms
+it, and `SAL_DISABLE_OPENCL=1` gets the suite moving. Fixing the ICD is
+the better cure — the workaround is per-run, and everything else that
+uses OpenCL stays broken. It applies to `tools/run_macro_test.py` too.
+
 `notes/findings.md` records what was measured and why each design
 decision was taken — read it before revisiting one.
 

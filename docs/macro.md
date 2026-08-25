@@ -495,7 +495,17 @@ language as above or stand alone on its line.
 
 - **Markers** are a single letter or a roman numeral followed by `.` or
   `)` — `a.`, `(b)`, `iii.`. Deliberately narrow, so `Dr.` and `no.` are
-  not mistaken for one.
+  not mistaken for one. A judgment mark may follow with no space —
+  `b.?Maybe this` is sub-example `b` of a judged one-liner — but nothing
+  else may, so `a.out` stays a word.
+- **A no-break space separates words like any other.** Writer's autocorrect
+  puts one before `?`, `!`, `;` and `:` under a French locale, so
+  `c. ?Probably` is stored as `c.`&nbsp;U+00A0&nbsp;`?Probably` — one word
+  as far as anything splitting on spaces is concerned, and the line stops
+  opening a sub-example. Nothing on screen distinguishes the two spaces,
+  so the macro treats U+00A0, U+202F and the rest of the Unicode space
+  runs as spaces. Nobody typed them on purpose; `{braces}` stay the way to
+  ask for one column, because those are typed on purpose.
 - **A sub-example letter sits exactly where a main example's text
   begins** — linguexx's own geometry. That is why the judgment column is
   carved out of the column to its left rather than inserted after it.
@@ -631,8 +641,23 @@ re-implementation of it.
 python3 tools/run_macro_test.py [OUTDIR]
 ```
 
-It needs `soffice`, `unopkg`, `pdftotext` and python-uno. Each run picks a
-free port and shuts its LibreOffice down at the end: a fixed port lets a
+It needs `soffice`, `unopkg`, `pdftotext` and python-uno. It can also
+appear to hang rather than fail: LibreOffice probes OpenCL as it starts,
+and a bad entry in `/etc/OpenCL/vendors` blocks the probe, so soffice
+never opens its acceptor and the harness waits out its timeout on a
+connection that will never come. `clinfo -l` hanging on the same machine
+is the confirmation, and running one ICD at a time —
+`OCL_ICD_VENDORS=<dir with a single .icd> clinfo -l` — says which. An
+`.icd` pointing at `libOpenCL.so` rather than at a driver is the usual
+one: that is the loader itself, so it loads a second copy of itself and
+deadlocks.
+
+`SAL_DISABLE_OPENCL=1` in the environment gets past it, and is worth
+trying first just to confirm the diagnosis, but the real fix is to the
+ICD. Neither is set here, because it is a property of the machine and not
+of the test.
+
+Each run picks a free port and shuts its LibreOffice down at the end: a fixed port lets a
 stray instance from an earlier run answer instead, and the suite then
 drives whatever library *that* one holds — which has produced a false
 failure at least once. It checks that the number
