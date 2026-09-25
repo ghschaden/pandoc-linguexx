@@ -39,6 +39,29 @@ sources are throwaway; what matters is that the answers are measurements.
    still renders, because the reference degrades quietly. So the styles
    have to be injected, exactly as `postprocess.inject_named_styles` does
    for ODT, and `styles.xml` is well-formed and patchable.
+7. **The Writer macro needs no .docx counterpart — measured, not guessed.**
+   A converted `.odt` re-saved as `.docx` by LibreOffice keeps the table and
+   all five `Lx*` style names, and the macro reads it: *Untypeset* on that
+   file returned `que Pierre est fatigué\exannot{[CP]}`, identical to the
+   `.odt`, and re-typesetting inside the same `.docx` put the label back in
+   its own cell at 75.00%. `LinguExx.bas` reads styles and cells, not the
+   file format. This was listed below as an open question; it is answered
+   and the risk is gone.
+8. **OOXML cell margins have to be zeroed.** A table cell insets its content
+   by 108 twips a side by default, which the width estimate does not know
+   about, and the first sample wrapped every word. `w:tblCellMar` at zero
+   fixes it. ODT needed no equivalent.
+9. **The table must span the text block, with slack in a trailing filler
+   column** — the same rule ODT already follows, and for a sharper reason
+   here. A narrow table with declared widths rendered at 69% of them; giving
+   it the full width and a filler column made every column exact.
+10. **The estimator's font baseline does not transfer.** `_ADVANCE` is
+    Liberation Serif at 12pt; pandoc's default `reference.docx` is another
+    font at another size, and the widths come out too narrow by roughly a
+    third. The arithmetic ports, the baseline does not: the docx emitter
+    needs either its own measured table or a reference document whose body
+    font it sets. Not hard, but it is real work and it is not in the
+    "geometry is free" column.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.
@@ -95,18 +118,22 @@ names, checked against the same rendered-geometry assertions the ODT target
 already has. Expect the merging idiom to be the only real thinking:
 `w:gridSpan` and `w:vMerge` do not behave like covered cells.
 
-### Phase 4 — styles and polish (½–1 day)
+### Phase 4 — styles, the font baseline, and polish (1 day)
 Inject the styles so a Word user can restyle from the sidebar, as a Writer
-user can. Small caps for `\lpzg`. The space above and below an example,
-which in ODT is a spacer row with a styled height — check whether
-`w:spacing` on the table's paragraphs is the better idiom in OOXML rather
-than porting the spacer rows.
+user can. Small caps for `\lpzg`. **Settle the font baseline** (fact 10):
+either measure a second `_ADVANCE` table, or ship a reference document that
+sets the body font to the one `_ADVANCE` already describes. The second is
+much less work and keeps one table honest instead of two.
+
+The space above and below an example is a spacer row with a styled height in
+ODT; check whether `w:spacing` on the table's paragraphs is the better idiom
+in OOXML before porting the spacer rows.
 
 ### Phase 5 — say so (½ day)
 README, `docs/guide-fr.md`, CLAUDE.md, and the "What it does not" table,
 which now has two columns' worth of truth to tell.
 
-**Total: 3–5 focused days**, against the two weeks the ODT target took,
+**Total: 4–6 focused days**, against the two weeks the ODT target took,
 because the IR, the geometry and the test method already exist.
 
 ## Risks, and what would settle each
@@ -123,12 +150,6 @@ because the IR, the geometry and the test method already exist.
   malformed OOXML, and a repair prompt is worse than a wrong width. No
   schema validator was used here. Settle with `python-docx` or an OOXML
   validator in CI, or at minimum one manual open in Word per phase.
-- **The Writer macro has no docx counterpart**, and should not get one:
-  `LinguExx.bas` is Basic in a Writer document. An open question worth an
-  experiment rather than an assumption — if the docx carries the same style
-  names, *Untypeset* may already work on a .docx opened in Writer, since
-  the macro reads styles and cells, not the file format. Try it before
-  deciding anything.
 - **Two targets, one "What it does not" table.** The tracking work of
   `plan-linguexx-1.3.md` is the warning: a second target doubles the
   surface on which a linguexx change can be silently ignored. Whatever the
