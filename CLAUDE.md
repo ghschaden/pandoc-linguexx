@@ -111,6 +111,26 @@ deliberate and worth keeping:
 - **Bands are frozen at conversion time.** Where an over-wide example
   breaks is computed from `--text-width` and baked in; the reference
   document fixes the band *pattern*, never the break points.
+- **A node pandoc produces but cannot render is DELETED, not degraded.**
+  Twice now the same shape: `\Next` arrives as `RawInline "latex"` and a
+  `Cite` with no bibliography carries only the raw LaTeX the reader kept.
+  Both writers drop raw LaTeX, so the text vanishes and the sentence closes
+  over the hole -- "structures like , involving" -- with nothing on the page
+  to show it. Neither had a test, and one of them had a *warning claiming
+  the opposite* ("pandoc renders it literally"; it does not). When a
+  construct is handed to pandoc, check what it renders, not what it parses:
+  a `Cite` in the AST proves only that the AST has a `Cite`.
+- **An unknown environment takes its content with it.** Pandoc returns one
+  it does not know as a single `RawBlock "latex"`, so an example inside
+  `multicols` never became a `Para` and never reached the injector.
+  `inject._free_trapped_placeholders` splits such a block at each
+  placeholder; it needs no list of environments, because a `RawBlock` can
+  only ever be an element of a block list.
+- **An unhandled inline command damages its neighbours.** The renderer falls
+  back to handing the whole enclosing group to pandoc, so one unknown
+  three-token command took a `forest` tree with it: `{\small
+  \begin{forest}...}` came back as `] [Voice' ...`. Adding a command to
+  `inline.DECLARATIONS` or `WRAPPERS` is therefore worth more than it looks.
 - **The macro duplicates the converter's constants, deliberately.** Basic
   can import nothing. `make macro` (`tools/sync_macro.py`) writes the
   second copy from the first and `tests/test_macro_sync.py` fails when

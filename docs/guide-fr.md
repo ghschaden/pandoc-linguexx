@@ -211,7 +211,11 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\ex.` dans `itemize`, `enumerate`, `footnote`, `exe`/`xlist` | laissé tel quel, en LaTeX |
 | étiquettes personnalisées `\ex.[(4′)]` | imprimées littéralement ; le compteur n'avance pas |
 | `\exsource{…}` | rendu en ligne à la fin, pas aligné à droite |
-| `\refrange`, `\Last`, `\Next`, renvois relatifs | laissés en LaTeX |
+| `\refrange` | laissé en LaTeX |
+| `\Next`, `\Last`, `\NNext`, `\LLast` et leurs formes `p` | résolus par position et réécrits en renvois vivants |
+| `\citet`, `\citep`, `\citealt`, `\citeauthor` | résolus par citeproc à partir du `.bib` que le document déclare, avec bibliographie finale ; à défaut de `.bib`, les clés sont imprimées |
+| `\citeauthor`, `\citealt`, `\citeyear` | résolus, mais imprimés `Auteur (Année)` : pandoc n'a qu'un seul mode « auteur dans le texte » ; le nombre est signalé |
+| un exemple dans un environnement inconnu de pandoc (`multicols`, …) | l'exemple est récupéré ; le balisage qui l'entoure ne l'est pas |
 | `\altn`, `\altg` | laissés en LaTeX |
 | `\GlossTransSide` | avertit ; converti en exemple ordinaire, traduction en dessous. Choix délibéré |
 | `[phantomalign]`, `\GlossPhantomAlign` | avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |

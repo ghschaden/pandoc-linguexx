@@ -149,6 +149,13 @@ linguexx2odt input.tex [-o out.odt]
              [--page a4|a4-wide|letter|keep]
                                    page geometry written into the ODT
                                    (default a4; pandoc's own default is Letter)
+             [--bibliography BIB]  a .bib for the citations; repeatable.
+                                   Default: the ones the document names
+             [--csl STYLE]         CSL style for citations and the
+                                   reference list (default: Chicago
+                                   author-date, which reads like natbib's
+                                   author-year mode)
+             [--no-citeproc]       do not resolve citations; print the keys
              [--reference-doc REF.odt]   base styles for pandoc
              [--keep-intermediates DIR]  residue.tex, ast.json, unpatched odt
              [-q] [-v]
@@ -231,7 +238,8 @@ Unless a row says otherwise, this is true of both targets.
 | `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped |
 | `\exsource{…}` | rendered inline at the end, not flush right |
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro to draw |
-| `\refrange`, `\Last`, `\Next`, relative references | left as LaTeX |
+| `\refrange` | left as LaTeX |
+| `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references |
 | `\altn`, `\altg` | left as LaTeX |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
 | `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
@@ -239,6 +247,9 @@ Unless a row says otherwise, this is true of both targets.
 | `[langsci]`, the `\ea … \z` front-end | warns; those examples are left as LaTeX |
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignored — they describe what a PDF screen reader says, which has no ODT counterpart |
 | gb4e `exe`/`xlist` syntax, `[legacy]` mode | out of scope |
+| `\citet`, `\citep`, `\citealt`, `\citeauthor` | resolved with citeproc against the document's `.bib`, with a reference list; the keys are printed if no `.bib` is found |
+| `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
+| an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
 | math inside examples | handed to pandoc; may not survive |
 | anything else unknown | handed to pandoc, as `opendocument` or `openxml` |
 
@@ -253,6 +264,34 @@ answering it in passing would turn an accident into a promise.
 
 So the converter says what it did and moves on. If you want the side layout
 in the `.odt`, it is a column drag in Writer, once, per example.
+
+### Citations
+
+natbib and biblatex citations are resolved, and a reference list is added at
+the end. Nothing needs saying on the command line: the document already
+declares its bibliography with `\addbibresource` or `\bibliography`, so that
+is what gets used.
+
+```
+linguexx2odt paper.tex                       # uses \addbibresource{mabiblio.bib}
+linguexx2odt paper.tex --bibliography ~/refs.bib    # or name one yourself
+linguexx2odt paper.tex --csl unified-style-sheet.csl
+```
+
+`\citet` comes out author-in-text, `\citep` parenthetical, and an optional
+locator (`\citep[786]{fruyt2011}` → "Fruyt 2011, 786") survives. `\citealt`,
+`\citeauthor` and `\citeyear` resolve too, but pandoc's reader has a single
+author-in-text mode, so they all print `Author (Year)`; the run says how many
+of each, since `\citeauthor` in particular asked for the author *without* the
+year.
+
+**If no `.bib` is found the keys are printed** — `[vincent1982]` — and the run
+says so twice, once for the missing file and once for the count. This is not
+politeness: a `Cite` that citeproc has not resolved carries only the raw LaTeX
+the reader kept, and both writers drop that, so before this an unresolved
+citation was not degraded but *deleted*, closing the sentence over the hole
+("According to authors like , the Latin construction…"). Printing the key is
+what makes the gap visible.
 
 ### Choosing the face: `--font`
 
