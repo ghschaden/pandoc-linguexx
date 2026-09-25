@@ -76,9 +76,9 @@ def build_parser() -> argparse.ArgumentParser:
     # new backend rather than a refactor; see plan-docx.md, Phase 1.
     p.add_argument("--to", choices=("odt", "docx"), default="odt",
                    metavar="FORMAT",
-                   help="output format: odt (complete) or docx "
-                        "(Phase 2 of plan-docx.md: numbers and "
-                        "references, no gloss grid yet)")
+                   help="output format: odt, or docx (numbers, references, "
+                        "the gloss grid and the named styles; the .odt "
+                        "target is still the reference one)")
     p.add_argument("--text-width", type=float, default=17.0, metavar="CM",
                    help="width of the text block in cm (default: 17, i.e. A4 with 2cm margins)")
     p.add_argument("--no-split", action="store_true",
