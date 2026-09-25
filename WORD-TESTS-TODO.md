@@ -1,16 +1,24 @@
 # What still needs a real Word
 
-Two readers have now seen the full Phase-4 document and agree to the point:
-LibreOffice and OnlyOffice 9.4 lay it out with identical column offsets
-(`0, 23, 108, 139, 171, 209` from the text start), the same 41pt
-number-to-text indent, and the `\exannot` column at 362 against 361.
-Neither refuses the file. What is left needs
-Microsoft Word specifically, and it is less than it was — the schema check
-and OnlyOffice between them have retired most of the repair-prompt risk, and
-the cache fix has removed the dependency on a reader recalculating anything.
+**Nothing, as of 2026-09-25.** All three tests passed in **Word 365**, on
+the converted `tests/e2e/word-sample.tex`:
 
-What remains is below. None takes more than five minutes once Word is in
-front of you.
+| test | result |
+|---|---|
+| 1a — does it read correctly? | yes |
+| 1b — does inserting an example renumber, references included? | **yes** |
+| 2 — does Word offer to repair the file? | no |
+
+Three readers now agree: LibreOffice, OnlyOffice 9.4 and Word 365. The
+first two also lay it out with identical column offsets (`0, 23, 108, 139,
+171, 209` from the text start), the same 41pt number-to-text indent, and
+the `\exannot` column at 362 against 361.
+
+**This file is now a procedure, not a to-do.** It is kept for the next time
+the emitter changes and the questions need asking again — which they will,
+because none of this can be tested from a machine without Word. Rebuild the
+document as below and work through the three tests; none takes more than
+five minutes once Word is in front of you.
 
 ## The file
 

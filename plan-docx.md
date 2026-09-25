@@ -130,6 +130,21 @@ sources are throwaway; what matters is that the answers are measurements.
     Not Word. But the design was developed against one renderer, and the
     second one agreeing to the point is better evidence than any amount of
     re-reading the markup.
+15. **Word 365 does all of it.** Reported 2026-09-25, on the full Phase-5
+    document (`tests/e2e/word-sample.tex` converted with `--to docx`):
+
+    - it reads correctly, and Word does not offer to repair it;
+    - **inserting an example renumbers the rest, and the cross-references
+      shift with it.**
+
+    That last line is the target. Everything else here is arrangements for
+    making it true: a number that renumbers is the reason not to write the
+    number as text, and until Word said so it was a thing that worked in
+    two readers neither of which is what linguists are asked to submit in.
+
+    No open questions remain that only Word could answer. Three readers
+    agree — LibreOffice, OnlyOffice 9.4 and Word 365 — and the assessment
+    is closed.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.
