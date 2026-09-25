@@ -51,6 +51,11 @@ from typing import ClassVar
 
 from .emit_base import BaseEmitter, register
 from .inline import esc
+from .styles import (
+    ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA,
+    SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA,
+)
+from .styles_docx import LEIPZIG_CHAR
 from .ir import Body, Example
 
 #: twentieths of a point per centimetre, which is what OOXML measures in
@@ -66,7 +71,7 @@ def bookmark_name(index: int) -> str:
     return f"NumEx{index}"
 
 
-def field_run(instr: str, cached: str, font_pt: float = 12.0) -> str:
+def field_run(instr: str, cached: str) -> str:
     r"""A Word field: begin, instruction, cached result, end.
 
     *cached* is what a reader that does not recalculate will show, so it is
@@ -76,13 +81,12 @@ def field_run(instr: str, cached: str, font_pt: float = 12.0) -> str:
         '<w:r><w:fldChar w:fldCharType="begin"/></w:r>'
         + f'<w:r><w:instrText xml:space="preserve"> {instr} </w:instrText></w:r>'
         + '<w:r><w:fldChar w:fldCharType="separate"/></w:r>'
-        + run(cached, font_pt=font_pt)
+        + run(cached)
         + '<w:r><w:fldChar w:fldCharType="end"/></w:r>'
     )
 
 
-def sequence_field(index: int, seq: str = "NumEx",
-                   font_pt: float = 12.0) -> str:
+def sequence_field(index: int, seq: str = "NumEx") -> str:
     """The example number: a live counter, cached at its correct value.
 
     Bookmarked around the field alone and not the line, which is what makes
@@ -92,65 +96,56 @@ def sequence_field(index: int, seq: str = "NumEx",
     name = bookmark_name(index)
     return (
         f'<w:bookmarkStart w:id="{index + 1}" w:name="{name}"/>'
-        + field_run(f"SEQ {seq} \\* ARABIC", str(index + 1), font_pt)
+        + field_run(f"SEQ {seq} \\* ARABIC", str(index + 1))
         + f'<w:bookmarkEnd w:id="{index + 1}"/>'
     )
 
 
 def sequence_ref(index: int, letter: str = "", brackets=None,
-                 bare: bool = False, font_pt: float = 12.0) -> str:
+                 bare: bool = False) -> str:
     """A reference to that bookmark, cached at the number it resolves to."""
     from .latexutil import Brackets
 
     br = brackets or Brackets()
     left, right = ("", "") if bare else (esc(br.ex_l), esc(br.ex_r))
-    inner = field_run(f"REF {bookmark_name(index)} \\h", str(index + 1),
-                      font_pt)
-    tail = run(letter, font_pt=font_pt) if letter else ""
+    inner = field_run(f"REF {bookmark_name(index)} \\h", str(index + 1))
+    tail = run(letter) if letter else ""
     return (
-        (run(left, font_pt=font_pt) if left else "")
+        (run(left) if left else "")
         + inner + tail
-        + (run(right, font_pt=font_pt) if right else "")
+        + (run(right) if right else "")
     )
 
 
-#: The face the width estimate targets.  measure._ADVANCE was measured from
-#: Liberation Serif, which is metric-compatible with this.
-#:
-#: Named on every run, and it has to be until Phase 4 ships a reference
-#: document: pandoc's default reference.docx is neither this face nor this
-#: size, so columns computed from _ADVANCE were about a third too narrow
-#: for what was drawn in them and every longer word wrapped.  A grid whose
-#: columns are right for a font the document does not use is not a grid.
-ESTIMATED_FONT = "Times New Roman"
+def run(text: str, small_caps: bool = False) -> str:
+    """One run of plain text, optionally in small capitals.
 
-
-def run(text: str, small_caps: bool = False, font_pt: float = 12.0) -> str:
-    """One run of plain text, optionally in small capitals."""
-    props = (f'<w:rFonts w:ascii="{ESTIMATED_FONT}" '
-             f'w:hAnsi="{ESTIMATED_FONT}"/>'
-             f'<w:sz w:val="{int(round(font_pt * 2))}"/>')
-    if small_caps:
-        props += "<w:smallCaps/>"
-    return (f"<w:r><w:rPr>{props}</w:rPr>"
-            f'<w:t xml:space="preserve">{esc(text)}</w:t></w:r>')
+    The face and size are not here any more: they are on the CELL_PARA
+    style every cell's paragraph uses, which is where a Word user can
+    change them.  Phase 3 put them on every run because nothing declared
+    the styles yet, and a column measured for one font and drawn in
+    another wraps.
+    """
+    rpr = (f'<w:rPr><w:rStyle w:val="{LEIPZIG_CHAR}"/></w:rPr>'
+           if small_caps else "")
+    return f'<w:r>{rpr}<w:t xml:space="preserve">{esc(text)}</w:t></w:r>'
 
 
 def cell(width_cm: float, content: str, span: int = 1,
-         align: str = "") -> str:
-    r"""One table cell.
+         style: str = CELL_PARA) -> str:
+    """One table cell, its paragraph carrying a named style.
 
-    *align* is for the judgment column, which hangs RIGHT so that the mark
-    sits snug against the text it judges -- linguexx \llap's it, the ODT
-    target gives it a right-aligned paragraph style, and without it the
-    mark floats at the left of its column with a gap before the example.
-    Measured: a 10pt hole between `*` and the word it marks.
+    The style is what a Word user edits from the Styles pane, and it is
+    also where the face and size the column widths were measured against
+    live.  A `w:pStyle` naming a style the document does not define is not
+    an error -- the reference survives and the paragraph renders with the
+    default -- so a missing injection looks like nothing rather than like
+    a failure.  See styles_docx.
     """
     grid = f'<w:gridSpan w:val="{span}"/>' if span > 1 else ""
-    jc = f'<w:pPr><w:jc w:val="{align}"/></w:pPr>' if align else ""
     return (
         f'<w:tc><w:tcPr><w:tcW w:w="{dxa(width_cm)}" w:type="dxa"/>{grid}</w:tcPr>'
-        f"<w:p>{jc}{content}</w:p></w:tc>"
+        f'<w:p><w:pPr><w:pStyle w:val="{style}"/></w:pPr>{content}</w:p></w:tc>'
     )
 
 
@@ -174,8 +169,7 @@ class DocxEmitter(BaseEmitter):
 
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:
-        return sequence_ref(index, letter, self.brackets, bare=bare,
-                            font_pt=self.layout.font_pt)
+        return sequence_ref(index, letter, self.brackets, bare=bare)
 
     def example(self, ex: Example) -> str:
         return self._table(ex)
@@ -185,10 +179,9 @@ class DocxEmitter(BaseEmitter):
         if ex.custom_label:
             return self._runs(ex.custom_label)
         br = self.brackets
-        pt = self.layout.font_pt
-        return ((run(br.ex_l, font_pt=pt) if br.ex_l else "")
-                + sequence_field(ex.index, font_pt=pt)
-                + (run(br.ex_r, font_pt=pt) if br.ex_r else ""))
+        return ((run(br.ex_l) if br.ex_l else "")
+                + sequence_field(ex.index)
+                + (run(br.ex_r) if br.ex_r else ""))
 
     def _runs(self, latex: str) -> str:
         r"""LaTeX source as OOXML runs, with its markup interpreted.
@@ -203,8 +196,7 @@ class DocxEmitter(BaseEmitter):
         Small capitals are direct formatting here.  A named character style
         a Word user can edit is Phase 4, with the rest of the styles.
         """
-        return "".join(run(text, sc, self.layout.font_pt)
-                       for text, sc in self.inline.runs(latex))
+        return "".join(run(text, sc) for text, sc in self.inline.runs(latex))
 
     def _judgment(self, body: Body) -> str:
         return self._runs(body.judgment) if body.judgment else ""
@@ -226,11 +218,25 @@ class DocxEmitter(BaseEmitter):
         for k, (marker, body) in enumerate(p.bodies):
             rows += self._body_rows(ex, marker, body, k == 0, p, k)
 
+        # Spacer rows rather than w:spacing on the first and last
+        # paragraphs, which the plan asked to weigh.  Both make the gap a
+        # style a user can edit; the rows keep the two targets one shape,
+        # so a document converted either way is the same object and one
+        # vocabulary explains both.  w:spacing would also have to solve an
+        # example whose first row is its last.
+        rows = ([self._spacer_row(widths, SPACE_ABOVE_PARA)] + rows
+                + [self._spacer_row(widths, SPACE_BELOW_PARA)])
+
         return (
             f'<w:tbl><w:tblPr><w:tblW w:w="{dxa(sum(widths))}" w:type="dxa"/>'
             f"{TABLE_PR}</w:tblPr>"
             f"<w:tblGrid>{grid_cols}</w:tblGrid>" + "".join(rows) + "</w:tbl>"
         )
+
+    def _spacer_row(self, widths: list[float], style: str) -> str:
+        """An empty full-width row whose only job is to be *style*'s height."""
+        return ("<w:tr>" + cell(sum(widths), "", span=len(widths), style=style)
+                + "</w:tr>")
 
     # -- rows --------------------------------------------------------------
     def _body_rows(self, ex, marker, body, first, p, body_index) -> list[str]:
@@ -257,27 +263,32 @@ class DocxEmitter(BaseEmitter):
             if p.has_judgment:
                 out.append(cell(p.lead[i],
                                 self._judgment(body) if active else "",
-                                align="right"))
+                                style=JUDGMENT_PARA))
             return "".join(out)
 
         def annot_cell(active: bool) -> str:
             if not p.has_annot:
                 return ""
             content = self._runs(body.annot) if (active and body.annot) else ""
-            return cell(p.widths[-1], content)
+            return cell(p.widths[-1], content, style=ANNOT_PARA)
 
-        def body_span(content: str) -> str:
+        def body_span(content: str, style: str = CELL_PARA) -> str:
             """One cell across every body column, spans included."""
             return cell(sum(p.columns) + (p.widths[len(p.lead) + len(p.columns)]
                                           if p.filler else 0.0),
-                        content, span=ncols)
+                        content, span=ncols, style=style)
 
         if body.tiers:
             for b, band in enumerate(p.grid.bands_of(body_index)):
-                for tier in body.tiers:
+                for tr, tier in enumerate(body.tiers):
+                    # The first row of a continuation band is marked,
+                    # because nothing else in the finished table can say
+                    # so: a band's rows are built exactly like a tier's.
+                    style = BAND_PARA if b and not tr else CELL_PARA
                     rows.append(
                         "<w:tr>" + lead_cells(not head_used)
-                        + self._band_cells(tier.cells, band, p, body_index)
+                        + self._band_cells(tier.cells, band, p, body_index,
+                                           style)
                         + annot_cell(not head_used) + "</w:tr>"
                     )
                     head_used = True
@@ -293,12 +304,13 @@ class DocxEmitter(BaseEmitter):
         if trailer:
             rows.append(
                 "<w:tr>" + lead_cells(False)
-                + body_span(self._runs(trailer))
+                + body_span(self._runs(trailer), style=TRANSLATION_PARA)
                 + annot_cell(False) + "</w:tr>"
             )
         return rows
 
-    def _band_cells(self, cells, band, p, body_index: int) -> str:
+    def _band_cells(self, cells, band, p, body_index: int,
+                    style: str = CELL_PARA) -> str:
         """One tier's cells for one band, padded to the grid by SPAN.
 
         The padding counts columns, not cells, for the reason in
@@ -311,11 +323,11 @@ class DocxEmitter(BaseEmitter):
             span = p.grid.span(body_index, j)
             content = self._runs(cells[j]) if j < len(cells) else ""
             width = sum(p.columns[j:j + span])
-            out.append(cell(width, content, span=span))
+            out.append(cell(width, content, span=span, style=style))
             covered += span
         remaining = len(p.columns) + p.filler - covered
         if remaining > 0:
             tail = sum(p.columns[covered:]) + (
                 p.widths[len(p.lead) + len(p.columns)] if p.filler else 0.0)
-            out.append(cell(tail, "", span=remaining))
+            out.append(cell(tail, "", span=remaining, style=style))
         return "".join(out)

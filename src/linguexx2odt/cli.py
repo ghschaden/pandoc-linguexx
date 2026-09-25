@@ -28,7 +28,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import postprocess
+from . import postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
 from .inject import inject
@@ -192,7 +192,8 @@ def main(argv: list[str] | None = None) -> int:
             # itself by being used, and a column's width lives in the cell.
             # What it WILL need is the named styles, so that a Word user
             # can restyle from the sidebar as a Writer user can: Phase 4.
-            shutil.copy2(raw_odt, out_path)
+            postprocess_docx.apply_styles(
+                raw_odt, out_path, styles_docx.styles_fragment(layout))
         else:
             content = postprocess.read(raw_odt, "content.xml")
             content = postprocess.inject_sequence_decls(content)

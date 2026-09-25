@@ -147,7 +147,8 @@ def test_inline_markup_is_interpreted_not_copied(tmp_path: Path) -> None:
     xml = document_xml(build(tmp_path, GLOSS, "m"))
     assert "\\lpzg" not in xml, "the command reached the document literally"
     assert "3sg" in xml
-    assert "<w:smallCaps/>" in xml, "the Leipzig gloss is not in small capitals"
+    assert '<w:rStyle w:val="LxLeipzig"/>' in xml, (
+        "the Leipzig gloss does not carry the small-caps character style")
     assert "\u2018my book\u2019" in xml, "the quotes were not turned"
 
 
@@ -331,3 +332,77 @@ def test_every_row_adds_up_to_the_grid_by_span(tmp_path: Path) -> None:
             f"row {i} covers {cells + spanned} of {n_cols} columns "
             f"({cells} cells, {spanned} spanned)"
         )
+
+
+@pandoc
+def test_the_styles_an_example_uses_are_defined(tmp_path: Path) -> None:
+    """Phase 4, and fact 6 is why it is not optional.
+
+    A `w:pStyle` naming a style the document does not define is not an
+    error: the reference survives and the paragraph renders with the
+    default.  So an example can reference LxExampleCell, look almost right,
+    and be set in a font the columns were not measured for -- which is
+    exactly what happened between removing the per-run font and injecting
+    the styles.  Every style referenced must exist.
+    """
+    docx = build(tmp_path, BANDED, "s")
+    xml = document_xml(docx)
+    styles = zipfile.ZipFile(docx).read("word/styles.xml").decode("utf-8")
+
+    referenced = set(re.findall(r'<w:pStyle w:val="(Lx[A-Za-z]+)"/>', xml))
+    referenced |= set(re.findall(r'<w:rStyle w:val="(Lx[A-Za-z]+)"/>', xml))
+    assert referenced, "the example references no styles at all"
+
+    defined = set(re.findall(r'w:styleId="(Lx[A-Za-z]+)"', styles))
+    missing = sorted(referenced - defined)
+    assert not missing, (
+        f"referenced but never defined: {missing} — they will render with "
+        f"Word's defaults, in a font the columns were not measured for")
+
+
+@pandoc
+def test_the_body_font_is_declared_once_on_the_style(tmp_path: Path) -> None:
+    """Fact 10, settled where it belongs.
+
+    The column widths come from _ADVANCE (Liberation Serif, 12pt).  Phase 3
+    named that face on every single run, because nothing declared the
+    styles yet and a column measured for one font and drawn in another
+    wraps.  It belongs on the style a user can edit, and once there the
+    runs should carry no font of their own.
+    """
+    docx = build(tmp_path, BANDED, "f")
+    xml = document_xml(docx)
+    styles = zipfile.ZipFile(docx).read("word/styles.xml").decode("utf-8")
+
+    assert "w:rFonts" not in xml, (
+        "a run still carries direct font formatting; the style should be "
+        "the only place the face is named")
+    assert "LxExampleCell" in styles and "w:rFonts" in styles, (
+        "the cell style does not name a face, so the columns are measured "
+        "for one font and drawn in whatever the reader defaults to")
+
+
+@pandoc
+def test_the_space_around_an_example_is_a_styled_row(tmp_path: Path) -> None:
+    """Spacer rows, as in the ODT target, and the plan asked why.
+
+    w:spacing on the first and last paragraphs was the alternative. Both
+    make the gap a style a user can edit; the rows keep the two targets one
+    shape, so a document converted either way is the same object and one
+    vocabulary explains both — and w:spacing would additionally have to
+    answer what an example whose first row is also its last should do.
+
+    Measured between two examples: 24.0pt in the .docx and 24.0pt in the
+    .odt, from the same source. (The gap at the very start and end of the
+    document differs, because pandoc's reference.docx puts its own spacing
+    around a table; that is the reference document's business, not this
+    row's.)
+    """
+    xml = document_xml(build(tmp_path, PLAIN, "sp"))
+    for style in ("LxExampleSpaceAbove", "LxExampleSpaceBelow"):
+        assert f'<w:pStyle w:val="{style}"/>' in xml, f"no {style} row"
+
+    # the spacer rows top and tail each example, and span the whole grid
+    rows = re.findall(r"<w:tr>(.*?)</w:tr>", xml, re.S)
+    assert "LxExampleSpaceAbove" in rows[0], "the first row is not the spacer"
+    assert "LxExampleSpaceBelow" in rows[-1], "the last row is not the spacer"

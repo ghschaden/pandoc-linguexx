@@ -240,16 +240,38 @@ characters. Small capitals are direct formatting for now — a named
 character style is Phase 4 — but they had to be drawn in Phase 3 regardless,
 because the estimator measured them.
 
-### Phase 4 — styles, the font baseline, and polish (1 day)
-Inject the styles so a Word user can restyle from the sidebar, as a Writer
-user can. Small caps for `\lpzg`. **Settle the font baseline** (fact 10):
-either measure a second `_ADVANCE` table, or ship a reference document that
-sets the body font to the one `_ADVANCE` already describes. The second is
-much less work and keeps one table honest instead of two.
+### Phase 4 — styles and the font baseline — DONE
 
-The space above and below an example is a spacer row with a styled height in
-ODT; check whether `w:spacing` on the table's paragraphs is the better idiom
-in OOXML before porting the spacer rows.
+`styles_docx.py` declares the nine styles an example uses, under the same
+names as the ODT target so that one document answers to one vocabulary
+whichever way it was converted. `postprocess_docx.py` injects them into
+`word/styles.xml` — a smaller pass than the ODT one, which also has to
+declare its sequence and carry automatic column styles; OOXML needs
+neither. Its own rewrite, because ODF puts an uncompressed `mimetype`
+first and the ODT pass asserts it, which would refuse every valid .docx.
+
+**Fact 10 is settled where it belongs.** Phase 3 named the face and size on
+every run, because nothing declared the styles yet. It is now on
+`LxExampleCell`, which is also where a user can change it — and a test
+asserts no run carries `w:rFonts` any more. The geometry is unchanged by
+the move, measured: the same columns at 113/136/221/252/284/322.
+
+Small capitals became the `LxLeipzig` character style; the judgment's right
+alignment became `LxJudgmentCell`'s; the continuation-band mark became
+`LxExampleBand`, as in ODT.
+
+**The spacing question the plan asked to weigh**: spacer rows, not
+`w:spacing` on the first and last paragraphs. Both make the gap an editable
+style. The rows keep the two targets one shape, so a document converted
+either way is the same object; `w:spacing` would also have to answer what
+an example whose first row is its last should do. Measured between two
+examples: **24.0pt in both targets** from the same source. The gap at the
+document's start and end differs, because pandoc's `reference.docx` puts
+its own spacing around a table — the reference document's business, not the
+row's, and the remaining argument for shipping one.
+
+Three mutations checked: styles never injected, the cell style dropped from
+the paragraphs, and no face on the cell style. All caught.
 
 ### Phase 5 — say so (½ day)
 README, `docs/guide-fr.md`, CLAUDE.md, and the "What it does not" table,

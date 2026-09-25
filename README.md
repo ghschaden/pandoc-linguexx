@@ -185,9 +185,14 @@ file whose numbers are live `SEQ` fields and whose cross-references are
 `REF` fields, so inserting an example renumbers the rest there too. Through Phase 3 of
 `plan-docx.md` it also lays out the gloss grid, judgments, sub-examples,
 bands and `\exannot`, with the columns measured against the same rendered
-geometry the `.odt` target is held to. What it does not do yet is the named
-styles, so a Word user cannot restyle examples from the sidebar the way a
-Writer user can; the `.odt` target remains the complete one.
+geometry the `.odt` target is held to. Examples carry named
+styles — the same names the `.odt` target uses — so a Word user can restyle
+every example from the Styles pane, and the body face is declared there
+rather than on each run.
+
+It has not been opened in Word. Everything above is measured through
+LibreOffice and checked against the ECMA-376 schemas; `WORD-TESTS-TODO.md`
+says what is left to ask of Word itself.
 
 **Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
 invisible: this converter was written against 1.2 and silently kept
