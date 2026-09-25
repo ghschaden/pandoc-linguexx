@@ -42,7 +42,7 @@ redesign, and it is worth doing regardless.
 This is the test the target lives or dies by: a number that does not
 renumber is a number the user could have typed.
 
-## Test 2 — does Word offer to repair the file?
+## Test 2 — does Word offer to repair the file? (partly answered already)
 
 Watch the moment it opens. A repair prompt means the OOXML is malformed
 somewhere LibreOffice tolerates and Word does not.
@@ -51,8 +51,23 @@ Answer **yes/no**, and if yes, whether the document still opens afterwards
 and what it looks like. A repair prompt is worse than a wrong column width:
 it teaches the user not to trust the tool.
 
-If this fails, Phase 1 grows an OOXML schema validator in CI. See "Without
-Word" below for how far that can be taken here.
+**Most of this risk is now retired without Word.** The sample validates
+clean against the official ECMA-376 transitional schemas:
+
+```
+make schemas                                  # once, into .ooxml-schemas/
+python3 tools/validate_docx.py /tmp/linguexx-docx-sample.docx
+```
+
+reports every XML part well-formed and schema-valid. So the markup
+conforms, which is the bulk of what makes Word refuse a file.
+
+What is left for Word is the part a schema cannot describe: relationships,
+content types, part-level rules, and Word's own opinions. A clean validation
+makes a repair prompt unlikely; only Word makes it impossible. If Word *does*
+prompt despite this, that is worth knowing precisely — it would mean the gap
+between "conforms" and "Word accepts" is wider than assumed, and Phase 1
+needs more than a validator.
 
 ## Test 3 — does inserting an example renumber the rest?
 
@@ -114,14 +129,19 @@ ten minutes' work.
 
 Worth doing anyway, and it shrinks what Word has to answer:
 
-- **Schema-validate the OOXML.** `lxml` is installed; the ECMA-376
-  schemas are a download away. Validating `word/document.xml` against
-  `wml.xsd` would catch most of what makes Word offer to repair a file,
-  and it belongs in CI once the emitter exists. This is the single highest
-  -value thing that does not need Word.
-- **Check every part is well-formed and the zip is sane** — cheap, catches
-  gross breakage, and proves nothing about schema conformance.
-- **Open the sample in OnlyOffice**, per above.
+- **Schema validation — done.** `make schemas` fetches the ECMA-376
+  transitional schemas into a gitignored `.ooxml-schemas/`, and
+  `tools/validate_docx.py` checks every XML part of a `.docx` for
+  well-formedness and schema conformance. The sample passes. Both checks
+  were mutation-tested — a cell placed outside a row, and a truncated
+  part — and each is reported with its line.
+
+  Wire it into CI in Phase 1, once there is emitter output worth
+  validating; validating only the sample on every push would cost an 8 MB
+  download to check a file nobody is editing.
+- **Open the sample in OnlyOffice**, per above: a second independent OOXML
+  reader, and the one thing here that tests acceptance rather than
+  conformance.
 
 None of these can answer Test 1. Field recalculation is behaviour, not
 markup, and only an implementation can tell you.
@@ -136,5 +156,6 @@ later reader can tell a measurement from an assumption, and "Word does it"
 without a version is an assumption wearing a measurement's clothes.
 
 If Test 1 came back needing F9, edit Phase 2 to say the caches are written
-correct at build time. If Test 2 came back with a repair prompt, add the
-schema validator to Phase 1 before any more OOXML is written.
+correct at build time. If Test 2 came back with a repair prompt *despite*
+the file validating, say so loudly — the validator exists now, so that
+result would mean conformance is not enough and Phase 1 needs more than it.

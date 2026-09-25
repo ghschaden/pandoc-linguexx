@@ -6,6 +6,7 @@
 #   make macro     rewrite the macro's constants from the converter's
 #   make oxt       package the Writer macro as a LibreOffice extension
 #   make advances  check the width table against the font it describes
+#   make schemas   fetch the ECMA-376 schemas a .docx is validated against
 #   make venv      recreate .venv (see the note below)
 #   make clean     remove build artefacts and caches
 #
@@ -17,7 +18,7 @@
 
 PYTHON ?= python3
 
-.PHONY: all check test lint macro oxt advances venv clean
+.PHONY: all check test lint macro oxt advances schemas venv clean
 
 all: check
 
@@ -51,6 +52,13 @@ oxt:
 
 advances:
 	@$(PYTHON) tools/measure_advances.py
+
+# Into .ooxml-schemas/, which is gitignored: 968 KB of somebody else's
+# standard, cached rather than vendored.  Transitional, from Part 4 -- the
+# Strict schemas in Part 1 are a different namespace and validating against
+# them fails on that alone.  tools/validate_docx.py uses them.
+schemas:
+	@$(PYTHON) tools/fetch_ooxml_schemas.py
 
 # pCloud syncs this checkout between machines and does not preserve the
 # executable bit, which leaves .venv/bin/linguexx2odt present and not

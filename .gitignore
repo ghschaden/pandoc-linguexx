@@ -18,3 +18,4 @@ tests/reference/*.fodt
 
 # LibreOffice's lock file, left behind beside a document it has open
 .~lock.*#
+.ooxml-schemas/

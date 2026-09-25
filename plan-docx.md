@@ -62,6 +62,19 @@ sources are throwaway; what matters is that the answers are measurements.
     needs either its own measured table or a reference document whose body
     font it sets. Not hard, but it is real work and it is not in the
     "geometry is free" column.
+11. **The OOXML this plan proposes is schema-valid.** The sample
+    `spikes/s5_docx_sample.py` builds -- tables, fixed grids, `SEQ` and
+    `REF` fields, bookmarks -- validates clean against ECMA-376
+    **transitional** `wml.xsd`, checked with `tools/validate_docx.py`.
+    That is most of the "will Word offer to repair it" risk answered
+    without Word. Not all of it: Word enforces relationships, content types
+    and part rules the schema does not describe, and has opinions besides.
+    Note the flavour. Part 1's 5th edition ships **Strict**
+    (`purl.oclc.org/ooxml/...`); pandoc and Word both write **Transitional**
+    (`schemas.openxmlformats.org/.../2006/main`), and the Transitional
+    schemas are in **Part 4** alone. Validating one against the other fails
+    on the namespace before reaching anything real, which looks alarming
+    and means nothing.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.
