@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 from . import postprocess
-from .emit_odt import Emitter
+from .emit_base import emitter_for
 from .extract import parse
 from .inject import inject
 from .styles import Layout, named_styles
@@ -72,6 +72,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="print the LibreOffice Writer macro (LinguExx.bas) to "
                         "stdout and exit; see docs/macro.md for how to install it")
     p.add_argument("-o", "--output", type=Path, help="output .odt (default: input with .odt)")
+    # One choice, on purpose.  The seam exists so that adding "docx" is a
+    # new backend rather than a refactor; see plan-docx.md, Phase 1.
+    p.add_argument("--to", choices=("odt",), default="odt", metavar="FORMAT",
+                   help="output format (only 'odt' so far; see plan-docx.md)")
     p.add_argument("--text-width", type=float, default=17.0, metavar="CM",
                    help="width of the text block in cm (default: 17, i.e. A4 with 2cm margins)")
     p.add_argument("--no-split", action="store_true",
@@ -139,8 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         space_above_cm=args.space_above,
         space_below_cm=args.space_below,
     )
-    emitter = Emitter(layout=layout, split=not args.no_split,
-                      brackets=parsed.brackets)
+    emitter = emitter_for(args.to, layout=layout, split=not args.no_split,
+                          brackets=parsed.brackets)
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}
 

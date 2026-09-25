@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU General Public License along
 # with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Check emit_odt._ADVANCE against the font it claims to describe.
+"""Check measure._ADVANCE against the font it claims to describe.
 
 The converter has no font metrics at conversion time, so it carries a table
 of them.  This is where the table came from, and how to find out that it
@@ -44,7 +44,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import uno  # type: ignore  # noqa: E402
 
 import run_macro_test as harness  # noqa: E402
-from linguexx2odt.emit_odt import _ADVANCE  # noqa: E402
+from linguexx2odt.measure import _ADVANCE  # noqa: E402
 
 #: The face the estimate targets.  Liberation Serif is metric-compatible
 #: with Times New Roman, so its advances are the ones to carry.
@@ -94,10 +94,10 @@ def main() -> int:
     for ch, table, got in wrong:
         print(f"{ch!r}: table says {table}, {FONT} says {got}")
     if absent or wrong:
-        print(f"\nemit_odt._ADVANCE has drifted from {FONT}; "
+        print(f"\nmeasure._ADVANCE has drifted from {FONT}; "
               "reprint it with --print")
         return 1
-    print(f"emit_odt._ADVANCE: {len(real)} advances, all within "
+    print(f"measure._ADVANCE: {len(real)} advances, all within "
           f"{TOLERANCE} em of {FONT}")
     return 0
 

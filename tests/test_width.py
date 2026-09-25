@@ -34,7 +34,7 @@ import pytest
 
 from linguexx2odt import postprocess
 from linguexx2odt.cli import main
-from linguexx2odt.emit_odt import _ADVANCE, _advance, runs_width_cm, text_width_cm
+from linguexx2odt.measure import _ADVANCE, _advance, runs_width_cm, text_width_cm
 from linguexx2odt.inline import InlineRenderer
 from linguexx2odt.styles import Layout
 

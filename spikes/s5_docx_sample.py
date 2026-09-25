@@ -52,7 +52,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from linguexx2odt.emit_odt import text_width_cm      # noqa: E402
+from linguexx2odt.measure import text_width_cm       # noqa: E402
 from linguexx2odt.styles import Layout               # noqa: E402
 
 DXA = 566.93          #: twentieths of a point per centimetre

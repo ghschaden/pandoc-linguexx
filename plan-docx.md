@@ -150,12 +150,28 @@ About half the package, and the half that took the longest to get right:
 
 ## Phases
 
-### Phase 1 — the seam (½ day)
-Split `Emitter` into what is shared and what is ODF. Introduce the target
-as a parameter, with ODT as the only value, and change nothing else. The
-suite must report the same 203 tests, because nothing has happened yet.
-Doing this first keeps the diff of Phase 2 readable as "a new backend"
-rather than "a refactor with a backend inside it".
+### Phase 1 — the seam — DONE
+
+`measure.py` holds the arithmetic: `_ADVANCE`, the width functions, `Grid`
+and `Plan`. `emit_base.py` holds `BaseEmitter` — `prepare()`, `_bands()`,
+`_lead_widths()`, `_word_widths()` — plus the `TARGETS` registry and
+`emitter_for()`. `emit_odt.Emitter` subclasses it, keeps the XML and its
+`auto_styles` (ODF-only: OOXML carries a column's width inline in the
+cell), and registers itself as `odt`. `emit_odt.py` went from 671 lines to
+379. `cli.py` gained `--to`, with one choice.
+
+The suite reported the same 203 tests throughout, which is what a seam
+should cost. `tests/test_targets.py` adds four for the seam itself, one of
+which is the invariant worth keeping: **no markup vocabulary in the shared
+half**. An emitter reaching for `table:` in format-agnostic code breaks
+nothing today and breaks the second target on the day it is written.
+
+Both new tests needed a second attempt, and both failures are the same
+shape — a check that could not fail. The leak test first looked for
+`'"table:'` and sailed straight past `'"<table:table-cell/>"'`; widened, it
+then flagged the module docstrings, which discuss `table:` and `w:`
+precisely to promise the code contains neither. It now blanks docstrings
+with `ast` before reading, and was mutated in both directions afterwards.
 
 ### Phase 2 — numbers and references (1 day)
 `emit_docx.py` emitting one example as a `w:tbl`, with `SEQ` fields and

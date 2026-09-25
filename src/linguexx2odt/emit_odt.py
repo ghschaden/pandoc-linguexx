@@ -33,13 +33,15 @@ around them are literal text, exactly as a Writer user would type them.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
-from .inline import InlineRenderer, esc
+from .emit_base import BaseEmitter, register
+from .inline import esc
 from .latexutil import Brackets
 from .ir import Body, Example
+from .measure import Grid, Plan
 from .styles import (
-    ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME,
+    ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, SEQ_NAME,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
 )
 
@@ -75,244 +77,24 @@ def sequence_ref(index: int, letter: str = "", brackets: Brackets | None = None,
     )
 
 
-#: Advance widths in em, measured from Liberation Serif — metric-compatible
-#: with Times New Roman, which is the face this estimate targets.  Check or
-#: reprint them with ``python3 tools/measure_advances.py``.
-#:
-#: These replace a four-bucket guess (wide 0.90 / narrow 0.32 / caps 0.70 /
-#: the rest 0.50) that was 8.3% out on average and, worse, 6.7% out in one
-#: direction: it overestimated nearly everything, with 'I' 113% too wide and
-#: 'J' 79%.  Both are common in Leipzig glosses — INF, IND, INS — so gloss
-#: columns were the worst affected, and width_safety was multiplying on top
-#: of a bias it was supposed to be insuring against.
-# --- BEGIN MEASURED — see tools/measure_advances.py
-_ADVANCE: dict[str, float] = {
-    ' ': 0.251, '!': 0.334, '"': 0.409, '#': 0.502, '$': 0.502,
-    '%': 0.832, '&': 0.78, "'": 0.18, '(': 0.334, ')': 0.334, '*': 0.502,
-    '+': 0.566, ',': 0.251, '-': 0.334, '.': 0.251, '/': 0.277,
-    '0': 0.502, '1': 0.502, '2': 0.502, '3': 0.502, '4': 0.502,
-    '5': 0.502, '6': 0.502, '7': 0.502, '8': 0.502, '9': 0.502,
-    ':': 0.277, ';': 0.277, '<': 0.566, '=': 0.566, '>': 0.566,
-    '?': 0.446, '@': 0.922, 'A': 0.724, 'B': 0.667, 'C': 0.667,
-    'D': 0.724, 'E': 0.611, 'F': 0.555, 'G': 0.724, 'H': 0.724,
-    'I': 0.334, 'J': 0.39, 'K': 0.724, 'L': 0.611, 'M': 0.889, 'N': 0.724,
-    'O': 0.724, 'P': 0.555, 'Q': 0.724, 'R': 0.667, 'S': 0.555,
-    'T': 0.611, 'U': 0.724, 'V': 0.724, 'W': 0.945, 'X': 0.724,
-    'Y': 0.724, 'Z': 0.611, '[': 0.334, '\\': 0.277, ']': 0.334,
-    '^': 0.469, '_': 0.502, '`': 0.334, 'a': 0.446, 'b': 0.502,
-    'c': 0.446, 'd': 0.502, 'e': 0.446, 'f': 0.334, 'g': 0.502,
-    'h': 0.502, 'i': 0.277, 'j': 0.277, 'k': 0.502, 'l': 0.277, 'm': 0.78,
-    'n': 0.502, 'o': 0.502, 'p': 0.502, 'q': 0.502, 'r': 0.334, 's': 0.39,
-    't': 0.277, 'u': 0.502, 'v': 0.502, 'w': 0.724, 'x': 0.502,
-    'y': 0.502, 'z': 0.446, '{': 0.48, '|': 0.199, '}': 0.48, '~': 0.54,
-    '\xa0': 0.251, '¡': 0.334, '¢': 0.502, '£': 0.502, '¤': 0.502,
-    '¥': 0.502, '¦': 0.199, '§': 0.502, '¨': 0.334, '©': 0.761,
-    'ª': 0.277, '«': 0.502, '¬': 0.566, '\xad': 0.0, '®': 0.761,
-    '¯': 0.502, '°': 0.401, '±': 0.551, '²': 0.3, '³': 0.3, '´': 0.334,
-    'µ': 0.577, '¶': 0.454, '·': 0.334, '¸': 0.334, '¹': 0.3, 'º': 0.311,
-    '»': 0.502, '¼': 0.75, '½': 0.75, '¾': 0.75, '¿': 0.446, 'À': 0.724,
-    'Á': 0.724, 'Â': 0.724, 'Ã': 0.724, 'Ä': 0.724, 'Å': 0.724,
-    'Æ': 0.889, 'Ç': 0.667, 'È': 0.611, 'É': 0.611, 'Ê': 0.611,
-    'Ë': 0.611, 'Ì': 0.334, 'Í': 0.334, 'Î': 0.334, 'Ï': 0.334,
-    'Ð': 0.724, 'Ñ': 0.724, 'Ò': 0.724, 'Ó': 0.724, 'Ô': 0.724,
-    'Õ': 0.724, 'Ö': 0.724, '×': 0.566, 'Ø': 0.724, 'Ù': 0.724,
-    'Ú': 0.724, 'Û': 0.724, 'Ü': 0.724, 'Ý': 0.724, 'Þ': 0.555,
-    'ß': 0.502, 'à': 0.446, 'á': 0.446, 'â': 0.446, 'ã': 0.446,
-    'ä': 0.446, 'å': 0.446, 'æ': 0.667, 'ç': 0.446, 'è': 0.446,
-    'é': 0.446, 'ê': 0.446, 'ë': 0.446, 'ì': 0.277, 'í': 0.277,
-    'î': 0.277, 'ï': 0.277, 'ð': 0.502, 'ñ': 0.502, 'ò': 0.502,
-    'ó': 0.502, 'ô': 0.502, 'õ': 0.502, 'ö': 0.502, '÷': 0.551,
-    'ø': 0.502, 'ù': 0.502, 'ú': 0.502, 'û': 0.502, 'ü': 0.502,
-    'ý': 0.502, 'þ': 0.502, 'ÿ': 0.502, 'ŋ': 0.495, 'ɑ': 0.525,
-    'ɔ': 0.446, 'ə': 0.446, 'ɛ': 0.42, 'ɜ': 0.42, 'ɡ': 0.502, 'ɪ': 0.277,
-    'ʃ': 0.334, 'ʊ': 0.551, 'ʌ': 0.502, 'ʒ': 0.446, 'ˈ': 0.334,
-    'ˌ': 0.334, 'ː': 0.277, 'θ': 0.48, '‐': 0.334, '–': 0.502, '—': 1.001,
-    '‘': 0.334, '’': 0.334, '“': 0.446, '”': 0.446, '…': 1.001,
-    '′': 0.217, '″': 0.416,
-}
-# --- END MEASURED
-
-#: For anything the table does not cover.  Deliberately unambitious: Latin
-#: text is covered, and a script that is not (CJK, rarer IPA) is not going
-#: to be served by a single number anyway.
-_FALLBACK_UPPER = 0.667
-_FALLBACK_OTHER = 0.5
 
 
-def _advance(ch: str) -> float:
-    width = _ADVANCE.get(ch)
-    if width is not None:
-        return width
-    return _FALLBACK_UPPER if ch.isupper() else _FALLBACK_OTHER
-
-
-def text_width_cm(text: str, em_cm: float) -> float:
-    """Estimated rendered width of *text*."""
-    return sum(_advance(c) for c in text) * em_cm
-
-
-def _sc_advance(ch: str, sc_ratio: float) -> float:
-    """A small capital: the *capital's* advance, at sc_ratio of the size.
-
-    Which is usually wider than the lowercase letter it stands in for —
-    small-cap I against lowercase i is the extreme case — and occasionally
-    narrower, for the letters that are already wide in lowercase.
-    """
-    if ch.islower():
-        return _advance(ch.upper()) * sc_ratio
-    return _advance(ch)
-
-
-def runs_width_cm(runs, em_cm: float, sc_ratio: float) -> float:
-    """Estimated width of (text, is_small_caps) runs, each measured as drawn.
-
-    Small caps have to be measured as what they draw as, not as what they
-    say: \\lpzg{3sg} sets three small capitals, and estimating them from
-    "3sg" makes the column too narrow for its own contents.
-    """
-    return em_cm * sum(
-        sum(_sc_advance(c, sc_ratio) if small_caps else _advance(c) for c in text)
-        for text, small_caps in runs
-    )
-
-
-#: one body's own layout: its word widths, and the bands they were packed
-#: into.  An unglossed body has neither.
-Plan = tuple[list[float], list[tuple[int, int]]]
-
-
-class Grid:
-    """The column grid of one example's table.
-
-    Two things start at the left edge and so put their word boundaries in
-    different places: the **bands** an overlong body is broken into, and
-    the separate **bodies** of a sub-example paradigm.  A single table has
-    one column grid, so the grid is the **union** of every boundary either
-    produces, and each word spans the columns it covers — precisely the
-    structure that hand-merging cells in Writer produces (reference.odt
-    item 4 reaches 22 columns for a 13-word band over a 9-word band).
-
-    Sharing one *width per word index* across bodies instead — which is
-    what this did until the union was widened to cover them — couples the
-    items together: item a's second column has to be as wide as item b's
-    second column, so a three-word sentence acquires a gap in the middle
-    because a longer word sits under it in an unrelated sentence.  Bands
-    were already exempt from that coupling; items are now too.
-    """
-
-    TOL = 0.015  # cm; boundaries closer than this are the same boundary
-
-    def __init__(self, plans: list[Plan]) -> None:
-        self.plans = plans
-
-        edges: list[float] = []
-        for word_widths, bands in plans:
-            for start, stop in bands:
-                x = 0.0
-                for j in range(start, stop):
-                    x += word_widths[j]
-                    edges.append(x)
-        merged: list[float] = []
-        for x in sorted(edges):
-            if not merged or x - merged[-1] > self.TOL:
-                merged.append(x)
-        self.edges = merged
-        widest = max((sum(w) for w, _ in plans), default=0.0)
-        self.columns = [
-            b - a for a, b in zip([0.0] + merged, merged)
-        ] or [widest]
-        self.total = merged[-1] if merged else widest
-
-        # (body index, word index) -> (first grid column, span)
-        self._placement: dict[tuple[int, int], tuple[int, int]] = {}
-        for k, (word_widths, bands) in enumerate(plans):
-            for start, stop in bands:
-                x = 0.0
-                for j in range(start, stop):
-                    lo = self._edge_index(x)
-                    x += word_widths[j]
-                    hi = self._edge_index(x)
-                    self._placement[(k, j)] = (lo, max(1, hi - lo))
-
-    def _edge_index(self, x: float) -> int:
-        """Number of grid columns lying left of position *x*."""
-        for i, e in enumerate(self.edges):
-            if abs(e - x) <= self.TOL:
-                return i + 1
-        return sum(1 for e in self.edges if e < x)
-
-    def bands_of(self, body: int) -> list[tuple[int, int]]:
-        return self.plans[body][1]
-
-    def span(self, body: int, word: int) -> int:
-        return self._placement[(body, word)][1]
 
 
 def _col_name(ex_index: int, col: int) -> str:
     return f"LxExCol{ex_index}.{col}"
 
 
+@register("odt")
 @dataclass
-class Emitter:
-    layout: Layout = field(default_factory=Layout)
-    inline: InlineRenderer = None  # type: ignore[assignment]
-    warnings: list[str] = field(default_factory=list)
+class Emitter(BaseEmitter):
+    """OpenDocument.  The geometry is BaseEmitter's; this writes the XML."""
+
     auto_styles: list[str] = field(default_factory=list)
+    """Automatic column styles, which a raw block cannot carry itself and
+    postprocess injects into content.xml.  ODF-only: OOXML puts a column's
+    width inline in the cell."""
 
-    split: bool = True
-    """Break an example too wide for the text block into stacked bands."""
-
-    brackets: Brackets = field(default_factory=Brackets)
-    """What to wrap a number in -- \\ExLBr & co., as the preamble set them."""
-
-    any_judgment: bool = False
-    """Whether *any* example in the document carries a judgment mark.
-
-    The column is emitted for every example or for none, so the text block
-    starts at the same x throughout: ../linguexx/tests/judgment-align.tex
-    pins that alignment across a judged/unjudged *pair of examples*, not
-    merely within one."""
-
-    def __post_init__(self) -> None:
-        if self.inline is None:
-            self.inline = InlineRenderer(self.warnings.append)
-        self._warn = self.warnings.append
-
-    def prepare(self, examples) -> None:
-        r"""Document-level decisions, taken before the first example is emitted.
-
-        Sizes the number, letter and judgment columns from what the document
-        actually contains, so that ``(100)`` and ``viii.`` fit and a lone
-        ``*`` does not reserve room for ``\%\#``.
-        """
-        examples = list(examples)
-        lay = self.layout
-
-        marks = [b.judgment for ex in examples for b in ex.bodies if b.judgment]
-        self.any_judgment = bool(marks)
-        judgment = 0.0
-        if marks:
-            judgment = lay.judgment_gap_cm + max(
-                runs_width_cm(self.inline.runs(m), lay.em_cm, lay.sc_ratio)
-                for m in marks
-            )
-
-        wrap = self.brackets.wrap_example
-        numbers = [ex.custom_label or wrap(str(ex.index + 1)) for ex in examples] \
-            or [wrap("1")]
-        number = max(
-            runs_width_cm(self.inline.runs(n), lay.em_cm, lay.sc_ratio)
-            for n in numbers
-        )
-        letters = [it.marker for ex in examples for it in ex.items] or ["a."]
-        letter = max(text_width_cm(m, lay.em_cm) for m in letters)
-
-        self.layout = replace(
-            lay,
-            judgment_cm=judgment,
-            number_cm=max(lay.number_cm, number + lay.pad_cm) + judgment,
-            marker_cm=max(lay.marker_cm, letter + lay.pad_cm) + judgment,
-        )
 
     # -- entry point ------------------------------------------------------
     def example(self, ex: Example) -> str:
@@ -459,79 +241,8 @@ class Emitter:
         sidebar — which a table margin can never offer.  See styles.py."""
         return "<table:table-row>" + self._cell("", span=span, style=style) + "</table:table-row>"
 
-    # -- banding -----------------------------------------------------------
-    def _bands(self, word_w: list[float], available: float, ex: Example):
-        """Greedily pack words into bands no wider than the text block.
 
-        A band is one horizontal slice of the example: its tier rows are
-        emitted together, then the next band's, exactly as an overlong
-        example is broken by hand.  Where the break falls is computed from
-        --text-width at conversion time; reference.odt fixes the *pattern*,
-        never the break points.
-        """
-        if not self.split:
-            if sum(word_w) > available:
-                self._warn(
-                    f"glossed example is about {sum(word_w):.1f}cm wide against a "
-                    f"{available:.1f}cm text block, and --no-split was given; "
-                    f"columns were squeezed and long words will wrap in their cells"
-                )
-            return [(0, len(word_w))]
-        bands, start, acc = [], 0, 0.0
-        for j, w in enumerate(word_w):
-            if acc + w > available and j > start:
-                bands.append((start, j))
-                start, acc = j, 0.0
-            acc += w
-        bands.append((start, len(word_w)))
-        if len(bands) > 1:
-            self._warn(
-                f"glossed example does not fit the {self.layout.text_width_cm:.0f}cm "
-                f"text block; split into {len(bands)} bands"
-            )
-        over = [j for j, w in enumerate(word_w) if w > available]
-        if over:
-            self._warn(
-                f"{len(over)} word(s) are individually wider than the text block "
-                f"and will wrap inside their cell"
-            )
-        return bands
 
-    def _lead_widths(self, has_marker: bool, has_judgment: bool) -> list[float]:
-        """Number, sub-example letter, judgment — in that order.
-
-        The judgment column is **carved out of the column to its left**, not
-        inserted after it.  That is what makes the mark hang: a main
-        example's text still begins at ``number_cm`` and a sub-example's
-        letter still sits at ``number_cm``, judgments or no judgments, so
-        the letter lines up with where a main example's text starts —
-        linguexx's own geometry (measured: letter and main text both at
-        3.72cm, mark at 3.48cm).
-        """
-        lay = self.layout
-        lead = [lay.number_cm]
-        if has_marker:
-            lead.append(lay.marker_cm)
-        if has_judgment:
-            lead[-1] -= lay.judgment_cm
-            lead.append(lay.judgment_cm)
-        return lead
-
-    def _word_widths(self, bodies, words: int) -> list[float]:
-        lay = self.layout
-        widest = [0.0] * words
-        for _, body in bodies:
-            for tier in body.tiers:
-                for i, cell in enumerate(tier.cells):
-                    widest[i] = max(
-                        widest[i],
-                        runs_width_cm(self.inline.runs(cell), lay.em_cm,
-                                      lay.sc_ratio),
-                    )
-        return [
-            min(lay.max_col_cm, max(lay.min_col_cm, w * lay.width_safety + lay.pad_cm))
-            for w in widest
-        ]
 
     # -- rows --------------------------------------------------------------
     def _body_rows(self, ex, marker, body, first, grid, body_index, filler,
