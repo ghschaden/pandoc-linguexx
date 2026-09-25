@@ -1,0 +1,48 @@
+\documentclass{article}
+\usepackage[a4paper,margin=2cm]{geometry}
+\usepackage{linguexx}
+\begin{document}
+
+\section*{linguexx $\to$ .docx — what to check in Word}
+
+This document was produced by \texttt{linguexx2odt --to docx}. Every example
+number below is a live \texttt{SEQ} field and every cross-reference a
+\texttt{REF} field, both written with their correct value, so the document
+reads right whether or not your reader recalculates on open.
+
+\textbf{1. Does it read correctly?} The examples should number (1) to (5)
+in order, and the references at the end should agree with them.
+
+\textbf{2. Does Word offer to repair the file?} It validates against the
+ECMA-376 transitional schemas, so a prompt here would be a real finding.
+
+\textbf{3. Does editing renumber?} Put the cursor before example (1), paste
+a copy of any example above it, then press Ctrl+A and F9. Everything after
+it should move up by one, references included.
+
+\textbf{4. Do the columns hold?} In the glossed examples each gloss word
+should sit directly under the word above it. In (5) the label should sit in
+a column of its own, level with the object line.
+
+\ex.\label{plain} A plain example, with nothing special about it.
+
+\exg.\label{gloss} il mio libro\\
+     the my book\\
+\glt `my book'
+
+\ex.
+\a. *a judged sub-example
+\b. a plain one, whose text should start where the judged one's does
+
+\exg. Der ausserordentlich lange Hund bellte gestern sehr laut.\\
+      the extraordinarily long dog barked yesterday very loudly\\
+\glt `The extraordinarily long dog barked very loudly yesterday.'
+
+\exg.\label{annot} que Pierre est fatigu\'e \exannot{[CP]}\\
+     that Pierre is tired\\
+\glt `that Pierre is tired'
+
+Cross-references: \ref{plain}, \ref{gloss}, \ref{annot}, and the bare
+form \pref{plain}.
+
+\end{document}

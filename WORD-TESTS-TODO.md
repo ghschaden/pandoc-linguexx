@@ -12,19 +12,33 @@ front of you.
 ## The file
 
 ```
-python3 spikes/s5_docx_sample.py /tmp
+PYTHONPATH=src python3 -m linguexx2odt tests/e2e/word-sample.tex \
+    --to docx -o /tmp/linguexx-word-sample.docx
 ```
 
-writes `/tmp/linguexx-docx-sample.docx`. It is not converter output — the
-converter cannot emit `.docx`, which is the point of the plan. It is the
-OOXML a `--to docx` emitter *would* write, hand-assembled, so that opening
-it tests **the plan** rather than LibreOffice's `.docx` exporter. (Re-saving
-a converted `.odt` as `.docx` tests the exporter, which is a different and
-much less interesting question.)
+**This is converter output now.** It used to be a hand-assembled sample
+from `spikes/s5_docx_sample.py`, because the converter could not emit
+`.docx` at all; Phases 1–4 changed that, and testing the real thing is
+worth more than testing an imitation of it. The spike is still there and
+still useful for probing a reader's field behaviour in isolation
+(`--stale`), but it is no longer what these tests are about.
 
-Every field in it carries its **correct** cached value. The `--stale`
-variant carries deliberately wrong ones, for probing whether a given
-reader recalculates at all.
+The document exercises what the target now does: a plain example, a gloss,
+a judged sub-example beside a plain one, an example long enough to show
+whether the columns hold, an `\exannot` label, and four cross-references
+including the bare `\pref` form. It carries the named styles, so the
+Styles pane is worth a look too.
+
+Every field is written with its **correct** cached value, so the document
+should read right whether or not Word recalculates. `spikes/s5_docx_sample.py
+/tmp --stale` builds the deliberately-wrong variant if you want to find out
+which Word does.
+
+Measured here before sending, through LibreOffice: examples number (1)–(5),
+every gloss word sits at exactly the x of the word above it, the `[CP]`
+label lands at 434pt where `\ExAnnotColumn` puts it, and the references
+read (1), (2), (5) and a bare 1. It validates against the ECMA-376
+transitional schemas.
 
 ---
 
