@@ -40,8 +40,24 @@ from linguexx2odt.emit_base import TARGETS, BaseEmitter, emitter_for
 from linguexx2odt.emit_odt import Emitter
 
 
-def test_odt_resolves_to_the_odt_emitter() -> None:
+def test_each_target_resolves_to_its_emitter() -> None:
+    from linguexx2odt.emit_docx import DocxEmitter
+
     assert isinstance(emitter_for("odt"), Emitter)
+    assert isinstance(emitter_for("docx"), DocxEmitter)
+
+
+def test_targets_write_different_raw_formats() -> None:
+    """The format name is what tags a RawBlock, so the two must differ.
+
+    It is also a ClassVar on purpose: annotated as a plain field it becomes
+    part of the dataclass, every instance takes the base class's empty
+    default, and every RawBlock goes out tagged "" — eighteen tests red and
+    an .odt full of nothing.
+    """
+    seen = {name: cls.RAW_FORMAT for name, cls in TARGETS.items()}
+    assert seen == {"odt": "opendocument", "docx": "openxml"}, seen
+    assert all(v for v in seen.values()), "a target has no raw format"
 
 
 def test_every_registered_target_is_an_emitter() -> None:
@@ -56,8 +72,8 @@ def test_an_unknown_target_says_what_it_knows() -> None:
     A bare KeyError here would be read as a bug in the converter rather
     than as a typo in the argument.
     """
-    with pytest.raises(ValueError, match="known targets: odt"):
-        emitter_for("docx")
+    with pytest.raises(ValueError, match="known targets: docx, odt"):
+        emitter_for("rtf")
 
 
 def test_the_shared_half_knows_nothing_about_odf() -> None:

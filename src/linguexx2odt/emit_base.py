@@ -31,6 +31,7 @@ to maintain and would make both harder to read.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from typing import ClassVar
 
 from .inline import InlineRenderer
 from .ir import Example
@@ -68,9 +69,30 @@ class BaseEmitter:
             self.inline = InlineRenderer(self.warnings.append)
         self._warn = self.warnings.append
 
+    #: pandoc's name for the markup this emitter writes, as it appears in a
+    #: RawBlock.  The inject pass tags its blocks and inlines with it.
+    #:
+    #: ClassVar, and it has to be: annotated plainly it becomes a dataclass
+    #: FIELD, so every instance is constructed with the base class's empty
+    #: default and the subclass's value never arrives.  That produced
+    #: RawBlocks tagged "" and eighteen red tests.
+    RAW_FORMAT: ClassVar[str] = ""
+
     def example(self, ex: Example) -> str:      # pragma: no cover - abstract
         raise NotImplementedError(
             f"{type(self).__name__} does not know how to emit an example")
+
+    def reference(self, index: int, letter: str = "",
+                  bare: bool = False) -> str:   # pragma: no cover - abstract
+        r"""A cross-reference to example *index*, as raw markup.
+
+        ``letter`` is a sub-example's, appended inside the brackets;
+        ``bare`` drops them, which is what ``\pref`` prints.  Lives here
+        rather than in the inject pass because what a reference *is* --
+        a field, an anchor, a span -- is the format's business.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not know how to write a reference")
 
     def prepare(self, examples) -> None:
         r"""Document-level decisions, taken before the first example is emitted.
@@ -210,7 +232,7 @@ def emitter_for(target: str, **kwargs) -> BaseEmitter:
     this module for BaseEmitter, and a cycle would be a poor first act for
     a seam meant to make things easier to add.
     """
-    from . import emit_odt  # noqa: F401  (registers itself)
+    from . import emit_docx, emit_odt  # noqa: F401  (they register themselves)
 
     try:
         cls = TARGETS[target]

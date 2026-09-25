@@ -180,6 +180,13 @@ column at every length rather than the rule changing at one. The optional
 spoken argument is dropped — it is what a PDF screen reader says, and an
 ODT has nowhere to put it.
 
+There is an experimental second output format: `--to docx` writes a Word
+file whose numbers are live `SEQ` fields and whose cross-references are
+`REF` fields, so inserting an example renumbers the rest there too. It is
+Phase 2 of `plan-docx.md` — numbers and references only. A glossed example
+warns that its columns are not laid out yet and comes out as running text,
+so the `.odt` target remains the complete one.
+
 **Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
 invisible: this converter was written against 1.2 and silently kept
 emitting 1.2's output for a month after 1.3 changed it. If you are on a

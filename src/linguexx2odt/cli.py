@@ -74,8 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-o", "--output", type=Path, help="output .odt (default: input with .odt)")
     # One choice, on purpose.  The seam exists so that adding "docx" is a
     # new backend rather than a refactor; see plan-docx.md, Phase 1.
-    p.add_argument("--to", choices=("odt",), default="odt", metavar="FORMAT",
-                   help="output format (only 'odt' so far; see plan-docx.md)")
+    p.add_argument("--to", choices=("odt", "docx"), default="odt",
+                   metavar="FORMAT",
+                   help="output format: odt (complete) or docx "
+                        "(Phase 2 of plan-docx.md: numbers and "
+                        "references, no gloss grid yet)")
     p.add_argument("--text-width", type=float, default=17.0, metavar="CM",
                    help="width of the text block in cm (default: 17, i.e. A4 with 2cm margins)")
     p.add_argument("--no-split", action="store_true",
@@ -122,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     src_path: Path = args.input
     if not src_path.is_file():
         sys.exit(f"linguexx2odt: no such file: {src_path}")
-    out_path: Path = args.output or src_path.with_suffix(".odt")
+    out_path: Path = args.output or src_path.with_suffix("." + args.to)
 
     src_path = src_path.resolve()
     out_path = out_path.resolve()
@@ -171,27 +174,37 @@ def main(argv: list[str] | None = None) -> int:
             ).stdout
         )
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
-                          brackets=parsed.brackets)
+                          emitter=emitter)
 
         ast_path = tmp / "ast.json"
         ast_path.write_text(json.dumps(doc), encoding="utf-8")
 
-        raw_odt = tmp / "raw.odt"
+        raw_odt = tmp / f"raw.{args.to}"
         pandoc_args = ["-f", "json", str(ast_path), "-o", str(raw_odt)]
         if args.reference_doc:
             pandoc_args += ["--reference-doc", str(args.reference_doc)]
         _pandoc(pandoc_args, cwd=workdir)
 
-        content = postprocess.read(raw_odt, "content.xml")
-        content = postprocess.inject_sequence_decls(content)
-        content = postprocess.inject_automatic_styles(content, emitter.styles_fragment())
+        if args.to == "docx":
+            # Nothing to patch, yet.  ODT needs a pass to declare its
+            # sequence and to carry automatic column styles that a raw
+            # block cannot; OOXML needs neither -- a SEQ field declares
+            # itself by being used, and a column's width lives in the cell.
+            # What it WILL need is the named styles, so that a Word user
+            # can restyle from the sidebar as a Writer user can: Phase 4.
+            shutil.copy2(raw_odt, out_path)
+        else:
+            content = postprocess.read(raw_odt, "content.xml")
+            content = postprocess.inject_sequence_decls(content)
+            content = postprocess.inject_automatic_styles(
+                content, emitter.styles_fragment())
 
-        styles = postprocess.read(raw_odt, "styles.xml")
-        styles = postprocess.inject_named_styles(styles, named_styles(layout))
-        styles = postprocess.set_page_geometry(styles, args.page)
+            styles = postprocess.read(raw_odt, "styles.xml")
+            styles = postprocess.inject_named_styles(styles, named_styles(layout))
+            styles = postprocess.set_page_geometry(styles, args.page)
 
-        postprocess.rewrite(raw_odt, out_path,
-                            {"content.xml": content, "styles.xml": styles})
+            postprocess.rewrite(raw_odt, out_path,
+                                {"content.xml": content, "styles.xml": styles})
 
         if args.keep_intermediates:
             keep = args.keep_intermediates

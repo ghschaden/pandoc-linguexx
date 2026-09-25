@@ -37,8 +37,6 @@ from typing import Any
 from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
-from .emit_odt import sequence_ref
-from .latexutil import Brackets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 
@@ -68,8 +66,8 @@ def _placeholder_index(block: dict) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _raw_inline(xml: str) -> dict:
-    return {"t": "RawInline", "c": ["opendocument", xml]}
+def _raw_inline(fmt: str, xml: str) -> dict:
+    return {"t": "RawInline", "c": [fmt, xml]}
 
 
 def _link_reference(node: dict) -> str | None:
@@ -90,12 +88,15 @@ class Injector:
         blocks_by_index: dict[int, str],
         labels: dict[str, tuple[int, str]],
         warn: Callable[[str], None] | None = None,
-        brackets: Brackets | None = None,
+        emitter=None,
     ) -> None:
         self.blocks = blocks_by_index
         self.labels = labels
         self.warn = warn or (lambda _m: None)
-        self.brackets = brackets or Brackets()
+        # The emitter decides what a reference and a raw block ARE; this
+        # pass only decides where they go.
+        self.emitter = emitter
+        self.fmt = getattr(emitter, "RAW_FORMAT", "opendocument")
         self.placeholders_replaced = 0
         self.refs_rewritten = 0
 
@@ -117,7 +118,7 @@ class Injector:
         if idx is not None:
             if idx in self.blocks:
                 self.placeholders_replaced += 1
-                return {"t": "RawBlock", "c": ["opendocument", self.blocks[idx]]}
+                return {"t": "RawBlock", "c": [self.fmt, self.blocks[idx]]}
             self.warn(f"placeholder {idx} survived into the AST with no example to put back")
 
         replaced = self._reference(node)
@@ -136,7 +137,7 @@ class Injector:
             if label and label in self.labels:
                 index, letter = self.labels[label]
                 self.refs_rewritten += 1
-                return _raw_inline(sequence_ref(index, letter, self.brackets))
+                return _raw_inline(self.fmt, self.emitter.reference(index, letter))
             return None
         if node.get("t") == "RawInline":
             fmt, text = (node.get("c") or ["", ""])[:2]
@@ -148,13 +149,13 @@ class Injector:
                     # \pref prints the bare number.  Built without the
                     # brackets rather than sliced off the finished XML: a
                     # slice is right only while they are one character each.
-                    xml = sequence_ref(index, letter, self.brackets,
-                                       bare=m.group(1) == "pref")
-                    return _raw_inline(xml)
+                    xml = self.emitter.reference(
+                        index, letter, bare=m.group(1) == "pref")
+                    return _raw_inline(self.fmt, xml)
         return None
 
 
 def inject(doc: dict, blocks_by_index, labels, warn=None,
-           brackets=None) -> tuple[dict, Injector]:
-    inj = Injector(blocks_by_index, labels, warn, brackets=brackets or Brackets())
+           emitter=None) -> tuple[dict, Injector]:
+    inj = Injector(blocks_by_index, labels, warn, emitter=emitter)
     return inj.run(doc), inj

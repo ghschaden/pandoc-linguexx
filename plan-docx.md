@@ -173,13 +173,34 @@ then flagged the module docstrings, which discuss `table:` and `w:`
 precisely to promise the code contains neither. It now blanks docstrings
 with `ast` before reading, and was mutated in both directions afterwards.
 
-### Phase 2 — numbers and references (1 day)
-`emit_docx.py` emitting one example as a `w:tbl`, with `SEQ` fields and
-bookmarks, and `inject.py` writing `REF` fields inline. No bands, no
-judgments, no glosses — a plain `\ex.` and a `\ref` to it. The end-to-end
-test is the one that matters and it exists already in the ODT form: render
-to PDF, read the numbers back, and check they renumber when an example is
-inserted.
+### Phase 2 — numbers and references — DONE
+
+`emit_docx.DocxEmitter`, registered as `docx`: one example as a `w:tbl`,
+the number a `SEQ` field bookmarked around the field alone, and `REF`
+fields inline for `\ref` and `\pref`. Every cached value written correct,
+per fact 12. `--to docx` on the CLI; no post-processing, because OOXML
+needs none yet — a `SEQ` field declares itself and a column's width lives
+in the cell. Phase 4 adds the styles.
+
+`inject.py` stopped hardcoding `opendocument`: it asks the emitter for
+`RAW_FORMAT` and for `reference()`, since what a cross-reference *is* — a
+field, an anchor, a span — is the format's business and where it goes is
+the inject pass's.
+
+**The two targets render the same document identically**, measured through
+LibreOffice: `(1) A first example. (2) A second example. Prose referring to
+(1) and (2), and bare 1.` The output is schema-valid.
+
+Six tests in `tests/test_docx.py`, mutation-tested: stale caches and a
+bookmark widened to swallow the example text are both caught. A glossed
+example warns that the grid is Phase 3 rather than laying it out wrong —
+the edge is stated, not discovered.
+
+One trap worth recording, because it cost eighteen red tests and will
+recur. `RAW_FORMAT: str = ""` on a `@dataclass` is a **field**, not a class
+attribute: every instance takes the base class's default, the subclass's
+value never arrives, and every `RawBlock` goes out tagged `""`. It is a
+`ClassVar` now, and a test pins the two values.
 
 ### Phase 3 — the grid (1–2 days)
 Gloss tiers, merged cells, judgment and marker columns, bands, `\exannot`.

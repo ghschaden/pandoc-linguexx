@@ -34,6 +34,7 @@ around them are literal text, exactly as a Writer user would type them.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from .emit_base import BaseEmitter, register
 from .inline import esc
@@ -90,11 +91,17 @@ def _col_name(ex_index: int, col: int) -> str:
 class Emitter(BaseEmitter):
     """OpenDocument.  The geometry is BaseEmitter's; this writes the XML."""
 
+    RAW_FORMAT: ClassVar[str] = "opendocument"
+
     auto_styles: list[str] = field(default_factory=list)
     """Automatic column styles, which a raw block cannot carry itself and
     postprocess injects into content.xml.  ODF-only: OOXML puts a column's
     width inline in the cell."""
 
+
+    def reference(self, index: int, letter: str = "",
+                  bare: bool = False) -> str:
+        return sequence_ref(index, letter, self.brackets, bare=bare)
 
     # -- entry point ------------------------------------------------------
     def example(self, ex: Example) -> str:
