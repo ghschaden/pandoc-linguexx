@@ -375,11 +375,33 @@ def test_the_body_font_is_declared_once_on_the_style(tmp_path: Path) -> None:
     styles = zipfile.ZipFile(docx).read("word/styles.xml").decode("utf-8")
 
     assert "w:rFonts" not in xml, (
-        "a run still carries direct font formatting; the style should be "
-        "the only place the face is named")
-    assert "LxExampleCell" in styles and "w:rFonts" in styles, (
-        "the cell style does not name a face, so the columns are measured "
-        "for one font and drawn in whatever the reader defaults to")
+        "a run still carries direct font formatting; the document default "
+        "should be the only place the face is named")
+
+    # On the DOCUMENT DEFAULT, and not on the example style.  Both keep the
+    # columns right; only the first keeps the examples in the same face as
+    # the prose around them, which the ODT target gets for free because its
+    # LxExampleCell inherits from Standard and names no font.  Put it on the
+    # style and a reader sees the examples change typeface mid-page.
+    default = re.search(r"<w:rPrDefault>.*?</w:rPrDefault>", styles, re.S)
+    assert default, "styles.xml has no document default to carry the face"
+    fonts = re.findall(r'<w:rFonts[^>]*w:ascii="([^"]+)"', default.group(0))
+    assert fonts, (
+        "the document default names no face, so it resolves to a theme font "
+        "and the columns are measured for something else")
+
+    cell = re.search(r'<w:style [^>]*w:styleId="LxExampleCell".*?</w:style>',
+                     styles, re.S)
+    assert cell, "no LxExampleCell style"
+    assert "w:ascii=" not in cell.group(0), (
+        "the example style names a face of its own, so examples will not "
+        "match the prose around them")
+
+    # exactly one rFonts in the default: prepending beside pandoc's theme
+    # font left both, and the theme one won
+    assert len(re.findall(r"<w:rFonts", default.group(0))) == 1, (
+        "more than one rFonts in the document default; the last one wins "
+        "and it may not be ours")
 
 
 @pandoc

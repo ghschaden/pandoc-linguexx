@@ -193,7 +193,13 @@ def main(argv: list[str] | None = None) -> int:
             # What it WILL need is the named styles, so that a Word user
             # can restyle from the sidebar as a Writer user can: Phase 4.
             postprocess_docx.apply_styles(
-                raw_odt, out_path, styles_docx.styles_fragment(layout))
+                raw_odt, out_path, styles_docx.styles_fragment(layout),
+                # Not when the user supplied a reference document: their
+                # typeface is a choice, and overriding it to keep the
+                # columns exact would be answering a question they already
+                # answered.  The columns may then be a little off.
+                "" if args.reference_doc
+                else styles_docx.default_font(layout.font_pt))
         else:
             content = postprocess.read(raw_odt, "content.xml")
             content = postprocess.inject_sequence_decls(content)

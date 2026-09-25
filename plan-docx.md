@@ -264,11 +264,25 @@ declare its sequence and carry automatic column styles; OOXML needs
 neither. Its own rewrite, because ODF puts an uncompressed `mimetype`
 first and the ODT pass asserts it, which would refuse every valid .docx.
 
-**Fact 10 is settled where it belongs.** Phase 3 named the face and size on
-every run, because nothing declared the styles yet. It is now on
-`LxExampleCell`, which is also where a user can change it — and a test
-asserts no run carries `w:rFonts` any more. The geometry is unchanged by
-the move, measured: the same columns at 113/136/221/252/284/322.
+**Fact 10 took three attempts and the third is the right one.** Phase 3
+named the face and size on every run. Phase 4 moved that to
+`LxExampleCell`, which fixed nothing that was broken and broke something
+that was not: the examples came out in Times New Roman and the prose around
+them in Arial, pandoc's theme font, so the typeface changed mid-page. The
+ODT target never does that — its `LxExampleCell` inherits from `Standard`
+and names no font at all.
+
+The face belongs on the **document default**, where it makes the whole
+document the thing the columns were measured for. `postprocess_docx.
+set_default_font()` replaces the theme `w:rFonts` in `w:rPrDefault`; it
+does not prepend beside it, which is what the first version did — pandoc's
+theme font followed mine in the same `w:rPr` and won, and the guard meant
+to notice was looking for `w:ascii=` where pandoc writes `w:asciiTheme=`.
+Skipped entirely when `--reference-doc` is given: the user's typeface is a
+choice, and the columns being a little off is the honest price of it.
+
+Measured after: the same columns at 113/136/221/252/284/322, and `pdffonts`
+shows Arial gone from the rendered PDF.
 
 Small capitals became the `LxLeipzig` character style; the judgment's right
 alignment became `LxJudgmentCell`'s; the continuation-band mark became

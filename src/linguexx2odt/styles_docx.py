@@ -76,12 +76,30 @@ def _para(name: str, parent: str | None, props: str = "",
     )
 
 
-def _fonts(pt: float) -> str:
+def default_font(pt: float) -> str:
+    """The run properties to put on the DOCUMENT's default, not on a style.
+
+    The columns are measured from `measure._ADVANCE`, which is Liberation
+    Serif metrics, and pandoc's reference.docx names no face at all -- it
+    leaves the reader to pick, and the reader picks something narrower, so
+    words wrapped inside columns sized for something else.
+
+    Phase 3 fixed that on every run and Phase 4 moved it onto the example
+    style, which fixed the geometry and broke the typography: the examples
+    came out in a different face from the prose around them, which the ODT
+    target never does -- its LxExampleCell inherits from Standard and names
+    no font.  Setting the document default instead makes the whole document
+    the face the estimate describes, so the prose and the examples match
+    AND the columns are right.
+
+    Applied only when the document names no face of its own, so that a
+    --reference-doc a user supplied still wins.
+    """
     half = int(round(pt * 2))
     return (
         f'<w:rFonts w:ascii="{ESTIMATED_FONT}" w:hAnsi="{ESTIMATED_FONT}" '
-        f'w:cs="{FALLBACK_FONT}"/><w:sz w:val="{half}"/>'
-        f'<w:szCs w:val="{half}"/>'
+        f'w:eastAsia="{ESTIMATED_FONT}" w:cs="{FALLBACK_FONT}"/>'
+        f'<w:sz w:val="{half}"/><w:szCs w:val="{half}"/>'
     )
 
 
@@ -93,7 +111,7 @@ def styles_fragment(layout: Layout) -> str:
     tight = ('<w:spacing w:before="0" w:after="0" w:line="240" '
              'w:lineRule="auto"/><w:ind w:firstLine="0"/>')
     styles = [
-        _para(CELL_PARA, None, tight, _fonts(layout.font_pt)),
+        _para(CELL_PARA, None, tight),
         # A little air above the free translation, as in the ODT target.
         _para(TRANSLATION_PARA, CELL_PARA,
               '<w:spacing w:before="57" w:after="0"/>'),

@@ -32,6 +32,7 @@ Asserting the ODF shape here would refuse every valid Word file.
 
 from __future__ import annotations
 
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -61,12 +62,45 @@ def rewrite(docx: Path, out: Path, members: dict[str, str]) -> None:
                 dst.writestr(info, data.encode("utf-8"))
 
 
-def apply_styles(raw: Path, out: Path, fragment: str) -> None:
-    """Write *raw* to *out* with the style fragment added to styles.xml."""
+def set_default_font(styles_xml: str, run_props: str) -> str:
+    r"""Make the document's default run the face the columns were measured for.
+
+    The columns come from `measure._ADVANCE`, which is Liberation Serif
+    metrics.  pandoc's reference.docx points its default at a *theme* font
+    (`w:asciiTheme="minorHAnsi"`), which resolves to something narrower, so
+    words wrapped inside columns sized for something else.
+
+    The face belongs on the document default and not on the example style.
+    Put it on the style and the examples come out in a different face from
+    the prose around them -- which the ODT target never does, its
+    LxExampleCell inheriting from Standard and naming no font.
+
+    **Replaces** the existing `w:rFonts` and sizes rather than inserting
+    beside them.  Prepending looked right and did nothing: pandoc's theme
+    rFonts followed mine inside the same `w:rPr` and won, and the check
+    that was supposed to notice looked for `w:ascii=` where pandoc writes
+    `w:asciiTheme=`.
+    """
+    m = re.search(r"(<w:rPrDefault>\s*<w:rPr>)(.*?)(</w:rPr>)", styles_xml, re.S)
+    if not m:
+        return styles_xml
+    inner = m.group(2)
+    for tag in ("w:rFonts", "w:sz", "w:szCs"):
+        inner = re.sub(rf"<{tag}\b[^>]*/>", "", inner)
+    return (styles_xml[:m.start()] + m.group(1) + run_props + inner
+            + m.group(3) + styles_xml[m.end():])
+
+
+def apply_styles(raw: Path, out: Path, fragment: str,
+                 default_run_props: str = "") -> None:
+    """Write *raw* to *out* with the styles added and the face declared."""
     from .styles_docx import inject_styles
 
-    if not fragment:
+    if not fragment and not default_run_props:
         shutil.copy2(raw, out)
         return
-    styles = inject_styles(read(raw, "word/styles.xml"), fragment)
+    styles = read(raw, "word/styles.xml")
+    styles = inject_styles(styles, fragment)
+    if default_run_props:
+        styles = set_default_font(styles, default_run_props)
     rewrite(raw, out, {"word/styles.xml": styles})
