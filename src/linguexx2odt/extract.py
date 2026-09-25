@@ -139,14 +139,32 @@ SKIP_ENVS = frozenset(
 DEGRADE = {
     "refrange": "ranged reference",
     "prefrange": "bare ranged reference",
-    "Last": "relative reference \\Last",
-    "pLast": "relative reference \\pLast",
-    "LLast": "relative reference \\LLast",
-    "Next": "relative reference \\Next",
+    # \Next, \Last and their kin used to be listed here.  They are resolved
+    # now -- see RELATIVE and _resolve_relatives -- so an entry for them
+    # would be a warning that never fires.
     "altn": "\\altn alternatives",
     "altg": "\\altg alternatives",
     "exsource": "\\exsource",
 }
+
+#: Relative reference -> (how many examples away, bare number?).  Negative
+#: counts backwards.  These are resolved by POSITION, which the converter can
+#: do and linguexx deliberately does not: linguexx only links to an anchor a
+#: previous run wrote into the .aux, because at the moment it typesets
+#: ``\Next`` the next example does not exist yet.  Here the whole document is
+#: in hand before anything is emitted, so "the next example" is simply the
+#: next one in the source.
+RELATIVE = {
+    "Next": (1, False), "pNext": (1, True),
+    "NNext": (2, False), "pNNext": (2, True),
+    "Last": (-1, False), "pLast": (-1, True),
+    "LLast": (-2, False), "pLLast": (-2, True),
+}
+
+#: Prefix for the labels those get rewritten to.  They go through the same
+#: path as a \ref the author wrote, which is the point: no second reference
+#: mechanism to keep in step, and both targets get it for free.
+REL_LABEL = "lx-relative-"
 
 JUDG_RUN = re.compile(r"\A\s*((?:\*|\?|\\\#|\\%)+)")
 
@@ -309,8 +327,14 @@ def _pull_judgment(text: str, warn) -> tuple[str, str]:
     return "", text
 
 
-def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], str]:
-    """Split the pre-``\\glt`` part into tiers.  Returns (tiers, leftover)."""
+def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], str, str]:
+    """Split the pre-``\\glt`` part into tiers.
+
+    Returns ``(tiers, before, trailing)``.  ``before`` is what stood in
+    front of the ``\\gll``; ``trailing`` is the ``\\\\``-separated lines
+    beyond the tier count, which are a different thing in a different place
+    and used to be concatenated onto ``before`` as though they were not.
+    """
     m = re.search(r"\\(glll|gll|gl)(?![a-zA-Z])", head)
     if m:
         kind = m.group(1)
@@ -326,8 +350,9 @@ def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], st
     elif shorthand:
         kind, before, rest, limit = "gll", "", head, 2
     else:
-        return (), head
+        return (), head, ""
 
+    trailing = ""
     pieces = [c for _, c in split_top(rest, DBLBACK)]
     while pieces and not pieces[-1].strip():
         pieces.pop()
@@ -335,13 +360,9 @@ def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], st
         extra = pieces[limit:]
         pieces = pieces[:limit]
         if any(p.strip() for p in extra):
-            warn(
-                f"\\{kind} takes {limit} tiers; {len(extra)} further "
-                f"\\\\-separated line(s) kept as trailing text"
-            )
-            before += " " + " ".join(extra)
+            trailing = " ".join(" ".join(p.split()) for p in extra).strip()
     tiers = tuple(Tier(cells=split_cells(p)) for p in pieces)
-    return tiers, before
+    return tiers, before, trailing
 
 
 def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
@@ -357,7 +378,28 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
     head = parts[0][1]
     translation = " ".join(c for sep, c in parts[1:]).strip() if len(parts) > 1 else ""
 
-    tiers, leftover = _parse_gloss(head, shorthand, warn)
+    tiers, leftover, trailing = _parse_gloss(head, shorthand, warn)
+
+    if trailing:
+        # A line past the last tier IS the free translation.  linguexx
+        # typesets it at the gloss indent on its own baseline, which is
+        # pixel-for-pixel where \glt puts one -- measured both ways, same x
+        # (88.6pt) and same y.  So this is not a degradation to warn about,
+        # it is the other spelling of \glt, and the papers that use it write
+        # every example that way.
+        #
+        # When there is a \glt as well, linguexx prints the trailing text
+        # first and the \glt line after it.  The IR has one slot, so they
+        # join in that order and the line break is lost -- the one case here
+        # that really is a degradation.
+        if translation:
+            warn(
+                "trailing line after the gloss and \\glt both present; "
+                "joined into one translation line"
+            )
+            translation = trailing + " " + translation
+        else:
+            translation = trailing
 
     if tiers:
         judgment, first = _pull_judgment(leftover + " " + " ".join(tiers[0].cells), warn)
@@ -446,6 +488,7 @@ def parse(src: str) -> ParseResult:
     warnings: list[str] = []
     examples: list[Example] = []
     spans: list[tuple[int, int, str]] = []
+    relatives: list[tuple[int, int, str]] = []   # (start, stop, command name)
 
     env_stack: list[str] = []
     group_stack: list[str] = []
@@ -504,6 +547,8 @@ def parse(src: str) -> ParseResult:
                 f"line {line}: stray \\{name}. outside any example, left untouched "
                 f"(linguexx itself raises a package error here)"
             )
+        elif name in RELATIVE:
+            relatives.append((i, end, name))
         elif name in DEGRADE and name != "exsource":
             warnings.append(f"{DEGRADE[name]} left as LaTeX; pandoc renders it literally")
         i = end
@@ -513,11 +558,14 @@ def parse(src: str) -> ParseResult:
     if brackets != Brackets():
         examples = [_redecorate(ex, brackets) for ex in examples]
 
+    labels = _collect_labels(examples)
+    rel_spans = _resolve_relatives(src, relatives, spans, labels, warnings)
+
     return ParseResult(
-        residue=_build_residue(src, spans),
+        residue=_build_residue(src, spans, rel_spans),
         examples=examples,
         warnings=warnings,
-        labels=_collect_labels(examples),
+        labels=labels,
         brackets=brackets,
     )
 
@@ -594,15 +642,83 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     return resume
 
 
-def _build_residue(src: str, spans: list[tuple[int, int, str]]) -> str:
+def _resolve_relatives(
+    src: str,
+    relatives: list[tuple[int, int, str]],
+    spans: list[tuple[int, int, str]],
+    labels: dict[str, tuple[int, str]],
+    warnings: list[str],
+) -> list[tuple[int, int, str]]:
+    r"""``\Next`` & co. -> a ``\ref`` to the example they point at.
+
+    These used to be left alone with a warning saying pandoc would render
+    them literally.  It does not: ``+raw_tex`` keeps ``\Next`` as a
+    ``RawInline "latex"`` and both writers drop one, so a sentence reading
+    "structures like \Next, involving..." came out as "structures like ,
+    involving..." -- a hole in the prose with a comma dangling in it, 26
+    times in the paper this was found in.  A warning the output contradicts
+    is worse than no warning.
+
+    Resolved by position: the examples are already parsed and their source
+    spans known, so "the next example" is the first one that starts after
+    this point.  Rewriting to ``\ref`` rather than to a number keeps it a
+    live cross-reference in the output, and reuses the path an author's own
+    ``\ref`` takes -- so ODT and docx both get it without either emitter
+    learning anything new.
+    """
+    # (source position, example index), in source order.  The index is read
+    # back off the placeholder rather than taken to be the position in the
+    # list: they agree today, and a positional assumption is the kind that
+    # stops being true quietly.
+    located = []
+    for start, _stop, ph in spans:
+        m = PLACEHOLDER_RE.fullmatch(ph)
+        if m:
+            located.append((start, int(m.group(1))))
+    located.sort()
+
+    out: list[tuple[int, int, str]] = []
+    for n, (start, stop, name) in enumerate(relatives):
+        offset, bare = RELATIVE[name]
+        # How many examples begin before this point; that count is also the
+        # position of the NEXT one, so \Next is `nxt` and \Last is nxt - 1.
+        nxt = sum(1 for s, _ in located if s < start)
+        at = nxt + offset - 1 if offset > 0 else nxt + offset
+        line = src.count("\n", 0, start) + 1
+        if not 0 <= at < len(located):
+            warnings.append(
+                f"line {line}: \\{name} points past the document's "
+                f"{len(located)} examples; left as written"
+            )
+            continue
+        label = f"{REL_LABEL}{n}"
+        labels[label] = (located[at][1], "")
+        out.append((start, stop, f"\\{'pref' if bare else 'ref'}{{{label}}}"))
+    return out
+
+
+def _build_residue(
+    src: str,
+    spans: list[tuple[int, int, str]],
+    inline: list[tuple[int, int, str]] | None = None,
+) -> str:
     """Replace each example span with its placeholder, always as a
     paragraph of its own — S4 showed that is the whole requirement for
-    pandoc to hand it back as a standalone Para."""
+    pandoc to hand it back as a standalone Para.
+
+    `inline` replacements are substituted where they stand, with no blank
+    lines: they sit inside a sentence, and a paragraph break there would
+    split it in two.
+    """
+    marked = [(a, b, text, True) for a, b, text in spans]
+    marked += [(a, b, text, False) for a, b, text in (inline or [])]
+    marked.sort(key=lambda t: t[0])
+
     out: list[str] = []
     prev = 0
-    for start, stop, ph in spans:
+    for start, stop, text, block in marked:
         out.append(src[prev:start])
-        out.append("\n\n" + ph + "\n\n")
+        out.append("\n\n" + text + "\n\n" if block else text)
         prev = stop
     out.append(src[prev:])
     return "".join(out)

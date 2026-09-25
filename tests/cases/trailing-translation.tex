@@ -1,0 +1,37 @@
+\input{_preamble}
+\begin{document}
+% The shape a real paper actually writes: the free translation is a third
+% \\-separated line after \gll, with no \glt.  linguexx typesets that
+% identically to \glt -- measured, same x and same baseline -- so it is the
+% translation and not text that precedes the example.
+\ex. \gll quodsi magnam Hermagoras habuisset facultatem \\
+     if great.\textsc{acc} Hermagoras.\textsc{nom} have.\textsc{pluprf} ability.\textsc{acc} \\
+     `if Hermagoras had acquired great skill' (Cicero)
+
+% Same for \glll: a fourth line is the translation, not a fourth tier.
+\ex. \glll Ich habe geschlafen \\
+      ich hab-e schlaf-en \\
+      \lpzg{1sg} have-\lpzg{1sg} sleep-\lpzg{ptcp} \\
+      `I slept.'
+
+% Genuine text BEFORE the gloss still is that, and still warns -- the
+% trailing line must not swallow it.
+\ex. As Cicero puts it, \gll magnam facultatem \\
+     great.\textsc{acc} ability.\textsc{acc} \\
+     `great skill'
+
+% A judgment mark in front of the gloss, with a trailing translation: the
+% mark must reach the judgment slot and must not drag the translation into
+% tier 0 behind it.
+\ex. *\gll magnam facultatem \\
+     great.\textsc{acc} ability.\textsc{acc} \\
+     `great skill'
+
+% Both a trailing line and a \glt: linguexx prints the trailing text and
+% then the \glt line, in that order.  One slot, so they are joined, and
+% that loses a line break -- which is worth a warning.
+\ex. \gll magnam facultatem \\
+     great.\textsc{acc} ability.\textsc{acc} \\
+     `great skill'
+\glt (Cicero, \emph{De inventione})
+\end{document}
