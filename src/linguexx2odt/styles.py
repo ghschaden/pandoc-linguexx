@@ -89,6 +89,7 @@ MACRO_NAMES: dict[str, str] = {
     "SPACE_ABOVE": SPACE_ABOVE_PARA,
     "SPACE_BELOW": SPACE_BELOW_PARA,
     "SEQ_NAME": SEQ_NAME,
+    "ANNOT_PARA": ANNOT_PARA,
 }
 
 #: Basic constant name -> the Layout field it must equal, in cm.
@@ -101,6 +102,8 @@ MACRO_LENGTHS: dict[str, str] = {
     "JUDG_GAP_CM": "judgment_gap_cm",
     "SPACE_CM": "space_cm",
     "SC_RATIO": "sc_ratio",
+    "ANNOT_RATIO": "annot_column_ratio",
+    "ANNOT_SEP_EM": "annot_sep_em",
 }
 
 #: Deliberately *not* shared, with the reason — so that a value missing from
@@ -123,30 +126,17 @@ MACRO_NOT_SHARED: dict[str, str] = {
         "and lets the SPACE_ABOVE/SPACE_BELOW styles hold any difference, "
         "which is what a Writer user edits"),
     "space_below_cm": "converter-only, as space_above_cm",
-    "annot_column_ratio": (
-        "the macro has no \\exannot column at all.  Until it does, sharing "
-        "the number would say the two agree about a thing only one of them "
-        "has — see MACRO_STYLES_NOT_SHARED for what that costs"),
-    "annot_sep_em": "as annot_column_ratio",
 }
 
 #: The same, for paragraph styles: a style the converter writes and the
 #: macro knows nothing about, with what that costs.
 #:
-#: This is not free.  The macro reads a converted table back with
-#: LxRowText, which takes every cell from the lead columns rightwards, so
-#: an annotation comes back as a trailing word of the object tier rather
-#: than as \\exannot{...}.  Measured, not feared: untypesetting a converted
-#: `\\gll que Pierre est fatigué \\exannot{[CP]}` gives back
-#: "que Pierre est fatigué [CP]", and re-typesetting that builds an
-#: eight-column grid where linguexx's is seven, so the gloss stops sitting
-#: under its word.  Teaching LxRowText to recognise ANNOT_PARA — the way it
-#: already recognises BAND_PARA — is the fix, and it is macro work.
-MACRO_STYLES_NOT_SHARED: dict[str, str] = {
-    "ANNOT_PARA": (
-        "the macro has no annotation column; a converted example that has "
-        "one does not survive Untypeset intact"),
-}
+#: Empty, and worth keeping so.  It held ANNOT_PARA for one commit, with
+#: the measurement that justified it: the macro read a converted
+#: annotation back as a trailing word of the object tier, and re-typesetting
+#: gave an eight-column grid where linguexx's is seven.  The macro now
+#: knows the style, so the entry is gone rather than explained away.
+MACRO_STYLES_NOT_SHARED: dict[str, str] = {}
 
 
 @dataclass(frozen=True)

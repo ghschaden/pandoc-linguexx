@@ -2293,6 +2293,7 @@ def check_untypeset(ctx, out: Path, profile: Path) -> int:
     bad += check_untypeset_references(ctx, out, profile)
     bad += check_untypeset_adjacent(ctx)
     bad += check_untypeset_converted(ctx, out)
+    bad += check_untypeset_annot(ctx, out)
     bad += check_untypeset_trees(ctx)
     bad += check_untypeset_formatting(ctx)
     bad += check_untypeset_refusals(ctx)
@@ -2454,6 +2455,87 @@ def check_untypeset_converted(ctx, out: Path) -> int:
               f"table(s), numbers {before} -> {after}")
         return 1
     print("    ok — a converted document untypesets and rebuilds, bands and all")
+    return 0
+
+
+ANNOTATED = r"""\begin{document}
+\ex. \gll que Pierre est fatigu\'e \exannot{[CP]}\\
+     that Pierre is tired\\
+\glt `that Pierre is tired'
+\end{document}
+"""
+
+
+def check_untypeset_annot(ctx, out: Path) -> int:
+    r"""An \exannot label survives the trip out of the converter and back.
+
+    It did not, and the failure was quiet.  The macro read the annotation
+    column as one more cell of the object tier, so a converted
+
+        \gll que Pierre est fatigué \exannot{[CP]}
+
+    came back as "que Pierre est fatigué [CP]" -- the wrapper gone and the
+    label now a fifth object word -- and re-typesetting that built an
+    eight-column grid where the original is seven, with the gloss no longer
+    under its word.
+
+    Both halves are checked, because either alone can pass for the wrong
+    reason: the text must come back as \exannot{...}, and re-typesetting it
+    must put the label in a column of its own at ANNOT_RATIO of the table,
+    not in a word cell.
+    """
+    tex = out / "annotated.tex"
+    tex.write_text(ANNOTATED, encoding="utf-8")
+    odt = out / "annotated.odt"
+    built = subprocess.run(
+        [sys.executable, "-m", "linguexx2odt.cli", str(tex), "-o", str(odt)],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    if built.returncode or not odt.is_file():
+        print(f"    skipped — the converter did not run: "
+              f"{(built.stdout + built.stderr).strip()[:80]!r}")
+        return 0
+
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", ctx)
+    doc = desktop.loadComponentFromURL(odt.as_uri(), "_blank", 0, ())
+    table = [el for el in paragraphs(doc)
+             if el.supportsService("com.sun.star.text.TextTable")][0]
+    vc = doc.getCurrentController().getViewCursor()
+    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+    msg = run(ctx, "UntypesetSelectionQuiet")
+    lines = [ln for ln in body_lines(doc) if ln.strip()]
+    doc.dispose()
+
+    if msg:
+        print(f"    FAIL: annotated: {msg!r}")
+        return 1
+    object_line = NUMBER_AT_FRONT.sub("", lines[0]).strip() if lines else ""
+    if "\\exannot{[CP]}" not in object_line:
+        print(f"    FAIL: annotated: came back as {object_line!r}, "
+              f"without its \\exannot wrapper")
+        return 1
+
+    # ... and it rebuilds into a column rather than a word
+    doc2 = make_doc(ctx, [NUMBER_AT_FRONT.sub("", ln).strip() for ln in lines])
+    again = run(ctx)
+    t2 = doc2.getTextTables().getByIndex(0)
+    seps = [s.Position for s in t2.TableColumnSeparators]
+    labelled = [n for n in t2.getCellNames()
+                if t2.getCellByName(n).getString().strip() == "[CP]"]
+    doc2.dispose()
+    if again:
+        print(f"    FAIL: annotated: rebuilding said {again!r}")
+        return 1
+    if len(labelled) != 1:
+        print(f"    FAIL: annotated: the label is in {len(labelled)} cell(s)")
+        return 1
+    at = seps[-1] / 100 if seps else 0
+    if abs(at - 75.0) > 0.5:
+        print(f"    FAIL: annotated: label column at {at:.2f}%, not 75%")
+        return 1
+    print("    ok — an \\exannot label survives the converter round trip, "
+          "and rebuilds into its own column")
     return 0
 
 

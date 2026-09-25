@@ -64,24 +64,27 @@ Option Explicit
 '
 '     python3 tools/sync_macro.py --write
 '
-Const CELL_PARA   As String = "LxExampleCell"
-Const TRANS_PARA  As String = "LxTranslation"
-Const JUDG_PARA   As String = "LxJudgmentCell"
-Const BAND_PARA   As String = "LxExampleBand"
-Const SPACE_PARA  As String = "LxExampleSpace"
-Const SPACE_ABOVE As String = "LxExampleSpaceAbove"
-Const SPACE_BELOW As String = "LxExampleSpaceBelow"
-Const SEQ_NAME    As String = "NumEx"
+Const CELL_PARA    As String = "LxExampleCell"
+Const TRANS_PARA   As String = "LxTranslation"
+Const JUDG_PARA    As String = "LxJudgmentCell"
+Const BAND_PARA    As String = "LxExampleBand"
+Const SPACE_PARA   As String = "LxExampleSpace"
+Const SPACE_ABOVE  As String = "LxExampleSpaceAbove"
+Const SPACE_BELOW  As String = "LxExampleSpaceBelow"
+Const SEQ_NAME     As String = "NumEx"
+Const ANNOT_PARA   As String = "LxAnnot"
 
 ' In centimetres, from linguexx2odt.styles.Layout.
-Const PAD_CM      As Double = 0.16
-Const MIN_COL_CM  As Double = 0.55
-Const MAX_COL_CM  As Double = 6.0
-Const NUMBER_CM   As Double = 1.1
-Const MARKER_CM   As Double = 0.7
-Const JUDG_GAP_CM As Double = 0.12
-Const SPACE_CM    As Double = 0.18
-Const SC_RATIO    As Double = 0.8
+Const PAD_CM       As Double = 0.16
+Const MIN_COL_CM   As Double = 0.55
+Const MAX_COL_CM   As Double = 6.0
+Const NUMBER_CM    As Double = 1.1
+Const MARKER_CM    As Double = 0.7
+Const JUDG_GAP_CM  As Double = 0.12
+Const SPACE_CM     As Double = 0.18
+Const SC_RATIO     As Double = 0.8
+Const ANNOT_RATIO  As Double = 0.75
+Const ANNOT_SEP_EM As Double = 1.0
 
 ' Deliberately not shared:
 '   text_width_cm — the macro reads the real page style instead
@@ -90,8 +93,6 @@ Const SC_RATIO    As Double = 0.8
 '   judgment_cm — the macro measures the mark rather than reserving a width for it; it shares JUDG_GAP_CM, which measuring cannot supply
 '   space_above_cm — converter-only: a CLI override.  The macro carries one SPACE_CM and lets the SPACE_ABOVE/SPACE_BELOW styles hold any difference, which is what a Writer user edits
 '   space_below_cm — converter-only, as space_above_cm
-'   annot_column_ratio — the macro has no \exannot column at all.  Until it does, sharing the number would say the two agree about a thing only one of them has — see MACRO_STYLES_NOT_SHARED for what that costs
-'   annot_sep_em — as annot_column_ratio
 ' --- END GENERATED
 
 Const JUDG_CHARS   As String = "*?#%!"
@@ -310,7 +311,8 @@ Const IT_TRANS  As Integer = 2     ' free translation, or ""
 Const IT_TIERS  As Integer = 3     ' array of word-arrays; tier 0 is the object
 Const IT_NTIERS As Integer = 4     ' 1 means unglossed, 0 means a tree
 Const IT_TREE   As Integer = 5     ' the item's own lines, when it is a tree
-Const IT_SIZE   As Integer = 6
+Const IT_ANNOT  As Integer = 6     ' \exannot label pulled off the object line
+Const IT_SIZE   As Integer = 7
 
 
 Sub LxBuildExample(oDoc As Object, oRange As Object, aLines As Variant, nLines As Integer)
@@ -459,6 +461,7 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
     Dim aTiers() As Variant
     Dim aWords As Variant, aLines As Variant
     Dim sTrans As String, sMark As String, sFirst As String, sSrc As String
+    Dim sAnnot As String
     Dim i As Integer, nTiers As Integer
 
     sTrans = ""
@@ -495,9 +498,16 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
         aItem(IT_TIERS) = Array()
         aItem(IT_NTIERS) = 0
         aItem(IT_TREE) = aLines
+        aItem(IT_ANNOT) = ""
         LxMakeItem = aItem()
         Exit Function
     End If
+
+    ' Before the words are counted: an \exannot label is not one of them.
+    ' It belongs in its own column and the gloss tier has nothing to put
+    ' under it.
+    sAnnot = ""
+    If nBody > 0 Then aBody(0) = LxPullAnnot(aBody(0), sAnnot)
 
     ReDim aTiers(LxMaxI(nBody - 1, 0))
     nTiers = 0
@@ -527,6 +537,7 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
 
     aItem(IT_MARKER) = sMarker
     aItem(IT_JUDG) = sMark
+    aItem(IT_ANNOT) = sAnnot
     aItem(IT_TRANS) = sTrans
     aItem(IT_TIERS) = aTiers()
     aItem(IT_NTIERS) = nTiers
@@ -537,6 +548,7 @@ End Function
 Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Dim oFont As Object, dPxPerCm As Double
     Dim dAvail As Double, dNumber As Double, dJudg As Double, dMarker As Double
+    Dim dAnnot As Double
     Dim dIndent As Double, dTable As Double
     Dim aItemW() As Double, aOneW() As Double, nWords As Integer
     Dim aBandStart() As Integer, aOneBand() As Integer
@@ -627,6 +639,20 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     nLead = 2
     If bSub Then nLead = 3
     dAvail = dAvail - dNumber - dMarker
+
+    ' An annotated example gives up the room to the right of the column,
+    ' plus \ExAnnotSep in front of it, before anything is measured into it.
+    dAnnot = 0
+    For k = 0 To nItems - 1
+        aItem = aItems(k)
+        If Len(aItem(IT_ANNOT)) > 0 Then dAnnot = dTable * (1 - ANNOT_RATIO)
+    Next k
+    If dAnnot > 0 Then
+        dAvail = LxMax(MIN_COL_CM, _
+                       dTable * ANNOT_RATIO - dNumber - dMarker _
+                       - ANNOT_SEP_EM * LxBodyPt / 72.0 * 2.54)
+    End If
+
     LxWideCm = dAvail                         ' what a drawn item has to fit
 
     ' Column widths come from the glossed items only.  An unglossed item is
@@ -715,12 +741,40 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
         dTotal = dAvail
     End If
 
+    ' The \exannot column sits at ANNOT_RATIO of the TABLE, measured from
+    ' its left edge and not from the indented line, so labels of items at
+    ' different depths line up -- linguexx's \ExAnnotColumn.  The filler is
+    ' whatever is left between the body and that edge, and it is emitted
+    ' however narrow: it IS \ExAnnotSep, and dropping it below MIN_COL_CM
+    ' would move the column an em left of where every other example put it.
     dFiller = 0
-    If dTotal <= dAvail - MIN_COL_CM Then dFiller = dAvail - dTotal
+    If dAnnot > 0 Then
+        dFiller = LxMax(0, dTable * ANNOT_RATIO - dNumber - dMarker - dTotal)
+    ElseIf dTotal <= dAvail - MIN_COL_CM Then
+        dFiller = dAvail - dTotal
+    End If
 
     Call LxEmitTable(oDoc, oRange, aItems, aBandStart(), aNBands(), aItemNW(), _
                      aColW(), nCols, aWordCol(), aWordSpan(), _
-                     dNumber, dMarker, dJudg, dFiller, nLead, dIndent, dTable)
+                     dNumber, dMarker, dJudg, dFiller, nLead, dIndent, dTable, _
+                     dAnnot)
+End Sub
+
+
+' The \exannot label, on the item's first row and in the last column.
+'
+' Written before the word loop merges anything: merging removes cells and
+' shifts every name to the right of it leftwards, so the column that is
+' last now would not be last by the end of the row.  The wide-cell and
+' band merges are bounded by nCols + nFill and leave this column alone.
+Sub LxPutAnnot(oTable As Object, nRow As Integer, nTotalCols As Integer, _
+               nAnn As Integer, aItem As Variant)
+    Dim oCell As Object
+    If nAnn <> 1 Then Exit Sub
+    If Len(aItem(IT_ANNOT)) = 0 Then Exit Sub
+    oCell = oTable.getCellByName(LxCell(nTotalCols - 1, nRow))
+    Call LxPut(oCell, aItem(IT_ANNOT))
+    oCell.getText().createTextCursor().ParaStyleName = ANNOT_PARA
 End Sub
 
 
@@ -731,9 +785,11 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                 aWordCol() As Integer, aWordSpan() As Integer, _
                 dNumber As Double, dMarker As Double, dJudg As Double, _
                 dFiller As Double, nLead As Integer, _
-                dIndent As Double, dTable As Double)
+                dIndent As Double, dTable As Double, _
+                dAnnot As Double)
     Dim oTable As Object
     Dim nRows As Integer, nTotalCols As Integer, nFill As Integer
+    Dim nAnn As Integer
     Dim b As Integer, t As Integer, i As Integer, c As Integer, k As Integer
     Dim nRow As Integer, nEnd As Integer, nItems As Integer, nMax As Integer
     Dim nShift As Integer
@@ -745,7 +801,9 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     nItems = UBound(aItems) + 1
     nFill = 0
     If dFiller > 0 Then nFill = 1
-    nTotalCols = nLead + nCols + nFill
+    nAnn = 0
+    If dAnnot > 0 Then nAnn = 1
+    nTotalCols = nLead + nCols + nFill + nAnn
 
     nRows = 2                                 ' the two spacer rows
     For k = 0 To nItems - 1
@@ -791,7 +849,8 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     For i = 0 To nCols - 1
         aWidths(nLead + i) = aColW(i)
     Next i
-    If nFill = 1 Then aWidths(nTotalCols - 1) = dFiller
+    If nFill = 1 Then aWidths(nLead + nCols) = dFiller
+    If nAnn = 1 Then aWidths(nTotalCols - 1) = dAnnot
 
     dSum = 0
     For i = 0 To nTotalCols - 1
@@ -812,6 +871,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                     aWords = aTiers(t)
                     If bFirstOfItem Then
                         Call LxHead(oDoc, oTable, nRow, aItem, bFirstOfAll, nLead)
+                        Call LxPutAnnot(oTable, nRow, nTotalCols, nAnn, aItem)
                         bFirstOfItem = False
                         bFirstOfAll = False
                     End If
@@ -852,6 +912,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
             ' nothing to do with each other.  A tree takes the same row and
             ' the same merged cell; only its contents are drawn.
             Call LxHead(oDoc, oTable, nRow, aItem, bFirstOfAll, nLead)
+            Call LxPutAnnot(oTable, nRow, nTotalCols, nAnn, aItem)
             bFirstOfAll = False
             If aItem(IT_NTIERS) = 0 Then
                 Call LxWideCellTree(oDoc, oTable, nRow, nLead, nCols + nFill, _
@@ -1626,6 +1687,63 @@ Function LxPullJudgment(sWord As String, ByRef sMark As String) As String
 End Function
 
 
+' \exannot{...} taken off a line, returning the line without it.
+'
+' linguexx allows it in exactly two places -- the end of an unglossed
+' example and the end of a gloss's OBJECT line -- and makes anywhere else
+' an error, so a line that came from a compiling document has it at most
+' once and at the end.  Searched anywhere in the line all the same, because
+' this also reads lines a person typed in Writer.
+'
+' The label goes in a column of its own at ANNOT_RATIO of the text block,
+' which is where linguexx's \ExAnnotColumn puts it.  Leaving it in the line
+' would make it the last word of the object tier, and the gloss tier has no
+' word to put under it -- which is exactly what a converted example used to
+' come back as.
+Function LxPullAnnot(sLine As String, ByRef sAnnot As String) As String
+    Dim nAt As Integer, nOpen As Integer, nDepth As Integer, i As Integer
+    Dim c As String
+
+    sAnnot = ""
+    nAt = InStr(sLine, "\exannot")
+    If nAt = 0 Then
+        LxPullAnnot = sLine
+        Exit Function
+    End If
+
+    ' step over an optional [spoken] argument; it has no Writer counterpart
+    i = nAt + Len("\exannot")
+    If Mid(sLine, i, 1) = "[" Then
+        Do While i <= Len(sLine) And Mid(sLine, i, 1) <> "]"
+            i = i + 1
+        Loop
+        i = i + 1
+    End If
+    If Mid(sLine, i, 1) <> "{" Then          ' not a call after all
+        LxPullAnnot = sLine
+        Exit Function
+    End If
+
+    nOpen = i : nDepth = 0
+    Do While i <= Len(sLine)
+        c = Mid(sLine, i, 1)
+        If c = "{" Then nDepth = nDepth + 1
+        If c = "}" Then
+            nDepth = nDepth - 1
+            If nDepth = 0 Then Exit Do
+        End If
+        i = i + 1
+    Loop
+    If nDepth <> 0 Then                      ' unbalanced: leave it alone
+        LxPullAnnot = sLine
+        Exit Function
+    End If
+
+    sAnnot = Mid(sLine, nOpen + 1, i - nOpen - 1)
+    LxPullAnnot = LxStrip(Left(sLine, nAt - 1) & Mid(sLine, i + 1))
+End Function
+
+
 Function LxDropFirst(aWords As Variant) As Variant
     Dim aOut() As String, i As Integer
     If UBound(aWords) < 1 Then
@@ -2261,6 +2379,16 @@ Sub LxEnsureStyles(oDoc As Object)
         oStyle.ParaLineSpacing = aSpacing
         oStyle.CharHeight = 1
     End If
+    ' \exannot's column.  Flush left in its own cell, which is what makes a
+    ' column of labels a column; the converter declares the same style, and
+    ' LxRowText reads it back to tell a label from a word of the tier.
+    If Not oFam.hasByName(ANNOT_PARA) Then
+        oStyle = oDoc.createInstance("com.sun.star.style.ParagraphStyle")
+        oStyle.ParentStyle = CELL_PARA
+        oFam.insertByName(ANNOT_PARA, oStyle)
+        oStyle.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
+    End If
+
     Call LxEnsureChildStyle(oDoc, oFam, SPACE_ABOVE)
     Call LxEnsureChildStyle(oDoc, oFam, SPACE_BELOW)
 End Sub
@@ -2423,6 +2551,7 @@ Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
     Dim n As Integer, j As Integer, nMax As Integer
     Dim bJudg As Boolean, bMarker As Boolean, bBand0 As Boolean, bStart As Boolean
     Dim sLine As String, sMark As String, sJudg As String, sPre As String
+    Dim sAnnot As String
     Dim sTree As String
 
     sErr = ""
@@ -2511,6 +2640,14 @@ Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
                     sPre = sPre & sJudg
                     sLine = sPre & sLine
                 End If
+
+                ' ... and the label goes back where it was written, at the
+                ' end of the object line, as \exannot{...} rather than as a
+                ' bare word.  That is what makes the trip out and back a
+                ' round trip: linguexx reads what comes out of here.
+                sAnnot = LxRowAnnot(oTable, aCells)
+                If Len(sAnnot) > 0 Then _
+                    sLine = LxStrip(sLine) & "\exannot{" & sAnnot & "}"
 
                 If bBand0 Then
                     aOut(nOut) = sLine
@@ -2612,12 +2749,19 @@ Function LxRowText(oTable As Object, aCells As Variant, nLead As Integer, _
 
     nCount = 0
     For i = 0 To UBound(aCells)
-        If LxCellColOf(aCells(i)) >= nLead Then nCount = nCount + 1
+        If LxCellColOf(aCells(i)) >= nLead Then
+            If LxCellStyle(oTable.getCellByName(aCells(i))) <> ANNOT_PARA Then _
+                nCount = nCount + 1
+        End If
     Next i
 
     s = ""
     For i = 0 To UBound(aCells)
-        If LxCellColOf(aCells(i)) >= nLead Then
+        ' The \exannot column is not a word of the tier.  Read back as one it
+        ' becomes the last object word with no gloss under it, and the grid
+        ' gains a column -- which is what a converted example used to do.
+        If LxCellColOf(aCells(i)) >= nLead _
+           And LxCellStyle(oTable.getCellByName(aCells(i))) <> ANNOT_PARA Then
             sCell = LxTrimTagged(LxReadText(oTable.getCellByName(aCells(i)).getText()))
             sPlain = LxStrip(sCell)
             If Len(sPlain) > 0 Then
@@ -2808,6 +2952,20 @@ Function LxRowCells(oTable As Object, nRow As Integer) As Variant
         ReDim Preserve aOut(n - 1)
         LxRowCells = aOut()
     End If
+End Function
+
+
+' The \exannot label of a row, or "" — whatever sits in the column the
+' converter and LxPutAnnot both style ANNOT_PARA.
+Function LxRowAnnot(oTable As Object, aCells As Variant) As String
+    Dim i As Integer
+    LxRowAnnot = ""
+    For i = 0 To UBound(aCells)
+        If LxCellStyle(oTable.getCellByName(aCells(i))) = ANNOT_PARA Then
+            LxRowAnnot = LxStrip(LxReadText(oTable.getCellByName(aCells(i)).getText()))
+            If Len(LxRowAnnot) > 0 Then Exit Function
+        End If
+    Next i
 End Function
 
 

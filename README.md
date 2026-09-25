@@ -167,6 +167,11 @@ judgments · `\label` / `\sublabel` / `\ref` / `\pref` · `\lpzg{…}` ·
 `[1]` gets `[1]` · `\exannot{…}` structural labels, in a column at
 `.75` of the text block — where `\ExAnnotColumn` puts them.
 
+The Writer macro knows the construct too: it builds the same column from
+`\exannot{…}` typed in Writer, and *Untypeset* gives the wrapper back
+rather than leaving the label as a stray word — so a converted example
+survives the trip out and back.
+
 `\exannot` differs from linguexx in one case, deliberately. linguexx keeps
 an example that reaches the column full width and drops its annotation to
 the next line; this converter bands the example instead, which is what it
@@ -217,29 +222,6 @@ answering it in passing would turn an accident into a promise.
 
 So the converter says what it did and moves on. If you want the side layout
 in the `.odt`, it is a column drag in Writer, once, per example.
-
-### `\exannot` and the Writer macro do not yet round-trip
-
-The macro can take a converted example back apart (*Untypeset*), and an
-example carrying an `\exannot` label does not survive the trip. The macro
-has no annotation column, so it reads that cell as ordinary content: a
-converted
-
-```
-\ex. \gll que Pierre est fatigu\'e \exannot{[CP]}\\
-     that Pierre is tired\\
-\glt `that Pierre is tired'
-```
-
-comes back as `que Pierre est fatigué [CP]` — the `\exannot` wrapper gone
-and the label now a fifth object word. Re-typesetting that builds an
-eight-column grid where the original has seven, so the gloss stops sitting
-under its word. Measured, not feared.
-
-Nothing is lost on the page from converting; this affects only the
-round trip back through the macro. The fix is to teach the macro to
-recognise the `LxAnnot` paragraph style, the way it already recognises
-`LxExampleBand` — see `MACRO_STYLES_NOT_SHARED` in `styles.py`.
 
 ## Things you will want to fix by hand
 

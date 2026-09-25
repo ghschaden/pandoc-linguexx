@@ -81,6 +81,15 @@ all. It duplicates the converter's constants on purpose — see below.
   can import nothing. `make macro` (`tools/sync_macro.py`) writes the
   second copy from the first and `tests/test_macro_sync.py` fails when
   they drift. Never hand-edit the constants in `LinguExx.bas`.
+- **A style the macro does not know is a broken round trip, not a cosmetic
+  gap.** It reads converted tables back cell by cell, so a cell it cannot
+  identify becomes content: `LxAnnot` unknown meant an `\exannot` label
+  returned as a fifth object word and the rebuilt grid gained a column.
+  `MACRO_STYLES_NOT_SHARED` is where such a gap is recorded, and it is
+  empty — keep it so, or say what the absence costs.
+- **The macro's suite is `python3 tools/run_macro_test.py DIR`**, which
+  drives a real LibreOffice. It is not part of `make test`, so a change to
+  `LinguExx.bas` is unverified until it is run by hand.
 
 ## Tracking linguexx
 - **This converter targets a linguexx VERSION**, currently 1.3.2, and the
