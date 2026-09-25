@@ -155,6 +155,20 @@ page, citations — est converti par pandoc comme d'habitude.
 
 ## A.6 Ce qu'il ne fait pas, et le dit
 
+Les étiquettes structurales `\exannot{…}` sont converties, dans une colonne
+placée à `.75` du bloc de texte — là où `\ExAnnotColumn` les met. Une
+différence assumée : linguexx laisse un exemple qui atteint la colonne sur
+toute la largeur et renvoie son étiquette à la ligne suivante ; ce
+convertisseur découpe l'exemple en bandes, ce qu'il fait déjà de tout
+exemple trop large, pour que la colonne reste une colonne à toute longueur.
+L'argument optionnel (forme orale) est abandonné.
+
+**Cible linguexx 1.3.2.** L'écart est autrement invisible : ce convertisseur
+a été écrit pour la 1.2 et a continué pendant un mois à produire
+silencieusement la sortie de la 1.2 après que la 1.3 l'eut changée. Avec une
+version plus récente, vérifiez ce tableau avant de faire confiance au
+résultat.
+
 Le convertisseur n'échoue **jamais en silence**. Tout ce qu'il ne peut pas
 rendre fidèlement produit un avertissement nommant la construction et la
 ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
@@ -166,6 +180,11 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\exsource{…}` | rendu en ligne à la fin, pas aligné à droite |
 | `\refrange`, `\Last`, `\Next`, renvois relatifs | laissés en LaTeX |
 | `\altn`, `\altg` | laissés en LaTeX |
+| `\GlossTransSide` | avertit ; converti en exemple ordinaire, traduction en dessous. Choix délibéré |
+| `[phantomalign]`, `\GlossPhantomAlign` | avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |
+| `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | avertissent ; les styles du document de référence et les marques littérales sont utilisés |
+| `[langsci]`, l'interface `\ea … \z` | avertit ; ces exemples restent en LaTeX |
+| `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignorés — ils décrivent ce qu'un lecteur d'écran dit d'un PDF, ce qui n'a pas d'équivalent ODT |
 | syntaxe gb4e `exe`/`xlist`, mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
 

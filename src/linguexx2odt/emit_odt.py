@@ -36,9 +36,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from .inline import InlineRenderer, esc
+from .latexutil import Brackets
 from .ir import Body, Example, Item
 from .styles import (
-    BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME,
+    ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
 )
 
@@ -56,12 +57,21 @@ def sequence_field(index: int) -> str:
     )
 
 
-def sequence_ref(index: int, letter: str = "") -> str:
-    """``(3)`` or ``(3a)`` — field plus literal letter, per the reference."""
+def sequence_ref(index: int, letter: str = "", brackets: "Brackets | None" = None,
+                 bare: bool = False) -> str:
+    """``(3)`` or ``(3a)`` — field plus literal letter, per the reference.
+
+    The brackets are the document's (``\\ExLBr``/``\\ExRBr``), not always
+    parentheses.  ``bare`` drops them, which is what ``\\pref`` prints; it
+    used to be done by slicing a character off each end of the finished
+    XML, which is right only while they are one character each.
+    """
+    br = brackets or Brackets()
+    left, right = ("", "") if bare else (esc(br.ex_l), esc(br.ex_r))
     return (
-        f'(<text:sequence-ref text:reference-format="value"'
+        f'{left}<text:sequence-ref text:reference-format="value"'
         f' text:ref-name="{ref_name(index)}">{index + 1}</text:sequence-ref>'
-        f"{esc(letter)})"
+        f"{esc(letter)}{right}"
     )
 
 
@@ -252,6 +262,9 @@ class Emitter:
     split: bool = True
     """Break an example too wide for the text block into stacked bands."""
 
+    brackets: Brackets = field(default_factory=Brackets)
+    """What to wrap a number in -- \\ExLBr & co., as the preamble set them."""
+
     any_judgment: bool = False
     """Whether *any* example in the document carries a judgment mark.
 
@@ -284,7 +297,9 @@ class Emitter:
                 for m in marks
             )
 
-        numbers = [ex.custom_label or f"({ex.index + 1})" for ex in examples] or ["(1)"]
+        wrap = self.brackets.wrap_example
+        numbers = [ex.custom_label or wrap(str(ex.index + 1)) for ex in examples] \
+            or [wrap("1")]
         number = max(
             runs_width_cm(self.inline.runs(n), lay.em_cm, lay.sc_ratio)
             for n in numbers
@@ -339,7 +354,8 @@ class Emitter:
     def _number_text(self, ex: Example) -> str:
         if ex.custom_label:
             return self.inline.render(ex.custom_label)
-        return "(" + sequence_field(ex.index) + ")"
+        br = self.brackets
+        return esc(br.ex_l) + sequence_field(ex.index) + esc(br.ex_r)
 
     # -- table mode --------------------------------------------------------
     def _table(self, ex: Example) -> str:
@@ -351,6 +367,24 @@ class Emitter:
 
         lead = self._lead_widths(has_marker, has_judgment)
         available = self.layout.text_width_cm - sum(lead)
+
+        # \exannot puts a structural label in a column measured from the
+        # LEFT edge of the text block, so labels of examples at different
+        # nesting levels line up.  Reserve it, and give the body only what
+        # is left before it, minus \ExAnnotSep.
+        #
+        # linguexx, running out of room, keeps the example full width and
+        # drops the annotation to the next line.  This converter bands
+        # instead -- which is what it already does to any example too wide
+        # for the block, so the column stays a column at every length
+        # rather than the rule changing at one.  Different from the PDF in
+        # that case, and the same everywhere else.
+        lay = self.layout
+        has_annot = any(body.annot for _, body in bodies)
+        annot_x = lay.annot_column_ratio * lay.text_width_cm
+        if has_annot:
+            available = max(lay.min_col_cm,
+                            annot_x - sum(lead) - lay.annot_sep_em * lay.em_cm)
 
         # One plan per body, each measured and banded on its own words.  A
         # paradigm's items no longer pull on one another's columns; Grid
@@ -377,6 +411,20 @@ class Emitter:
             total = available
         filler = 1 if total <= available - self.layout.min_col_cm else 0
         widths = lead + columns + ([available - total] if filler else [])
+        if has_annot:
+            # Whatever is still unspoken for goes to the annotation, so its
+            # column begins at annot_x however the body measured out.
+            widths = lead + columns
+            gap = annot_x - sum(lead) - total
+            # Emitted however narrow it is, unlike the ordinary filler: the
+            # gap IS \ExAnnotSep, and dropping it for being below
+            # min_col_cm moves the annotation column an em left of where
+            # every other example put it, which is the one thing a column
+            # of labels may not do.
+            filler = 1 if gap > 0.01 else 0
+            if filler:
+                widths = widths + [gap]
+            widths = widths + [self.layout.text_width_cm - sum(widths)]
         self.auto_styles.append(self._table_styles(ex.index, widths))
 
         cols = "".join(
@@ -387,7 +435,7 @@ class Emitter:
         rows: list[str] = []
         for k, (marker, body) in enumerate(bodies):
             rows += self._body_rows(ex, marker, body, k == 0, grid, k, filler,
-                                    has_marker, has_judgment)
+                                    has_marker, has_judgment, has_annot)
 
         span = len(widths)
         rows = (
@@ -487,9 +535,22 @@ class Emitter:
 
     # -- rows --------------------------------------------------------------
     def _body_rows(self, ex, marker, body, first, grid, body_index, filler,
-                   has_marker, has_judgment) -> list[str]:
+                   has_marker, has_judgment, has_annot=False) -> list[str]:
         rows: list[str] = []
         head_used = False
+
+        def annot_cell(active: bool) -> str:
+            r"""The \exannot column, on the body's first row only.
+
+            Every row of the table carries the cell once the column exists,
+            because a table row that is short by one cell is not a shorter
+            row -- it is a broken one.  Only the first row of a body puts
+            anything in it: linguexx sets the label level with the object
+            tier, not under the free translation."""
+            if not has_annot:
+                return ""
+            content = self.inline.render(body.annot) if (active and body.annot) else ""
+            return self._cell(content, style=ANNOT_PARA)
 
         def lead_cells(active: bool) -> str:
             """Number / marker / judgment cells.  Only the first row of a
@@ -519,6 +580,7 @@ class Emitter:
                         "<table:table-row>" + lead_cells(not head_used)
                         + self._band_cells(tier.cells, band, grid, body_index,
                                            filler, style)
+                        + annot_cell(not head_used)
                         + "</table:table-row>"
                     )
                     head_used = True
@@ -526,6 +588,7 @@ class Emitter:
             rows.append(
                 "<table:table-row>" + lead_cells(True)
                 + self._cell(self._body_text_only(body), span=len(grid.columns) + filler)
+                + annot_cell(True)
                 + "</table:table-row>"
             )
             head_used = True
@@ -536,6 +599,7 @@ class Emitter:
                 "<table:table-row>" + lead_cells(False)
                 + self._cell(trailer, span=len(grid.columns) + filler,
                              style=TRANSLATION_PARA)
+                + annot_cell(False)
                 + "</table:table-row>"
             )
         return rows

@@ -1,0 +1,101 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "A plain example",
+        "tiers": [],
+        "translation": "",
+        "source": "",
+        "annot": "[XP]",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. A plain example\\exannot{[XP]}",
+      "line": 22
+    },
+    {
+      "index": 1,
+      "placeholder": "⟨⟨LINGUEXX-0001⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "que",
+              "Pierre",
+              "est",
+              "fatigu\\'e"
+            ]
+          },
+          {
+            "cells": [
+              "that",
+              "Pierre",
+              "is",
+              "tired"
+            ]
+          }
+        ],
+        "translation": "`that Pierre is tired'",
+        "source": "",
+        "annot": "[CP]",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\ex. \\gll que Pierre est fatigu\\'e \\exannot{[CP]}\\\\\n     that Pierre is tired\\\\\n\\glt `that Pierre is tired'",
+      "line": 24
+    },
+    {
+      "index": 2,
+      "placeholder": "⟨⟨LINGUEXX-0002⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a.",
+          "body": {
+            "judgment": "",
+            "text": "que Pierre est fatigu\\'e",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "annot": "[CP]",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b.",
+          "body": {
+            "judgment": "",
+            "text": "Pierre est fatigu\\'e",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "annot": "[TP]",
+            "label": ""
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\n\\a. que Pierre est fatigu\\'e\\exannot{[CP]}\n\\b. Pierre est fatigu\\'e\\exannot[spoken form]{[TP]}\n",
+      "line": 28
+    }
+  ],
+  "labels": {},
+  "warnings": []
+}

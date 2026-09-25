@@ -37,6 +37,7 @@ from typing import Any, Callable
 
 from .extract import PLACEHOLDER_RE
 from .emit_odt import sequence_ref
+from .latexutil import Brackets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 
@@ -88,10 +89,12 @@ class Injector:
         blocks_by_index: dict[int, str],
         labels: dict[str, tuple[int, str]],
         warn: Callable[[str], None] | None = None,
+        brackets: Brackets | None = None,
     ) -> None:
         self.blocks = blocks_by_index
         self.labels = labels
         self.warn = warn or (lambda _m: None)
+        self.brackets = brackets or Brackets()
         self.placeholders_replaced = 0
         self.refs_rewritten = 0
 
@@ -132,7 +135,7 @@ class Injector:
             if label and label in self.labels:
                 index, letter = self.labels[label]
                 self.refs_rewritten += 1
-                return _raw_inline(sequence_ref(index, letter))
+                return _raw_inline(sequence_ref(index, letter, self.brackets))
             return None
         if node.get("t") == "RawInline":
             fmt, text = (node.get("c") or ["", ""])[:2]
@@ -141,13 +144,16 @@ class Injector:
                 if m and m.group(2) in self.labels:
                     index, letter = self.labels[m.group(2)]
                     self.refs_rewritten += 1
-                    xml = sequence_ref(index, letter)
-                    if m.group(1) == "pref":   # \pref prints bare, no parentheses
-                        xml = xml[1:-1]
+                    # \pref prints the bare number.  Built without the
+                    # brackets rather than sliced off the finished XML: a
+                    # slice is right only while they are one character each.
+                    xml = sequence_ref(index, letter, self.brackets,
+                                       bare=m.group(1) == "pref")
                     return _raw_inline(xml)
         return None
 
 
-def inject(doc: dict, blocks_by_index, labels, warn=None) -> tuple[dict, Injector]:
-    inj = Injector(blocks_by_index, labels, warn)
+def inject(doc: dict, blocks_by_index, labels, warn=None,
+           brackets=None) -> tuple[dict, Injector]:
+    inj = Injector(blocks_by_index, labels, warn, brackets=brackets or Brackets())
     return inj.run(doc), inj

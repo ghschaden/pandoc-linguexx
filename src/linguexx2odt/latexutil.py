@@ -26,6 +26,7 @@ boundaries, respect brace groups, and know which characters are "live"
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 CMD = re.compile(r"\\(?:([a-zA-Z@]+)\*?|(.))")
 """A control sequence: a word (optionally starred) or a single character."""
@@ -232,3 +233,92 @@ def split_cells(tier: str) -> tuple[str, ...]:
         i += 1
     flush()
     return tuple(cells)
+
+
+# --------------------------------------------------------------------------
+# the characters linguexx puts around a number
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Brackets:
+    r"""What linguexx wraps an example number and a sub-example letter in.
+
+    The defaults are linguexx's own (``linguexx.sty``)::
+
+        \ExLBr ( \ExRBr )                -> (1)
+        \SubExLBr '' \SubExRBr .         -> a.
+        \SubSubExLBr '' \SubSubExRBr .   -> i.
+
+    They are `linguex`'s names and a document is entitled to redefine them
+    -- ``\renewcommand{\ExLBr}{[}`` for ``[1]`` is the documented way to get
+    square brackets, and linguexx has honoured it since 1.3.  Before that
+    the redefinition was accepted and ignored, which its changelog calls
+    "the one kind of incompatibility a drop-in replacement cannot have: the
+    document still compiles and only the page is wrong".  This converter
+    reproduced exactly that until the same version it now targets.
+    """
+
+    ex_l: str = "("
+    ex_r: str = ")"
+    sub_l: str = ""
+    sub_r: str = "."
+    subsub_l: str = ""
+    subsub_r: str = "."
+
+    def wrap_example(self, inner: str) -> str:
+        return f"{self.ex_l}{inner}{self.ex_r}"
+
+    def wrap_sub(self, level: int, inner: str) -> str:
+        if level >= 2:
+            return f"{self.subsub_l}{inner}{self.subsub_r}"
+        return f"{self.sub_l}{inner}{self.sub_r}"
+
+
+#: The six names, and which field of Brackets each one sets.
+_BRACKET_FIELDS = {
+    "ExLBr": "ex_l", "ExRBr": "ex_r",
+    "SubExLBr": "sub_l", "SubExRBr": "sub_r",
+    "SubSubExLBr": "subsub_l", "SubSubExRBr": "subsub_r",
+}
+
+_BRACKET_DEF = re.compile(
+    r"\\(?:re)?newcommand\s*\*?\s*(?:\{\s*\\([a-zA-Z@]+)\s*\}|\\([a-zA-Z@]+))"
+    r"|\\def\s*\\([a-zA-Z@]+)"
+)
+
+
+def scan_brackets(src: str, warn=None) -> Brackets:
+    r"""Read ``\ExLBr`` & co. out of a document's preamble.
+
+    Only the preamble counts.  An ODT example number is a `text:sequence`
+    field and its surrounding characters are literal text emitted once per
+    example, so a redefinition partway through the document cannot be
+    honoured the way LaTeX honours it; the run says so rather than
+    pretending.  Comments are skipped -- a commented-out ``\renewcommand``
+    is the obvious way to try one out and put it back.
+    """
+    live = live_mask(src)
+    body_at = src.find(r"\begin{document}")
+    if body_at < 0:
+        body_at = len(src)
+
+    values: dict[str, str] = {}
+    for m in _BRACKET_DEF.finditer(src):
+        if not live[m.start()]:
+            continue
+        name = m.group(1) or m.group(2) or m.group(3)
+        field_name = _BRACKET_FIELDS.get(name)
+        if field_name is None:
+            continue
+        group = find_group(src, m.end())
+        if group is None:
+            continue
+        if m.start() > body_at:
+            if warn:
+                warn(f"\\{name} is redefined after \\begin{{document}}; "
+                     f"ignored -- an example number's brackets are emitted "
+                     f"once per example and cannot change partway through")
+            continue
+        values[field_name] = group[0].strip()
+
+    return Brackets(**values)

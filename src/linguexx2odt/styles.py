@@ -42,6 +42,7 @@ from dataclasses import dataclass
 CELL_PARA = "LxExampleCell"
 TRANSLATION_PARA = "LxTranslation"
 JUDGMENT_PARA = "LxJudgmentCell"
+ANNOT_PARA = "LxAnnot"
 
 #: The first row of a *continuation* band, and nothing else.
 #:
@@ -147,6 +148,23 @@ class Layout:
     20% — so a \\textsc or \\lpzg column measured as lowercase is too
     narrow for what goes in it."""
 
+    annot_column_ratio: float = 0.75
+    r"""Where \exannot's column sits, as a fraction of the text block.
+
+    linguexx's \ExAnnotColumn defaults to .75\columnwidth and is measured
+    from the LEFT edge of the text block, so it does not move when the
+    example is indented -- which is the whole point of it: the labels of
+    examples at different nesting levels still line up.
+    """
+
+    annot_sep_em: float = 1.0
+    r"""\ExAnnotSep: the least gap between an example and that column.
+
+    An example that would come within it takes its annotation onto the
+    next line instead of pushing the column right, which is what keeps the
+    column a column.  linguexx's default is 1em with no stretch or shrink.
+    """
+
     width_safety: float = 1.02
     """Multiplier on the width estimate.  Err wide: a column a little too
     generous merely looks loose, one a little too narrow breaks a word
@@ -224,6 +242,15 @@ def named_styles(layout: Layout) -> str:
             f'<style:style style:name="{TRANSLATION_PARA}" style:family="paragraph"'
             f' style:parent-style-name="{CELL_PARA}">'
             f'<style:paragraph-properties fo:margin-top="0.1cm"/>'
+            f"</style:style>",
+            # \exannot's column.  Flush left in its own cell, which is what
+            # makes a column of labels a column: linguexx sets them all at
+            # \ExAnnotColumn from the text block's left edge, and the cell
+            # boundary is that distance here.  \ExAnnotFont is
+            # \normalfont by default, so nothing is declared about the face.
+            f'<style:style style:name="{ANNOT_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}">'
+            f'<style:paragraph-properties fo:text-align="start"/>'
             f"</style:style>",
             # Declares nothing: it is a mark, not a look.  See BAND_PARA.
             f'<style:style style:name="{BAND_PARA}" style:family="paragraph"'

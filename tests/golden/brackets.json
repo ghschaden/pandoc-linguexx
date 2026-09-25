@@ -1,0 +1,55 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "top",
+      "custom_label": "",
+      "body": null,
+      "items": [
+        {
+          "level": 1,
+          "ordinal": 1,
+          "marker": "a)",
+          "body": {
+            "judgment": "",
+            "text": "sub one",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "annot": "",
+            "label": ""
+          }
+        },
+        {
+          "level": 1,
+          "ordinal": 2,
+          "marker": "b)",
+          "body": {
+            "judgment": "",
+            "text": "sub two, whose letter is closed by a parenthesis",
+            "tiers": [],
+            "translation": "",
+            "source": "",
+            "annot": "",
+            "label": "sub"
+          }
+        }
+      ],
+      "warnings": [],
+      "src": "\\ex.\\label{top} Square brackets around the number.\n\\a. sub one\n\\b.\\label{sub} sub two, whose letter is closed by a parenthesis",
+      "line": 21
+    }
+  ],
+  "labels": {
+    "top": [
+      0,
+      ""
+    ],
+    "sub": [
+      0,
+      "b"
+    ]
+  },
+  "warnings": []
+}

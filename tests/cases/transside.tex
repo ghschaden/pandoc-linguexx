@@ -1,0 +1,21 @@
+%% \GlossTransSide (linguexx 1.3) sets the free translation in a column
+%% BESIDE the gloss instead of under it.  Measured against linguexx: with
+%% it set, the translation and the object tier share a baseline.
+%%
+%% This converter normalises it: the example is converted as an ordinary
+%% one, with the translation below, and the run SAYS so.  That is a
+%% decision (2026-09-25), not a gap -- a side translation is the same
+%% material in another place, and reproducing it would mean deciding what
+%% the column does when an example splits into bands, which linguexx never
+%% has to answer because it reflows.
+%%
+%% The assertion is on the WARNING.  Before it existed the setting was a
+%% preamble command, nothing in the body was unknown, and the run stayed
+%% silent while the output stopped matching the PDF.
+\input{_preamble}
+\GlossTransSide
+\begin{document}
+\exg. Der Hund bellte.\\
+the dog barked\\
+\glt `The dog barked.'
+\end{document}

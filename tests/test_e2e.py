@@ -455,3 +455,124 @@ def test_sub_example_letters_align_with_main_example_text(pdf: Path) -> None:
         )
 
     assert first["*This"] < main_text, "the judgment mark does not hang to the left"
+
+
+# --------------------------------------------------------------------------
+# the document's own brackets
+# --------------------------------------------------------------------------
+
+BRACKETS_SRC = r"""\documentclass{article}
+\usepackage{linguexx}
+\renewcommand{\ExLBr}{[}
+\renewcommand{\ExRBr}{]}
+\begin{document}
+\ex.\label{top} Square brackets around the number.
+\a. sub one
+\b.\label{sub} sub two
+
+Refs: \ref{top}, \pref{top}, \ref{sub}.
+\end{document}
+"""
+
+
+@pytest.fixture(scope="module")
+def brackets_odt(tmp_path_factory) -> Path:
+    if shutil.which("pandoc") is None:
+        pytest.skip("pandoc not installed")
+    d = tmp_path_factory.mktemp("brackets")
+    src = d / "brackets.tex"
+    src.write_text(BRACKETS_SRC, encoding="utf-8")
+    out = d / "brackets.odt"
+    assert main([str(src), "-o", str(out), "-q"]) == 0
+    return out
+
+
+@pandoc
+def test_number_uses_the_documents_brackets(brackets_odt: Path) -> None:
+    r"""\ExLBr/\ExRBr reach the number, which used to be '(' and ')' always.
+
+    Checked against linguexx itself, which sets this document as [1]: the
+    converter printed (1) and warned about nothing, so the page was wrong
+    and the run looked clean.
+    """
+    content = postprocess.read(brackets_odt, "content.xml")
+    text = re.sub(r"<[^>]+>", "", content)
+    assert "[1]" in text, f"expected a bracketed number; got {text[:120]!r}"
+    assert "(1)" not in text
+
+
+@pandoc
+def test_pref_prints_the_bare_number(brackets_odt: Path) -> None:
+    r"""\pref prints the number with nothing round it -- and prints at all.
+
+    Two bugs met here.  pandoc drops \pref (it is linguexx's, not LaTeX's),
+    so without +raw_tex the reference reached the injector as nothing and
+    the document showed an empty gap; and the bare form was made by slicing
+    one character off each end of the finished XML, which stops being right
+    the moment the brackets are '[' and ']' or anything longer.
+    """
+    content = postprocess.read(brackets_odt, "content.xml")
+    text = " ".join(re.sub(r"<[^>]+>", "", content).split())
+    refs = text.split("Refs:", 1)[1]
+    assert refs.startswith(" [1], 1, [1b]."), f"got {refs[:40]!r}"
+
+
+# --------------------------------------------------------------------------
+# \exannot's column
+# --------------------------------------------------------------------------
+
+ANNOT_SRC = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\ex.
+\a. que Pierre est fatigu\'e\exannot{[CP]}
+\b. Pierre est fatigu\'e\exannot[spoken form]{[TP]}
+\end{document}
+"""
+
+
+@pytest.fixture(scope="module")
+def annot_odt(tmp_path_factory) -> Path:
+    if shutil.which("pandoc") is None:
+        pytest.skip("pandoc not installed")
+    d = tmp_path_factory.mktemp("annot")
+    src = d / "annot.tex"
+    src.write_text(ANNOT_SRC, encoding="utf-8")
+    out = d / "annot.odt"
+    assert main([str(src), "-o", str(out), "-q"]) == 0
+    return out
+
+
+@pandoc
+def test_exannot_labels_are_present(annot_odt: Path) -> None:
+    r"""Both labels survive, and the optional spoken form does not appear.
+
+    They used to be dropped outright: pandoc rendered the fragment, the run
+    warned, and nothing reached content.xml -- "degrades to readable output
+    rather than to nothing" with nothing at the end of it.
+    """
+    text = re.sub(r"<[^>]+>", "", postprocess.read(annot_odt, "content.xml"))
+    assert "[CP]" in text and "[TP]" in text
+    assert "spoken form" not in text
+
+
+@pandoc
+def test_exannot_column_sits_where_linguexx_puts_it(annot_odt: Path) -> None:
+    r"""The column begins at .75 of the text block, measured from its left edge.
+
+    That is \ExAnnotColumn's default, and the number is not this
+    converter's opinion: linguexx sets both labels of this very paradigm at
+    12.750 cm from the text block on a 17 cm block, read off the rendered
+    PDF with pdftotext -bbox.  The point of the construct is that labels of
+    examples at different nesting levels line up, so the position IS the
+    feature.
+    """
+    content = postprocess.read(annot_odt, "content.xml")
+    widths = [float(w) for w in
+              re.findall(r'style:column-width="([0-9.]+)cm"', content)]
+    assert widths, "no table columns found"
+    assert sum(widths) == pytest.approx(17.0, abs=0.01), "table is not the text block"
+    start = sum(widths[:-1])
+    assert start == pytest.approx(12.75, abs=0.02), (
+        f"annotation column starts at {start:.3f}cm, linguexx puts it at 12.750"
+    )

@@ -30,6 +30,7 @@
         ],
         "translation": "`This is a small example.'",
         "source": "",
+        "annot": "",
         "label": ""
       },
       "items": [],
@@ -63,6 +64,7 @@
         ],
         "translation": "`The little child sleeps.'",
         "source": "",
+        "annot": "",
         "label": ""
       },
       "items": [],
@@ -96,6 +98,7 @@
         ],
         "translation": "Unequal lines: empty gloss cells.",
         "source": "",
+        "annot": "",
         "label": ""
       },
       "items": [],
@@ -136,6 +139,7 @@
         ],
         "translation": "`I slept.'",
         "source": "",
+        "annot": "",
         "label": ""
       },
       "items": [],
@@ -183,6 +187,7 @@
         ],
         "translation": "`The dog sleeps.'",
         "source": "",
+        "annot": "",
         "label": ""
       },
       "items": [],

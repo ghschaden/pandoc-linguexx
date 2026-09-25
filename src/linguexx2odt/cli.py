@@ -140,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
         space_above_cm=args.space_above,
         space_below_cm=args.space_below,
     )
-    emitter = Emitter(layout=layout, split=not args.no_split)
+    emitter = Emitter(layout=layout, split=not args.no_split,
+                      brackets=parsed.brackets)
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}
 
@@ -151,14 +152,23 @@ def main(argv: list[str] | None = None) -> int:
         residue = tmp / "residue.tex"
         residue.write_text(parsed.residue, encoding="utf-8")
 
+        # +raw_tex so that a command pandoc does not know survives as a
+        # RawInline instead of being dropped on the floor.  \pref and the
+        # relative references are linguexx's, so plain `latex` emitted
+        # NOTHING for them -- the inject pass has always had a branch for
+        # the RawInline they never arrived as, and a document's \pref came
+        # out as an empty gap between two commas.  Checked before changing:
+        # Emph, Strong, Note, Cite, Math and Header parse identically with
+        # and without it, so this costs the prose nothing.
         ast = json.loads(
             _pandoc(
-                ["-f", "latex", "-t", "json",
+                ["-f", "latex+raw_tex", "-t", "json",
                  "--resource-path", str(workdir), str(residue)],
                 cwd=workdir,
             ).stdout
         )
-        doc, inj = inject(ast, blocks, parsed.labels, warnings.append)
+        doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
+                          brackets=parsed.brackets)
 
         ast_path = tmp / "ast.json"
         ast_path.write_text(json.dumps(doc), encoding="utf-8")

@@ -1,0 +1,42 @@
+{
+  "examples": [
+    {
+      "index": 0,
+      "placeholder": "⟨⟨LINGUEXX-0000⟩⟩",
+      "label": "",
+      "custom_label": "",
+      "body": {
+        "judgment": "",
+        "text": "",
+        "tiers": [
+          {
+            "cells": [
+              "Der",
+              "Hund",
+              "bellte."
+            ]
+          },
+          {
+            "cells": [
+              "the",
+              "dog",
+              "barked"
+            ]
+          }
+        ],
+        "translation": "`The dog barked.'",
+        "source": "",
+        "annot": "",
+        "label": ""
+      },
+      "items": [],
+      "warnings": [],
+      "src": "\\exg. Der Hund bellte.\\\\\nthe dog barked\\\\\n\\glt `The dog barked.'\n",
+      "line": 18
+    }
+  ],
+  "labels": {},
+  "warnings": [
+    "\\GlossTransSide sets the free translation in a column beside the gloss; converted as an ordinary example, with the translation below it"
+  ]
+}

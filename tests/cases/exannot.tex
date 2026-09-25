@@ -1,0 +1,31 @@
+%% \exannot{[CP]} (linguexx 1.3) is a structural label about an example --
+%% the category of a constituent, the reading intended, the language --
+%% set in a column so that the labels of several examples line up and the
+%% eye can use them.
+%%
+%% The column is measured from the LEFT edge of the text block, not from
+%% the indented line, which is what makes it hold across nesting levels.
+%% \ExAnnotColumn defaults to .75\columnwidth; on the 17 cm block this
+%% converter assumes, that is 12.75 cm, and linguexx puts both labels of
+%% the paradigm below at exactly 12.750 cm (measured off the rendered PDF).
+%%
+%% Three shapes, because they take different paths through the emitter:
+%% an unglossed example (one merged cell), a gloss (where linguexx requires
+%% the label at the end of the OBJECT line and makes any other tier an
+%% error), and a paradigm of sub-examples, which is the case the column
+%% exists for.
+%%
+%% The optional argument is the spoken form, for a PDF screen reader. It is
+%% dropped: an ODT has nowhere to put it, and the README says so.
+\input{_preamble}
+\begin{document}
+\ex. A plain example\exannot{[XP]}
+
+\ex. \gll que Pierre est fatigu\'e \exannot{[CP]}\\
+     that Pierre is tired\\
+\glt `that Pierre is tired'
+
+\ex.
+\a. que Pierre est fatigu\'e\exannot{[CP]}
+\b. Pierre est fatigu\'e\exannot[spoken form]{[TP]}
+\end{document}

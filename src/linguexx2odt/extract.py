@@ -30,18 +30,91 @@ warning names it.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from .ir import Body, Example, Item, Tier
 from .latexutil import (
+    Brackets,
     cmd_at,
     find_group,
     find_optional,
     live_mask,
+    scan_brackets,
     split_cells,
     strip_comments,
     split_top,
 )
+
+#: Preamble settings that change how linguexx renders something this
+#: converter already emits, mapped to what the reader should be told.
+#:
+#: These are the blind spot the unknown-command fallback cannot cover:
+#: nothing unknown appears in the document body, so a run stays silent
+#: while the output quietly stops matching the PDF.  \\GlossTransSide is
+#: the case that proved it -- linguexx sets the free translation beside
+#: the gloss, this converter sets it below, and until now neither the run
+#: nor the README said so.
+#:
+#: Warning, and deliberately nothing more.  A side translation is a
+#: placement of the same material, so normalising it to the ordinary
+#: layout loses no content; reproducing it would mean deciding what the
+#: column does when an example splits into bands -- repeat beside each,
+#: sit beside the first, or suppress the split -- a question linguexx
+#: never faces because it reflows and an ODT table does not.  Decided
+#: 2026-09-25: not worth that, for a placement.
+_UNSUPPORTED_SETTINGS = {
+    "GlossTransSide":
+        "sets the free translation in a column beside the gloss; converted "
+        "as an ordinary example, with the translation below it",
+    "GlossPhantomAlign":
+        "hangs judgment marks into a gutter so the tiers stay aligned; "
+        "this converter sets the mark in its own column instead",
+    "GlossTierFont":
+        "changes the font of a gloss tier; this converter uses the "
+        "reference document's styles",
+    "DeclareJudgment":
+        "declares a judgment command; this converter knows the literal "
+        "marks (*, ??, #, %) and \\jdg{...}, so the new name is not "
+        "recognised as a judgment",
+    "SetLeipzig":
+        "declares a gloss abbreviation; \\lpzg renders it as small "
+        "capitals here either way, but a redefined expansion is not applied",
+}
+
+#: Package options with the same problem.
+_UNSUPPORTED_OPTIONS = {
+    "phantomalign":
+        "hangs judgment marks into a gutter; not reproduced here",
+    "langsci":
+        "selects the \\ea ... \\z front-end, which this converter does "
+        "not parse; those examples are left as LaTeX",
+    "legacy":
+        "selects linguex's geometry; this converter targets the default",
+}
+
+_SETTING_USE = re.compile(r"\\([a-zA-Z@]+)")
+_LINGUEXX_OPTS = re.compile(r"\\usepackage\s*\[([^\]]*)\]\s*\{\s*linguexx\s*\}")
+
+
+def _scan_unsupported(src: str, warn) -> None:
+    """Warn about preamble settings whose effect this converter cannot follow."""
+    live = live_mask(src)
+    body_at = src.find(r"\begin{document}")
+    head = src[:body_at] if body_at >= 0 else src
+
+    seen: set[str] = set()
+    for m in _SETTING_USE.finditer(src):
+        name = m.group(1)
+        if name in _UNSUPPORTED_SETTINGS and name not in seen and live[m.start()]:
+            seen.add(name)
+            warn(f"\\{name} {_UNSUPPORTED_SETTINGS[name]}")
+
+    m = _LINGUEXX_OPTS.search(head)
+    if m:
+        for opt in (o.strip() for o in m.group(1).split(",")):
+            if opt in _UNSUPPORTED_OPTIONS:
+                warn(f"[{opt}] {_UNSUPPORTED_OPTIONS[opt]}")
+
 
 PLACEHOLDER = "\u27e8\u27e8LINGUEXX-{n:04d}\u27e9\u27e9"
 PLACEHOLDER_RE = re.compile("\u27e8\u27e8LINGUEXX-(\\d{4})\u27e9\u27e9")
@@ -85,6 +158,8 @@ class ParseResult:
     warnings: list[str] = field(default_factory=list)
     labels: dict[str, tuple[int, str]] = field(default_factory=dict)
     """label -> (example index, sub-example marker or '')."""
+    brackets: Brackets = field(default_factory=Brackets)
+    """What the preamble asked an example number to be wrapped in."""
 
 
 def _alph(n: int) -> str:
@@ -98,8 +173,14 @@ def _roman(n: int) -> str:
     return _ROMAN[n - 1] if 1 <= n <= len(_ROMAN) else f"({n})"
 
 
-def _marker(level: int, ordinal: int) -> str:
-    return (_alph(ordinal) if level == 1 else _roman(ordinal)) + "."
+def _ordinal_text(level: int, ordinal: int) -> str:
+    """``a`` / ``i`` -- the letter itself, with nothing around it."""
+    return _alph(ordinal) if level == 1 else _roman(ordinal)
+
+
+def _marker(level: int, ordinal: int, brackets: Brackets | None = None) -> str:
+    br = brackets or Brackets()
+    return br.wrap_sub(level, _ordinal_text(level, ordinal))
 
 
 # --------------------------------------------------------------------------
@@ -188,6 +269,33 @@ def _pull_command(chunk: str, name: str) -> tuple[str, str]:
     return arg, chunk[: m.start()] + chunk[end:]
 
 
+def _pull_annot(chunk: str) -> tuple[str, str]:
+    r"""Remove ``\exannot[⟨spoken⟩]{⟨text⟩}``; return (text, rest).
+
+    Unlike _pull_command this has to step over an optional argument.  The
+    spoken form is dropped: it is what a PDF screen reader says, and an ODT
+    has nowhere to put it.
+
+    Taken from the body as a whole rather than from the object tier
+    specifically.  linguexx allows it in exactly two places -- the end of an
+    unglossed example, and the end of a gloss's OBJECT line -- and makes any
+    other position an error, so a document that compiled has it in one of
+    them and there is nothing here to disambiguate.
+    """
+    m = re.compile(r"\\exannot(?![a-zA-Z])").search(chunk)
+    if not m:
+        return "", chunk
+    i = m.end()
+    opt = find_optional(chunk, i)
+    if opt is not None:
+        i = opt[1]
+    grp = find_group(chunk, i)
+    if grp is None:
+        return "", chunk[: m.start()] + chunk[m.end():]
+    arg, end = grp
+    return arg, chunk[: m.start()] + chunk[end:]
+
+
 def _pull_judgment(text: str, warn) -> tuple[str, str]:
     m = JUDG_RUN.match(text)
     if m:
@@ -243,6 +351,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
     source, chunk = _pull_command(chunk, "exsource")
     if source:
         warn("\\exsource rendered inline at the end of the example, not flush right")
+    annot, chunk = _pull_annot(chunk)
 
     parts = split_top(chunk, GLT)
     head = parts[0][1]
@@ -264,6 +373,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
             tiers=tiers,
             translation=translation,
             source=source,
+            annot=annot,
             label=label,
         )
 
@@ -273,6 +383,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
         text=" ".join(text.split()),
         translation=translation,
         source=source,
+        annot=annot,
         label=label,
     )
 
@@ -397,12 +508,28 @@ def parse(src: str) -> ParseResult:
             warnings.append(f"{DEGRADE[name]} left as LaTeX; pandoc renders it literally")
         i = end
 
+    _scan_unsupported(src, warnings.append)
+    brackets = scan_brackets(src, warnings.append)
+    if brackets != Brackets():
+        examples = [_redecorate(ex, brackets) for ex in examples]
+
     return ParseResult(
         residue=_build_residue(src, spans),
         examples=examples,
         warnings=warnings,
         labels=_collect_labels(examples),
+        brackets=brackets,
     )
+
+
+def _redecorate(ex: Example, brackets: Brackets) -> Example:
+    """The same example with its sub-example markers rebuilt."""
+    if not ex.items:
+        return ex
+    return replace(ex, items=tuple(
+        replace(it, marker=_marker(it.level, it.ordinal, brackets))
+        for it in ex.items
+    ))
 
 
 def _handle_example(src, live, start, name, end, env_stack, group_stack,
@@ -490,5 +617,5 @@ def _collect_labels(examples: list[Example]) -> dict[str, tuple[int, str]]:
             labels[ex.body.label] = (ex.index, "")
         for it in ex.items:
             if it.body.label:
-                labels[it.body.label] = (ex.index, it.marker.rstrip("."))
+                labels[it.body.label] = (ex.index, _ordinal_text(it.level, it.ordinal))
     return labels

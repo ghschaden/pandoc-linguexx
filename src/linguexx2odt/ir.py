@@ -55,6 +55,9 @@ class Body:
 
     source: str = ""
     """``\\exsource`` content, LaTeX source."""
+    annot: str = ""
+    """``\\exannot`` content, LaTeX source — a structural label ([CP], [TP])
+    set in a column at a fixed distance from the text block's left edge."""
 
     label: str = ""
     """``\\label``/``\\sublabel`` target defined here, or ''."""

@@ -146,7 +146,23 @@ The **lazy** syntax:
 `\z.` early termination and level popping · `\gll` / `\glll` /
 `\gl … \endgl` glosses · `\glt` translations · `\exg.` / `\ag.` / `\bg.`
 shorthands · `{braced groups}` as single columns · unequal tiers ·
-judgments · `\label` / `\sublabel` / `\ref` / `\pref` · `\lpzg{…}`.
+judgments · `\label` / `\sublabel` / `\ref` / `\pref` · `\lpzg{…}` ·
+`\ExLBr` / `\ExRBr` and the sub-example pairs, so a document that asks for
+`[1]` gets `[1]` · `\exannot{…}` structural labels, in a column at
+`.75` of the text block — where `\ExAnnotColumn` puts them.
+
+`\exannot` differs from linguexx in one case, deliberately. linguexx keeps
+an example that reaches the column full width and drops its annotation to
+the next line; this converter bands the example instead, which is what it
+already does to anything too wide for the block, so the column stays a
+column at every length rather than the rule changing at one. The optional
+spoken argument is dropped — it is what a PDF screen reader says, and an
+ODT has nowhere to put it.
+
+**Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
+invisible: this converter was written against 1.2 and silently kept
+emitting 1.2's output for a month after 1.3 changed it. If you are on a
+newer linguexx, check this table before trusting the result.
 
 Example bodies end where linguexx ends them: at a blank line, at `\z.`,
 at an environment boundary, or at a closing brace.
@@ -165,9 +181,26 @@ readable output rather than to nothing:
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro to draw |
 | `\refrange`, `\Last`, `\Next`, relative references | left as LaTeX |
 | `\altn`, `\altg` | left as LaTeX |
+| `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
+| `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
+| `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | warn; the reference document's styles and the literal marks are used |
+| `[langsci]`, the `\ea … \z` front-end | warns; those examples are left as LaTeX |
+| `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignored — they describe what a PDF screen reader says, which has no ODT counterpart |
 | gb4e `exe`/`xlist` syntax, `[legacy]` mode | out of scope |
 | math inside examples | handed to pandoc; may not survive |
-| anything else unknown | handed to `pandoc -f latex -t opendocument` |
+| anything else unknown | handed to `pandoc -f latex+raw_tex -t opendocument` |
+
+### Why `\GlossTransSide` is normalised rather than reproduced
+
+A side translation is the same material in a different place, so setting it
+below loses nothing a reader needs. Reproducing it would mean deciding what
+that column does when an example is too wide and splits into bands — repeat
+beside every band, sit beside the first only, or suppress the split. linguexx
+never faces the question because it reflows; an ODT table does not, and
+answering it in passing would turn an accident into a promise.
+
+So the converter says what it did and moves on. If you want the side layout
+in the `.odt`, it is a column drag in Writer, once, per example.
 
 ## Things you will want to fix by hand
 
