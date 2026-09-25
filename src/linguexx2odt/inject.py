@@ -33,7 +33,8 @@ because older pandocs and ``+raw_tex`` produce that instead.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
 from .emit_odt import sequence_ref

@@ -91,9 +91,12 @@ def connect(profile: Path, timeout: float = 45.0):
             return ctx
         except NoConnectException:
             if proc.poll() is not None:
+                # from None: the NoConnectException is the symptom, not
+                # the cause.  soffice is already dead, and chaining its
+                # refusal to connect buries the returncode that says why.
                 raise RuntimeError(
                     f"soffice exited with {proc.returncode} before it "
-                    f"accepted a connection on port {port}")
+                    f"accepted a connection on port {port}") from None
             if time.time() > deadline:
                 proc.kill()
                 raise
@@ -2331,7 +2334,7 @@ def check_untypeset_references(ctx, out: Path, profile: Path) -> int:
               f"{text[:140]!r}")
         return 1
     if "completamente distinto" not in text:
-        print(f"    FAIL: references: the edit is not in the rebuilt example")
+        print("    FAIL: references: the edit is not in the rebuilt example")
         return 1
     print("    ok — changed an example and its references still resolve")
     return 0

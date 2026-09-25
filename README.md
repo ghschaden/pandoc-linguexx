@@ -26,9 +26,20 @@ instructions d'installation sous Windows, macOS et Linux.
 
 ## Install
 
-Arch/Manjaro (and most current distros) mark the system Python as
-externally managed, so `pip install -e .` into it is refused. Use a
-virtual environment:
+No install is needed to run it. From a checkout:
+
+```
+python3 -m linguexx2odt paper.tex -o paper.odt
+```
+
+That works from a bare clone with no virtualenv, which is the quickest way
+past a `.venv` that has gone stale — or, if this checkout is synced by a
+service that does not preserve the executable bit, past a
+`.venv/bin/linguexx2odt` that exists and will not run.
+
+For the `linguexx2odt` command itself: Arch/Manjaro (and most current
+distros) mark the system Python as externally managed, so `pip install -e .`
+into it is refused. Use a virtual environment:
 
 ```
 python -m venv .venv
@@ -311,17 +322,34 @@ cross-reference shifts.
 ## Development
 
 ```
-.venv/bin/pytest            # parser goldens, corpus, and end-to-end
-LINGUEXX_UPDATE_GOLDEN=1 .venv/bin/pytest tests/test_extract.py   # re-snapshot
+make check                  # lint and the suite: what CI runs
+make test                   # the suite alone
+make lint                   # ruff over src/, tests/ and tools/
+LINGUEXX_UPDATE_GOLDEN=1 pytest tests/test_extract.py   # re-snapshot
 python3 spikes/s1_passthrough.py   # re-run if the pandoc version changes
 ```
+
+Plain `pytest` is enough — `pyproject.toml` sets `pythonpath = ["src"]`, so
+no `PYTHONPATH` and no activated virtualenv are required. A regenerated
+golden is **read before it is committed**; regenerating without reading
+records whatever the code now does, bug included.
 
 The end-to-end tests build a real `.odt`, render it headlessly, and
 measure the PDF: that numbers evaluate (with every cached value corrupted
 first, so echoing cannot pass), that cross-references resolve, that
 glosses sit above their words, that judgment marks do not shift the text,
-and that nothing overflows the margin. They skip cleanly where `soffice`
-is absent.
+and that nothing overflows the margin.
+
+They need `pandoc`, `soffice` and `pdftotext`, and their absence is a
+**failure, not a skip**: without them 28 of the tests — every end-to-end
+one — step aside and the run still exits 0, which is how a contributor
+without LibreOffice sees green and ships. `tests/test_tooling.py` names
+what is missing, and checks that CI still installs it. To run a partial
+suite deliberately:
+
+```
+LINGUEXX2ODT_ALLOW_MISSING=1 make test
+```
 
 If a rendering test seems to sit there for ever rather than fail,
 suspect OpenCL: LibreOffice probes it at startup, and a broken entry in

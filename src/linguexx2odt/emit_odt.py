@@ -37,7 +37,7 @@ from dataclasses import dataclass, field, replace
 
 from .inline import InlineRenderer, esc
 from .latexutil import Brackets
-from .ir import Body, Example, Item
+from .ir import Body, Example
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, Layout, SEQ_NAME,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
@@ -57,7 +57,7 @@ def sequence_field(index: int) -> str:
     )
 
 
-def sequence_ref(index: int, letter: str = "", brackets: "Brackets | None" = None,
+def sequence_ref(index: int, letter: str = "", brackets: Brackets | None = None,
                  bare: bool = False) -> str:
     """``(3)`` or ``(3a)`` — field plus literal letter, per the reference.
 

@@ -27,7 +27,7 @@ is the emitter's job, not the parser's.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)

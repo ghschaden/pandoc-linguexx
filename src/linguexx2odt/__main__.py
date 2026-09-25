@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Gerhard Schaden
+#
+# This file is part of pandoc-linguexx.
+#
+# pandoc-linguexx is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the
+# Free Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# pandoc-linguexx is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""``python3 -m linguexx2odt`` — the CLI without an installed entry point.
+
+The console script in pyproject.toml needs an install; a virtualenv is one
+more thing that can be missing, out of date, or — as happened here — synced
+between machines by a service that does not preserve the executable bit, so
+that ``.venv/bin/linguexx2odt`` exists and will not run.
+
+This module needs none of that.  From a bare checkout::
+
+    python3 -m linguexx2odt paper.tex -o paper.odt
+
+works as long as ``src/`` is importable, which ``pip install -e .`` and
+``PYTHONPATH=src`` both arrange, and which pytest already does for the
+suite through ``pythonpath`` in pyproject.toml.
+"""
+
+import sys
+
+from .cli import main
+
+sys.exit(main())

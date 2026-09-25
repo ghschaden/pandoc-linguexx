@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pytest
 
-from linguexx2odt.emit_odt import Emitter, Grid, text_width_cm
+from linguexx2odt.emit_odt import Emitter, Grid
 from linguexx2odt.extract import parse
 from linguexx2odt.styles import (
     BAND_PARA, SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, Layout,

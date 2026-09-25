@@ -1,0 +1,66 @@
+# Linting for the Python in this repository: the converter in src/, the
+# suite in tests/, and the build and measurement helpers in tools/.
+#
+#   ruff check .
+#
+# from the repository root, or `make lint`.  Install it with the system
+# package manager (packaged as `ruff`); nothing here needs a virtualenv.
+# CI runs it as a job of its own, on a bare runner, because it needs
+# neither pandoc nor LibreOffice.
+#
+# The sibling linguexx repository added this and it earned its keep on the
+# first run — a rename had left one name undefined on a branch the tests
+# happened not to take, and F821 named the line.  This codebase is the same
+# shape of risk: 2,700 lines that assemble XML and LaTeX as strings, where
+# a name that only exists on the path nobody took is invisible until a
+# document takes it.
+
+target-version = "py310"
+
+# 79 is the style the code is written in; 100 is the width it is CHECKED
+# at, and the gap is deliberate — the same settlement as linguexx, for the
+# same reason: a lint that opens with a hundred complaints about existing
+# lines is a lint nobody runs.  Keep writing 79.
+line-length = 100
+
+# spikes/ is a record of what was tried, frozen beside the conclusion it
+# produced (see plan.md, Phase 0).  Tidying a frozen probe's imports edits
+# a document; the diff would say a question was reopened when it was not.
+extend-exclude = ["spikes/"]
+
+[lint]
+# F  -- pyflakes: undefined names, unused imports and variables.  The
+#       reason this file exists.
+# E  -- pycodestyle errors: bare excepts, ambiguous names, comparisons to
+#       None/True, and E9's syntax/IO failures.
+# W  -- trailing whitespace, missing final newline.
+# UP -- pyupgrade, bounded by target-version above.
+# B  -- bugbear, for B006/B008 (mutable default arguments) above all.
+select = ["F", "E", "W", "UP", "B"]
+
+ignore = [
+    # UP031 wants .format()/f-strings instead of %-formatting.  The sites
+    # here build ODF XML and LaTeX, both brace-heavy and both places where
+    # the braces are literal; converting means doubling every one of them
+    # to buy nothing.
+    "UP031",
+    # B905 wants zip(strict=) everywhere.  Thirteen sites, all of them
+    # pairing a measurement with the thing measured, and strict= does not
+    # tidy them -- it makes a length mismatch raise where it currently
+    # truncates.  That may well be the better behaviour and it is a change
+    # to what the code DOES, so it belongs in a commit that says so and
+    # tests it, not in the one that turns the linter on.
+    "B905",
+    # B007 flags a loop variable the body does not use.  Every site is a
+    # `for x, y in ...` over a coordinate pair where only one axis is
+    # wanted; naming the other one is what makes the pair readable at the
+    # loop head.  Same settlement as the sibling repository.
+    "B007",
+]
+
+[lint.per-file-ignores]
+# The long lines in these two are LaTeX fixtures: gloss lines written to be
+# wide enough to fill the text block and force the banding they test.  The
+# length is the test datum, so wrapping them would change what is asserted.
+"tests/test_bands.py" = ["E501"]
+"tools/run_macro_test.py" = ["E501"]

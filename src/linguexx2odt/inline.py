@@ -33,7 +33,7 @@ from __future__ import annotations
 import re
 import subprocess
 import unicodedata
-from typing import Callable
+from collections.abc import Callable
 
 from .latexutil import find_group
 
@@ -128,12 +128,12 @@ class InlineRenderer:
         try:
             xml = self._render(latex)
         except Unsupported:
-            xml = ""
-            depth = 0
-            for ch in latex:
-                if ch == "\\":
-                    depth = 0
-                xml += ch
+            # Nothing rendered it, so measure the source as written.  This
+            # was a character loop that appended every character in order
+            # and tracked a `depth` it never read -- scaffolding from a
+            # version that counted braces.  ruff's F841 found the dead
+            # variable; the loop around it was the same copy, written long.
+            xml = latex
 
         runs: list[tuple[str, bool]] = []
         spans: list[str] = []                  # open <text:span> styles
@@ -280,7 +280,7 @@ class InlineRenderer:
     TREE_ENVIRONMENTS = ("forest",)
 
     def _tree_environment(self, s: str, name: str, j: int, out: list[str]):
-        """``\begin{forest} … \end{forest}`` -> its bracket notation, as text.
+        r"""``\begin{forest} … \end{forest}`` -> its bracket notation, as text.
 
         Handed to pandoc this became ``]]]`` — the tree gone and three
         closing brackets left behind, which is not the "degrades to
@@ -312,7 +312,7 @@ class InlineRenderer:
         return stop + len(close)
 
     def _qtree(self, s: str, j: int, out: list[str]) -> int:
-        """qtree's ``\Tree [.S [.NP ] ]`` -> the same notation, undotted.
+        r"""qtree's ``\Tree [.S [.NP ] ]`` -> the same notation, undotted.
 
         qtree marks a label with a leading dot; the macro does not, so the
         dots come off and what is left is notation it can draw.

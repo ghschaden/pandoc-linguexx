@@ -1,0 +1,63 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Lint first and on a bare runner: ruff needs neither pandoc nor
+  # LibreOffice, and a lint that waits for an apt-get and a headless office
+  # suite is a lint that reports after the reader has moved on.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ruff
+        run: pipx install ruff
+      - name: ruff check
+        run: |
+          ruff --version
+          ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # libreoffice-writer is what renders the .odt to PDF so the geometry
+      # can be measured, and poppler-utils reads the words back out of it.
+      # Both are required rather than optional: without them 28 of the
+      # tests -- every end-to-end one -- skip, and the run still exits 0.
+      # tests/test_tooling.py fails when either is absent, and also checks
+      # that this apt line still installs them.
+      - name: Install LibreOffice and poppler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libreoffice-writer poppler-utils
+
+      # Not from apt: the distribution's pandoc lags, and this converter
+      # reads a pandoc JSON AST, which is a versioned interface.  The
+      # README asks for >= 3.0; taking the release keeps CI on something a
+      # reader can actually install.
+      - name: Install pandoc
+        run: |
+          PANDOC_VER=3.6.1
+          curl -sSL --retry 3 -o /tmp/pandoc.deb \
+            "https://github.com/jgm/pandoc/releases/download/${PANDOC_VER}/pandoc-${PANDOC_VER}-1-amd64.deb"
+          sudo dpkg -i /tmp/pandoc.deb
+          pandoc --version | head -1
+
+      - name: Install the package
+        run: python -m pip install --quiet -e ".[dev]"
+
+      # No LINGUEXX2ALLOW_MISSING here, deliberately: the escape hatch is
+      # for a person who knows what they are not running, and in CI it
+      # would restore the silence the tool check exists to end.
+      # test_ci_runs_the_suite_without_the_escape_hatch asserts its absence.
+      - name: Run the suite
+        run: pytest -q
