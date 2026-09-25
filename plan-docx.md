@@ -75,6 +75,25 @@ sources are throwaway; what matters is that the answers are measurements.
     schemas are in **Part 4** alone. Validating one against the other fails
     on the namespace before reaching anything real, which looks alarming
     and means nothing.
+12. **A reader may not recalculate at all, so the emitter must write the
+    cached values correct.** Fact 2 said `SEQ` renumbers, and it does — in
+    LibreOffice. Opened in **OnlyOffice 9.4**, the same stale-cache file
+    showed **(1) (1)** with both references still reading **99**: the
+    numbering did not recalculate and `REF` did not resolve. Two real OOXML
+    readers, opposite behaviour, and neither of them Word.
+
+    So the cache is not a hint that gets corrected on open — it is what a
+    reader sees. `spikes/s5_docx_sample.py` now writes correct values by
+    default (`--stale` restores the old behaviour for probing a new reader),
+    and with them LibreOffice still shows (1) (2) while the raw cached text
+    is `1, 2, 1, 2`, so both kinds of reader agree.
+
+    This does not weaken the target: the field stays live, so inserting an
+    example and refreshing still renumbers, which is the feature. It removes
+    a dependency on the reader for the document merely being *correct when
+    opened*. Phase 2 must compute every number and every reference at build
+    time — which it can, since `inject.py` already resolves every label to
+    an example index for ODT.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.

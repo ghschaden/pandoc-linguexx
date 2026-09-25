@@ -18,29 +18,39 @@ it tests **the plan** rather than LibreOffice's `.docx` exporter. (Re-saving
 a converted `.odt` as `.docx` tests the exporter, which is a different and
 much less interesting question.)
 
-Every number in it caches `1` and every reference caches `99`, on purpose.
+Every field in it carries its **correct** cached value. The `--stale`
+variant carries deliberately wrong ones, for probing whether a given
+reader recalculates at all.
 
 ---
 
-## Test 1 — do the fields recalculate? (the one that matters)
+## Test 1 — does it read correctly, and does editing renumber?
 
-Open the file and read the two examples and the last line.
+**This test changed on 2026-09-25, and the reason is worth reading.** It
+used to ask whether the reader recalculates stale fields. OnlyOffice 9.4
+answered no — it showed (1) (1) with both references still at 99, where
+LibreOffice showed (1) (2). Two real readers, opposite behaviour. So the
+emitter cannot depend on recalculation for the document to be *correct*, and
+the sample now ships with its cached values already right.
 
-| what you see | what it means |
-|---|---|
-| **(1)** and **(2)**, references agreeing | Fields are live. The premise holds, no plan change. |
-| **(1)** and **(1)**, references `99` | Fields are not recalculating on open. See below — not fatal. |
-| anything else | Write down exactly what, it is more interesting than either. |
+What is left to ask of Word is therefore two things, not one.
 
-If you see the second, press **F9** (or Ctrl+A then F9) and look again. If
-the numbers correct themselves, Word recalculates on demand rather than on
-open, and the emitter must write the caches **already correct at build
-time** — the field stays live for later edits, but the document reads right
-before anyone presses anything. That is an afternoon in Phase 2, not a
-redesign, and it is worth doing regardless.
+**1a. Does it read correctly on open?** The examples should be **(1)** and
+**(2)** and the cross-references should agree. Since the caches are correct,
+this should hold whether or not Word recalculates — so anything else is a
+surprise worth reporting exactly.
 
-This is the test the target lives or dies by: a number that does not
-renumber is a number the user could have typed.
+**1b. Does editing renumber?** Paste a copy of the first example above the
+original, select all, press **F9**. The numbers and the references should
+follow the new order. *This* is the feature: a number that never changes is
+a number the user could have typed.
+
+If 1b fails, the target is in real trouble and nothing else in this file
+matters much. If 1a fails while 1b works, Word disagrees with both other
+readers about caches, which would be strange and very much worth knowing.
+
+To probe a reader's recalculation behaviour deliberately, build the stale
+variant: `python3 spikes/s5_docx_sample.py /tmp --stale`.
 
 ## Test 2 — does Word offer to repair the file? (partly answered already)
 

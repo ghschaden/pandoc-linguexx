@@ -25,10 +25,17 @@ write, so that opening the result in Word tests the plan and not
 LibreOffice's exporter.  Re-saving a converted .odt as .docx would test the
 exporter instead, which is a different and much less interesting question.
 
-Every number is written with a cached value of 1 and every reference with a
-cached 99, deliberately: a reader who sees (1) and (2) with matching
-references has watched the fields recalculate, which is the premise the
-whole target rests on.
+By default every field carries its CORRECT cached value, which is what the
+emitter will have to do.  `--stale` writes deliberately wrong ones (numbers
+cache 1, references cache 99) to find out whether a given reader
+recalculates at all.
+
+That distinction stopped being academic on 2026-09-25.  LibreOffice
+recalculates a stale file on open and shows (1) (2) with matching
+references; OnlyOffice 9.4 does not, and shows (1) (1) with both references
+still reading 99.  Two real OOXML readers, opposite behaviour, and neither
+of them Word -- so the cached value is not a hint to be corrected later, it
+is what a reader sees.
 
 The column widths come from the converter's own estimator, with a fudge:
 _ADVANCE is Liberation Serif at 12pt and pandoc's reference.docx is neither,
@@ -83,7 +90,8 @@ def cell(width_cm: float, runs: str, span: int = 1) -> str:
     )
 
 
-def example(tiers: list[list[str]], translation: str, bm: str, bid: int) -> str:
+def example(tiers: list[list[str]], translation: str, bm: str, bid: int,
+            cached: int = 1) -> str:
     """One glossed example as a table, laid out the way the emitter would."""
     n = max(len(t) for t in tiers)
     cols = [
@@ -103,7 +111,7 @@ def example(tiers: list[list[str]], translation: str, bm: str, bid: int) -> str:
     for t, words in enumerate(tiers):
         number = (
             '<w:r><w:t>(</w:t></w:r>'
-            + field("SEQ NumEx \\* ARABIC", 1, bm, bid)
+            + field("SEQ NumEx \\* ARABIC", cached, bm, bid)
             + "<w:r><w:t>)</w:t></w:r>"
         )
         cells = [cell(widths[0], number if t == 0 else "")]
@@ -133,47 +141,72 @@ def example(tiers: list[list[str]], translation: str, bm: str, bid: int) -> str:
     )
 
 
-PREAMBLE = """# linguexx → .docx feasibility sample
+PREAMBLE_CORRECT = """# linguexx → .docx feasibility sample
 
 Not produced by the converter — it cannot emit .docx yet. This is the OOXML
-a `--to docx` emitter *would* write: live `SEQ` numbers, `REF` references, a
+a `--to docx` emitter *would* write: `SEQ` numbers, `REF` references, a
 fixed table grid whose widths come from the converter's own estimator.
+
+Every field here carries its **correct** cached value, which is what the
+emitter will do. A reader that recalculates and one that does not should
+therefore agree, and both should be right.
 
 **What to look for.**
 
-1. Every number and reference below is written with a deliberately wrong
-   cached value — the examples cache `1`, the references cache `99`. If Word
-   shows **(1)** and **(2)** and the references agree with them, the fields
-   are live and the premise of the whole target holds.
-2. If Word shows `99` instead, press F9 (or Ctrl+A then F9). That would mean
-   the fields work but must be written already-correct at build time, which
-   is a small change to the plan rather than a problem.
-3. Please say whether Word offers to **repair** the file when it opens.
-   LibreOffice is forgiving about OOXML and Word is not, and that is the one
-   risk in plan-docx.md that nothing here can test.
+1. The examples should read **(1)** and **(2)**, and the cross-references at
+   the end should agree with them. If anything reads otherwise, that is the
+   interesting result — say exactly what.
+2. Then try editing: paste a copy of the first example above the original,
+   select all and press F9. The numbers and references should follow the new
+   order. That is the feature; a number that never changes is a number the
+   user could have typed.
+3. Please say whether Word offers to **repair** the file when it opens. It
+   validates against the ECMA-376 transitional schemas, so a prompt here
+   would be genuinely surprising and worth reporting precisely.
+"""
+
+PREAMBLE_STALE = """# linguexx → .docx feasibility sample (STALE CACHES)
+
+Every field here carries a deliberately **wrong** cached value — the
+examples cache `1`, the references cache `99` — to find out whether this
+reader recalculates fields on open.
+
+- Shows **(1) (2)** with matching references → it recalculates.
+- Shows **(1) (1)** and `99` → it does not. Press F9 and look again.
+
+LibreOffice recalculates; OnlyOffice 9.4 does not. Neither is Word, which is
+why this file exists.
 """
 
 
 def main() -> int:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp")
+    argv = [a for a in sys.argv[1:] if a != "--stale"]
+    stale = "--stale" in sys.argv
+    out = Path(argv[0] if argv else "/tmp")
     out.mkdir(parents=True, exist_ok=True)
+
+    # What a reader that does not recalculate will show.  Correct by
+    # default; --stale makes it wrong on purpose, to find out whether a
+    # given reader recalculates at all.
+    n1, n2 = (1, 1) if stale else (1, 2)
+    r1, r2 = (99, 99) if stale else (1, 2)
 
     ex1 = example(
         [["que", "Pierre", "est", "fatigué"], ["that", "Pierre", "is", "tired"]],
-        "‘that Pierre is tired’", "exone", 1,
+        "‘that Pierre is tired’", "exone", 1, cached=n1,
     )
     ex2 = example(
         [["il", "mio", "libro"], ["the", "my", "book"]],
-        "‘my book’", "extwo", 2,
+        "‘my book’", "extwo", 2, cached=n2,
     )
     refs = (
-        "Cross-references to (`" + field("REF exone \\h", 99) + "`{=openxml}"
-        ") and (`" + field("REF extwo \\h", 99) + "`{=openxml}).\n"
+        "Cross-references to (`" + field("REF exone \\h", r1) + "`{=openxml}"
+        ") and (`" + field("REF extwo \\h", r2) + "`{=openxml}).\n"
     )
 
     md = out / "linguexx-docx-sample.md"
     md.write_text(
-        PREAMBLE
+        (PREAMBLE_STALE if stale else PREAMBLE_CORRECT)
         + f"\n```{{=openxml}}\n{ex1}\n```\n"
         + f"\n```{{=openxml}}\n{ex2}\n```\n\n"
         + refs,
