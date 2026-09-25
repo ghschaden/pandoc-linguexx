@@ -28,6 +28,9 @@ Nothing here imports a writer, and nothing here should.
 
 from __future__ import annotations
 
+import functools
+import subprocess
+
 #: Advance widths in em, measured from Liberation Serif — metric-compatible
 #: with Times New Roman, which is the face this estimate targets.  Check or
 #: reprint them with ``python3 tools/measure_advances.py``.
@@ -92,19 +95,108 @@ _FALLBACK_UPPER = 0.667
 _FALLBACK_OTHER = 0.5
 
 
-def _advance(ch: str) -> float:
-    width = _ADVANCE.get(ch)
+#: Faces that share Times metrics, so the measured table above describes
+#: them and nothing has to be read off a font file.
+#:
+#: Not a convenience: these are what a reader actually substitutes for one
+#: another.  Liberation Serif is what the table was measured from, Times New
+#: Roman is what it targets, and Nimbus Roman and Tinos are the same metrics
+#: again under other names.
+TIMES_METRIC = frozenset({
+    "times new roman", "liberation serif", "nimbus roman",
+    "nimbus roman no9 l", "tinos", "thorndale amt",
+})
+
+#: What a RENDERER draws, where that differs from what the font declares.
+#:
+#: The built-in table was measured through LibreOffice, so it records drawn
+#: widths; a font file gives the advance in the font.  They agree to 0.0022
+#: em over 217 characters -- except the soft hyphen, which the font calls
+#: 0.333 em and a renderer draws as nothing unless it falls at a line break.
+#: Measure a font without applying this and every column holding a soft
+#: hyphen comes out a third of an em too wide, which is a puzzling thing to
+#: meet later.
+RENDERED: dict[str, float] = {"­": 0.0}
+
+
+class FontNotFound(Exception):
+    """No file on this machine answers to that family name."""
+
+
+def _font_file(name: str) -> str:
+    """The file fontconfig gives for *name*, or raise.
+
+    fontconfig always answers -- with its best match, which for a name it
+    has never heard of is some default.  So the answer is checked against
+    the name asked for rather than trusted, or a typo silently measures
+    DejaVu Sans and the columns come out sized for it.
+    """
+    try:
+        got = subprocess.run(
+            ["fc-match", "--format=%{file}\t%{family}", name],
+            capture_output=True, text=True, timeout=20, check=True).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise FontNotFound(
+            f"cannot look up {name!r}: fontconfig's fc-match is not "
+            f"available here ({exc})") from None
+    path, _, families = got.partition("\t")
+    wanted = name.lower().replace(" ", "")
+    if not any(wanted == f.lower().replace(" ", "")
+               for f in families.split(",")):
+        raise FontNotFound(
+            f"no font named {name!r} on this machine; fontconfig offered "
+            f"{families.split(',')[0]!r} instead, whose metrics are not the "
+            f"ones you asked for")
+    return path
+
+
+@functools.lru_cache(maxsize=8)
+def advances_for(name: str) -> dict[str, float]:
+    """Per-character advances in em for *name*, measured from the font.
+
+    Returns the built-in table for anything Times-metric, so the common
+    case reads no files at all.  Otherwise the font is measured with
+    fontTools -- milliseconds, and no LibreOffice, which conversion does
+    not otherwise need.
+
+    Only the characters the built-in table covers are measured, because
+    those are the ones the estimator has fallbacks tuned for; a character
+    in neither is handled by _advance as it always was.
+    """
+    if name.lower().replace(" ", "") in {f.replace(" ", "")
+                                         for f in TIMES_METRIC}:
+        return _ADVANCE
+
+    from fontTools.ttLib import TTFont
+
+    font = TTFont(_font_file(name), fontNumber=0, lazy=True)
+    upem = font["head"].unitsPerEm
+    cmap = font.getBestCmap()
+    hmtx = font["hmtx"]
+    out: dict[str, float] = {}
+    for ch in _ADVANCE:
+        glyph = cmap.get(ord(ch))
+        if glyph is not None:
+            out[ch] = round(hmtx[glyph][0] / upem, 3)
+    out.update(RENDERED)
+    return out
+
+
+def _advance(ch: str, advances: dict[str, float] | None = None) -> float:
+    width = (advances or _ADVANCE).get(ch)
     if width is not None:
         return width
     return _FALLBACK_UPPER if ch.isupper() else _FALLBACK_OTHER
 
 
-def text_width_cm(text: str, em_cm: float) -> float:
+def text_width_cm(text: str, em_cm: float,
+                  advances: dict[str, float] | None = None) -> float:
     """Estimated rendered width of *text*."""
-    return sum(_advance(c) for c in text) * em_cm
+    return sum(_advance(c, advances) for c in text) * em_cm
 
 
-def _sc_advance(ch: str, sc_ratio: float) -> float:
+def _sc_advance(ch: str, sc_ratio: float,
+                advances: dict[str, float] | None = None) -> float:
     """A small capital: the *capital's* advance, at sc_ratio of the size.
 
     Which is usually wider than the lowercase letter it stands in for —
@@ -112,11 +204,12 @@ def _sc_advance(ch: str, sc_ratio: float) -> float:
     narrower, for the letters that are already wide in lowercase.
     """
     if ch.islower():
-        return _advance(ch.upper()) * sc_ratio
-    return _advance(ch)
+        return _advance(ch.upper(), advances) * sc_ratio
+    return _advance(ch, advances)
 
 
-def runs_width_cm(runs, em_cm: float, sc_ratio: float) -> float:
+def runs_width_cm(runs, em_cm: float, sc_ratio: float,
+                  advances: dict[str, float] | None = None) -> float:
     """Estimated width of (text, is_small_caps) runs, each measured as drawn.
 
     Small caps have to be measured as what they draw as, not as what they
@@ -124,7 +217,8 @@ def runs_width_cm(runs, em_cm: float, sc_ratio: float) -> float:
     "3sg" makes the column too narrow for its own contents.
     """
     return em_cm * sum(
-        sum(_sc_advance(c, sc_ratio) if small_caps else _advance(c) for c in text)
+        sum(_sc_advance(c, sc_ratio, advances) if small_caps
+            else _advance(c, advances) for c in text)
         for text, small_caps in runs
     )
 

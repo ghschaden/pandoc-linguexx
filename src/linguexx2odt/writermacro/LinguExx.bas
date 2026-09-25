@@ -89,6 +89,7 @@ Const ANNOT_SEP_EM As Double = 1.0
 ' Deliberately not shared:
 '   text_width_cm — the macro reads the real page style instead
 '   font_pt — the macro reads the real font instead
+'   font_name — the macro reads the real font too, and measures it -- naming a face is the converter's way of making the document be the thing its estimate describes, and the macro needs no estimate
 '   width_safety — the macro measures, so it needs no margin for error
 '   judgment_cm — the macro measures the mark rather than reserving a width for it; it shares JUDG_GAP_CM, which measuring cannot supply
 '   space_above_cm — converter-only: a CLI override.  The macro carries one SPACE_CM and lets the SPACE_ABOVE/SPACE_BELOW styles hold any difference, which is what a Writer user edits

@@ -112,6 +112,7 @@ linguexx2odt fichier.tex [-o sortie.odt]
 |---|---|
 | `-o`, `--output FICHIER` | nom du `.odt` produit (par défaut : le `.tex` avec l'extension changée) |
 | `--text-width CM` | largeur du bloc de texte servant au calcul des colonnes (défaut : 17, soit A4 avec marges de 2 cm) |
+| `--font NOM` | police dans laquelle le document est composé, et pour laquelle les colonnes sont mesurées (défaut : Times New Roman) |
 | `--font-pt PT` | corps du texte supposé pour estimer la largeur des colonnes (défaut : 12) |
 | `--example-spacing CM` | espace au-dessus **et** au-dessous de chaque exemple (défaut : 0,18) |
 | `--space-above CM` | espace au-dessus uniquement, prioritaire sur l'option précédente |
@@ -556,7 +557,9 @@ largeur des colonnes à partir de largeurs de caractères moyennes, en
 majorant légèrement. Trois solutions, de la plus simple à la meilleure :
 
 1. tirez les bords de colonne à la souris dans Writer ;
-2. reconvertissez avec `--font-pt` si votre corps de texte n'est pas 12 ;
+2. reconvertissez avec `--font-pt` si votre corps de texte n'est pas 12,
+   ou avec `--font` si ce n'est pas la police par défaut : les largeurs
+   sont alors mesurées sur la police demandée elle-même ;
 3. utilisez la macro, qui mesure vraiment.
 
 ### Un exemple déborde de la page

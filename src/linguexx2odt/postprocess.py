@@ -82,6 +82,54 @@ def inject_named_styles(styles_xml: str, fragment: str) -> str:
     return styles_xml.replace(tag, fragment + tag, 1)
 
 
+def set_default_font(styles_xml: str, name: str) -> str:
+    r"""Name *name* as the document's default face.
+
+    The columns are computed for one face (`Layout.font_name`), so the
+    document has to be set in that face or they are measured for something
+    it does not use.  pandoc's reference.odt already happens to be Times,
+    which is why this was not needed until `--font` existed: ask for
+    anything else and the widths changed while the drawing did not.
+
+    On the default paragraph style rather than on `LxExampleCell`, for the
+    reason the .docx target learned the hard way: put it on the example
+    style and the examples come out in a different face from the prose
+    around them.
+    """
+    import re as _re
+
+    # The `[^>]*?` is lazy and the `\s*` eats the space before a
+    # self-closing slash, so the attributes go INSIDE the element.  Greedy,
+    # it swallows the `/` itself and the result is `... / style:font-name=...>`
+    # -- well-formed to a regex, and a file LibreOffice refuses to open.
+    m = _re.search(r'(<style:default-style style:family="paragraph">.*?'
+                   r'<style:text-properties\b[^>]*?)\s*(/?>)',
+                   styles_xml, _re.S)
+    if not m:
+        return styles_xml
+    # ODF wants the face DECLARED as well as named.  Without an entry in
+    # office:font-face-decls a reader is free to substitute, and LibreOffice
+    # does: asking for DejaVu Serif and declaring nothing produced Liberation
+    # Serif, which is a perfectly good Times substitute and not what was
+    # asked for.  OOXML needs no equivalent.
+    if f'style:name="{name}"' not in styles_xml:
+        decl = (f'<style:font-face style:name="{name}" '
+                f'svg:font-family="&apos;{name}&apos;"/>')
+        styles_xml = styles_xml.replace("</office:font-face-decls>",
+                                        decl + "</office:font-face-decls>", 1)
+        m = _re.search(r'(<style:default-style style:family="paragraph">.*?'
+                       r'<style:text-properties\b[^>]*?)\s*(/?>)',
+                       styles_xml, _re.S)
+        if not m:
+            return styles_xml
+
+    head = _re.sub(r'\s+style:font-name(-\w+)?="[^"]*"', "", m.group(1))
+    for attr in ("style:font-name", "style:font-name-asian",
+                 "style:font-name-complex"):
+        head += f' {attr}="{name}"'
+    return styles_xml[:m.start()] + head + m.group(2) + styles_xml[m.end():]
+
+
 def set_page_geometry(styles_xml: str, page: str) -> str:
     """Rewrite the page size/margins of every page layout.
 

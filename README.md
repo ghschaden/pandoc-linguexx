@@ -20,7 +20,7 @@ instructions d'installation sous Windows, macOS et Linux.
 ## Requirements
 
 - **pandoc ≥ 3.0** (developed and tested against 3.6.1)
-- **Python ≥ 3.10**, standard library only
+- **Python ≥ 3.10** and `fonttools` (the only dependency; `pip` brings it)
 - LibreOffice is *not* needed to convert, only to read the result (and to
   run the rendering half of the test suite)
 
@@ -253,6 +253,29 @@ answering it in passing would turn an accident into a promise.
 
 So the converter says what it did and moves on. If you want the side layout
 in the `.odt`, it is a column drag in Writer, once, per example.
+
+### Choosing the face: `--font`
+
+```
+linguexx2odt paper.tex --font "EB Garamond"
+```
+
+The column widths are computed from real per-character metrics, so the face
+the document is set in and the face it is measured for have to be the same
+one. `--font` sets both, in either target.
+
+Times New Roman is the default, and Times-metric faces — Liberation Serif,
+Nimbus Roman, Tinos — use a table measured once and shipped, reading no
+files. Any other face is measured off its own font file with `fonttools`,
+which takes milliseconds and needs no LibreOffice. A name no installed font
+answers to is an error rather than a silent substitution: fontconfig always
+returns *something*, and measuring its guess would size the columns for a
+font nobody chose.
+
+`--reference-doc` wins over `--font`. Supplying a reference document is
+choosing a typeface, and overriding it to keep the columns exact would be
+answering a question you already answered — the columns may then drift a
+little, which is the honest price.
 
 ## Things you will want to fix by hand
 

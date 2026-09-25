@@ -109,7 +109,8 @@ class BaseEmitter:
         judgment = 0.0
         if marks:
             judgment = lay.judgment_gap_cm + max(
-                runs_width_cm(self.inline.runs(m), lay.em_cm, lay.sc_ratio)
+                runs_width_cm(self.inline.runs(m), lay.em_cm, lay.sc_ratio,
+                              lay.advances)
                 for m in marks
             )
 
@@ -117,11 +118,12 @@ class BaseEmitter:
         numbers = [ex.custom_label or wrap(str(ex.index + 1)) for ex in examples] \
             or [wrap("1")]
         number = max(
-            runs_width_cm(self.inline.runs(n), lay.em_cm, lay.sc_ratio)
+            runs_width_cm(self.inline.runs(n), lay.em_cm, lay.sc_ratio,
+                          lay.advances)
             for n in numbers
         )
         letters = [it.marker for ex in examples for it in ex.items] or ["a."]
-        letter = max(text_width_cm(m, lay.em_cm) for m in letters)
+        letter = max(text_width_cm(m, lay.em_cm, lay.advances) for m in letters)
 
         self.layout = replace(
             lay,
@@ -197,7 +199,7 @@ class BaseEmitter:
                     widest[i] = max(
                         widest[i],
                         runs_width_cm(self.inline.runs(cell), lay.em_cm,
-                                      lay.sc_ratio),
+                                      lay.sc_ratio, lay.advances),
                     )
         return [
             min(lay.max_col_cm, max(lay.min_col_cm, w * lay.width_safety + lay.pad_cm))

@@ -117,6 +117,10 @@ MACRO_LENGTHS: dict[str, str] = {
 MACRO_NOT_SHARED: dict[str, str] = {
     "text_width_cm": "the macro reads the real page style instead",
     "font_pt": "the macro reads the real font instead",
+    "font_name": (
+        "the macro reads the real font too, and measures it -- naming a "
+        "face is the converter's way of making the document be the thing "
+        "its estimate describes, and the macro needs no estimate"),
     "width_safety": "the macro measures, so it needs no margin for error",
     "judgment_cm": (
         "the macro measures the mark rather than reserving a width for it; "
@@ -161,6 +165,11 @@ class Layout:
 
     judgment_gap_cm: float = 0.12
     """Space between a judgment mark and the text it judges."""
+
+    font_name: str = "Times New Roman"
+    """The face the document is set in, and the one the columns are measured
+    for.  Times-metric by default because that is what measure._ADVANCE
+    describes and what pandoc's reference.odt already uses."""
 
     font_pt: float = 12.0
     """Body font size assumed when estimating column widths."""
@@ -226,6 +235,20 @@ class Layout:
     @property
     def em_cm(self) -> float:
         return self.font_pt / 72 * 2.54
+
+    @property
+    def advances(self) -> dict:
+        r"""Per-character widths for `font_name`, measured if need be.
+
+        Times-metric faces use the built-in table and read nothing; any
+        other face is measured off its file.  The columns are computed from
+        whatever this returns, so the face named here has to be the face the
+        document is actually set in -- which is why both emitters declare
+        it rather than leaving it to the reader's default.
+        """
+        from .measure import advances_for
+
+        return advances_for(self.font_name)
 
 
 def _space_side(name: str, override: float | None) -> str:

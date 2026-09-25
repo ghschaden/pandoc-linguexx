@@ -94,6 +94,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--space-below", type=float, metavar="CM",
                    help="space below each example, overriding --example-spacing "
                         "(style LxExampleSpaceBelow)")
+    p.add_argument("--font", default="Times New Roman", metavar="NAME",
+                   help="the face the document is set in, and the one the "
+                        "column widths are measured for (default: Times New "
+                        "Roman). Anything not Times-metric is measured off "
+                        "its own font file")
     p.add_argument("--font-pt", type=float, default=12.0, metavar="PT",
                    help="body font size assumed when estimating column widths "
                         "(default: 12)")
@@ -140,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
             sys.exit(f"linguexx2odt: --{name.replace('_', '-')} cannot be negative")
 
     layout = Layout(
+        font_name=args.font,
         text_width_cm=args.text_width,
         font_pt=args.font_pt,
         space_cm=args.example_spacing,
@@ -199,7 +205,8 @@ def main(argv: list[str] | None = None) -> int:
                 # columns exact would be answering a question they already
                 # answered.  The columns may then be a little off.
                 "" if args.reference_doc
-                else styles_docx.default_font(layout.font_pt))
+                else styles_docx.default_font(layout.font_pt,
+                                              layout.font_name))
         else:
             content = postprocess.read(raw_odt, "content.xml")
             content = postprocess.inject_sequence_decls(content)
@@ -209,6 +216,13 @@ def main(argv: list[str] | None = None) -> int:
             styles = postprocess.read(raw_odt, "styles.xml")
             styles = postprocess.inject_named_styles(styles, named_styles(layout))
             styles = postprocess.set_page_geometry(styles, args.page)
+            if not args.reference_doc:
+                # Same rule as the .docx target: the document must be
+                # set in the face its columns were measured for, unless
+                # the user supplied a reference document and thereby
+                # chose one.
+                styles = postprocess.set_default_font(
+                    styles, layout.font_name)
 
             postprocess.rewrite(raw_odt, out_path,
                                 {"content.xml": content, "styles.xml": styles})

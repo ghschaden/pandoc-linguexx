@@ -76,7 +76,7 @@ def _para(name: str, parent: str | None, props: str = "",
     )
 
 
-def default_font(pt: float) -> str:
+def default_font(pt: float, name: str = ESTIMATED_FONT) -> str:
     """The run properties to put on the DOCUMENT's default, not on a style.
 
     The columns are measured from `measure._ADVANCE`, which is Liberation
@@ -97,8 +97,8 @@ def default_font(pt: float) -> str:
     """
     half = int(round(pt * 2))
     return (
-        f'<w:rFonts w:ascii="{ESTIMATED_FONT}" w:hAnsi="{ESTIMATED_FONT}" '
-        f'w:eastAsia="{ESTIMATED_FONT}" w:cs="{FALLBACK_FONT}"/>'
+        f'<w:rFonts w:ascii="{name}" w:hAnsi="{name}" '
+        f'w:eastAsia="{name}" w:cs="{name}"/>'
         f'<w:sz w:val="{half}"/><w:szCs w:val="{half}"/>'
     )
 

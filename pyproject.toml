@@ -16,7 +16,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Text Processing :: Markup :: LaTeX",
 ]
-dependencies = []
+# fontTools reads per-character advances straight out of a font file, which
+# is what makes --font more than a label: the column widths are computed
+# from real metrics for whatever face the document is set in.  Milliseconds,
+# and no LibreOffice, which conversion does not otherwise need.
+dependencies = ["fonttools>=4.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
