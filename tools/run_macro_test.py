@@ -70,7 +70,16 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
-def connect(profile: Path, timeout: float = 45.0):
+#: How long to wait for a headless soffice to accept a connection.
+#: 45s is generous on a developer machine and not always enough on a cold
+#: CI runner, where the first start unpacks a profile and warms a JVM, so
+#: the workflow raises it rather than living with a flaky job.
+CONNECT_TIMEOUT = float(os.environ.get("LX_MACRO_TIMEOUT", "45"))
+
+
+def connect(profile: Path, timeout: float | None = None):
+    if timeout is None:
+        timeout = CONNECT_TIMEOUT
     port = free_port()
     proc = subprocess.Popen(
         ["soffice", "--norestore", "--headless",

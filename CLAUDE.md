@@ -88,8 +88,12 @@ all. It duplicates the converter's constants on purpose — see below.
   `MACRO_STYLES_NOT_SHARED` is where such a gap is recorded, and it is
   empty — keep it so, or say what the absence costs.
 - **The macro's suite is `python3 tools/run_macro_test.py DIR`**, which
-  drives a real LibreOffice. It is not part of `make test`, so a change to
-  `LinguExx.bas` is unverified until it is run by hand.
+  drives a real LibreOffice. It is not part of `make test` — it is minutes,
+  not seconds — so a change to `LinguExx.bas` is unverified locally until
+  it is run by hand. CI runs it in a job of its own, which must use the
+  system `python3`: `import uno` comes from the site-packages LibreOffice
+  installs for it, and a `setup-python` interpreter cannot see it.
+  `LX_MACRO_TIMEOUT` raises the wait for a cold headless start.
 
 ## Tracking linguexx
 - **This converter targets a linguexx VERSION**, currently 1.3.2, and the

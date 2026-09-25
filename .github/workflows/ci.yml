@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+# Both the suite and the macro job need pandoc, and the distribution's lags
+# behind the >= 3.0 the converter's JSON AST reading needs.  One version
+# here rather than two to drift apart.
+env:
+  PANDOC_VER: "3.6.1"
+
 jobs:
   # Lint first and on a bare runner: ruff needs neither pandoc nor
   # LibreOffice, and a lint that waits for an apt-get and a headless office
@@ -46,7 +52,6 @@ jobs:
       # reader can actually install.
       - name: Install pandoc
         run: |
-          PANDOC_VER=3.6.1
           curl -sSL --retry 3 -o /tmp/pandoc.deb \
             "https://github.com/jgm/pandoc/releases/download/${PANDOC_VER}/pandoc-${PANDOC_VER}-1-amd64.deb"
           sudo dpkg -i /tmp/pandoc.deb
@@ -61,3 +66,45 @@ jobs:
       # test_ci_runs_the_suite_without_the_escape_hatch asserts its absence.
       - name: Run the suite
         run: pytest -q
+
+  # The Writer macro, driven inside a real LibreOffice: the .bas that ships
+  # is installed into a throwaway profile and invoked through the script
+  # provider, so what runs is the file, not a re-implementation of it.  Its
+  # own job because it is minutes rather than seconds, and because it needs
+  # an interpreter the other two must not use.
+  #
+  # NOT actions/setup-python: `import uno` comes from the site-packages
+  # LibreOffice installs for the SYSTEM python3, and a setup-python
+  # interpreter cannot see it.  This job therefore runs whatever python3
+  # the runner ships, which is the one python3-uno was built for.
+  #
+  # pandoc is not optional here even though the macro never calls it: the
+  # two checks that take a CONVERTED document apart skip themselves when
+  # the converter will not run, and a check that skips in CI is the silent
+  # green this workflow exists to prevent.
+  macro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LibreOffice, the UNO bridge and poppler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            libreoffice-writer python3-uno poppler-utils
+          python3 -c "import uno; print('uno from', uno.__file__)"
+
+      - name: Install pandoc
+        run: |
+          curl -sSL --retry 3 -o /tmp/pandoc.deb \
+            "https://github.com/jgm/pandoc/releases/download/${PANDOC_VER}/pandoc-${PANDOC_VER}-1-amd64.deb"
+          sudo dpkg -i /tmp/pandoc.deb
+          pandoc --version | head -1
+
+      # A cold runner's first soffice start unpacks a profile and is slower
+      # than any developer machine; 45s is the local default and not enough
+      # here.  See CONNECT_TIMEOUT in the driver.
+      - name: Run the macro suite
+        env:
+          LX_MACRO_TIMEOUT: "180"
+        run: python3 tools/run_macro_test.py "$RUNNER_TEMP/macro"

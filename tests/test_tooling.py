@@ -131,13 +131,47 @@ def test_ci_installs_every_required_tool() -> None:
                     f"{tool} needs the apt package {value!r}, which the "
                     f"workflow's apt-get line does not install")
         elif kind == "step":
-            if f"name: {value}" not in text:
+            # Anchored to the end of the line: a substring test passes for
+            # a step called "Install pandoc-x", which installs nothing of
+            # the sort.  Found by mutating the name and watching the check
+            # stay green.
+            if not re.search(rf"^\s*-?\s*name:\s*{re.escape(value)}\s*$",
+                             text, re.M):
                 problems.append(
                     f"{tool} is provided by a step named {value!r}, which "
                     f"the workflow does not have")
         else:  # pragma: no cover - a typo in the table above
             problems.append(f"{tool}: unknown provider {provided!r}")
     assert not problems, "\n".join(problems)
+
+
+@pytest.mark.skipif(not WORKFLOW.exists(),
+                    reason="no CI workflow in this tree")
+def test_ci_runs_the_macro_suite() -> None:
+    """The Writer macro is checked by CI too, not only by hand.
+
+    It is the half of this project that pytest cannot reach: `.bas` driven
+    inside a real LibreOffice, minutes rather than seconds, and for a long
+    time run only where somebody remembered to. A phase CI can silently
+    omit is a phase CI eventually omits — which is the argument the sibling
+    repository's tooling check makes about its own --documents flag.
+
+    Its two round-trip checks need pandoc as well, because they take a
+    CONVERTED document apart and skip themselves when the converter will
+    not run.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert "run_macro_test.py" in text, (
+        "the CI workflow no longer runs tools/run_macro_test.py, so a "
+        "change to LinguExx.bas would reach main unverified"
+    )
+    installs = len(re.findall(r"^\s*-?\s*name:\s*Install pandoc\s*$",
+                              text, re.M))
+    assert installs >= 2, (
+        "the macro job needs pandoc too: without it the two checks that "
+        "read a converted document back skip, and skipping is how this "
+        "went unnoticed before"
+    )
 
 
 @pytest.mark.skipif(not WORKFLOW.exists(),
