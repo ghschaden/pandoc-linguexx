@@ -182,10 +182,12 @@ ODT has nowhere to put it.
 
 There is an experimental second output format: `--to docx` writes a Word
 file whose numbers are live `SEQ` fields and whose cross-references are
-`REF` fields, so inserting an example renumbers the rest there too. It is
-Phase 2 of `plan-docx.md` — numbers and references only. A glossed example
-warns that its columns are not laid out yet and comes out as running text,
-so the `.odt` target remains the complete one.
+`REF` fields, so inserting an example renumbers the rest there too. Through Phase 3 of
+`plan-docx.md` it also lays out the gloss grid, judgments, sub-examples,
+bands and `\exannot`, with the columns measured against the same rendered
+geometry the `.odt` target is held to. What it does not do yet is the named
+styles, so a Word user cannot restyle examples from the sidebar the way a
+Writer user can; the `.odt` target remains the complete one.
 
 **Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
 invisible: this converter was written against 1.2 and silently kept

@@ -40,7 +40,6 @@ from .emit_base import BaseEmitter, register
 from .inline import esc
 from .latexutil import Brackets
 from .ir import Body, Example
-from .measure import Grid, Plan
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, SEQ_NAME,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
@@ -148,72 +147,17 @@ class Emitter(BaseEmitter):
 
     # -- table mode --------------------------------------------------------
     def _table(self, ex: Example) -> str:
-        bodies: list[tuple[str, Body]] = (
-            [("", ex.body)] if ex.body is not None else [(i.marker, i.body) for i in ex.items]
-        )
-        has_marker = ex.body is None
-        has_judgment = self.any_judgment
+        """Render the shared plan as ODF.
 
-        lead = self._lead_widths(has_marker, has_judgment)
-        available = self.layout.text_width_cm - sum(lead)
-
-        # \exannot puts a structural label in a column measured from the
-        # LEFT edge of the text block, so labels of examples at different
-        # nesting levels line up.  Reserve it, and give the body only what
-        # is left before it, minus \ExAnnotSep.
-        #
-        # linguexx, running out of room, keeps the example full width and
-        # drops the annotation to the next line.  This converter bands
-        # instead -- which is what it already does to any example too wide
-        # for the block, so the column stays a column at every length
-        # rather than the rule changing at one.  Different from the PDF in
-        # that case, and the same everywhere else.
-        lay = self.layout
-        has_annot = any(body.annot for _, body in bodies)
-        annot_x = lay.annot_column_ratio * lay.text_width_cm
-        if has_annot:
-            available = max(lay.min_col_cm,
-                            annot_x - sum(lead) - lay.annot_sep_em * lay.em_cm)
-
-        # One plan per body, each measured and banded on its own words.  A
-        # paradigm's items no longer pull on one another's columns; Grid
-        # unions what they produce, exactly as it already did for bands.
-        plans: list[Plan] = []
-        for _, body in bodies:
-            if body.tiers:
-                word_w = self._word_widths([("", body)], body.width)
-                plans.append((word_w, self._bands(word_w, available, ex)))
-            else:  # unglossed: running text in one merged cell
-                plans.append(([], []))
-        if not any(w for w, _ in plans):  # nothing glossed: one wide column
-            plans = [([available], [(0, 1)]) for _ in bodies]
-
-        grid = Grid(plans)
-        self.last_grid = grid                 # what tests measure the layout from
-        columns, total = grid.columns, grid.total
-        if total > available:
-            # only reachable with --no-split, or when a single word is wider
-            # than the whole text block: keep the declared width inside the
-            # text block and let the cells wrap internally (spike S3)
-            scale = available / total
-            columns = [c * scale for c in columns]
-            total = available
-        filler = 1 if total <= available - self.layout.min_col_cm else 0
-        widths = lead + columns + ([available - total] if filler else [])
-        if has_annot:
-            # Whatever is still unspoken for goes to the annotation, so its
-            # column begins at annot_x however the body measured out.
-            widths = lead + columns
-            gap = annot_x - sum(lead) - total
-            # Emitted however narrow it is, unlike the ordinary filler: the
-            # gap IS \ExAnnotSep, and dropping it for being below
-            # min_col_cm moves the annotation column an em left of where
-            # every other example put it, which is the one thing a column
-            # of labels may not do.
-            filler = 1 if gap > 0.01 else 0
-            if filler:
-                widths = widths + [gap]
-            widths = widths + [self.layout.text_width_cm - sum(widths)]
+        The arithmetic -- lead columns, bands, the \\exannot column, the
+        filler -- is BaseEmitter.plan_table(); what is left here is the
+        markup, which is the only thing the two targets do not share.
+        """
+        p = self.plan_table(ex)
+        bodies, grid, filler = p.bodies, p.grid, p.filler
+        has_marker, has_judgment, has_annot = (
+            p.has_marker, p.has_judgment, p.has_annot)
+        widths = p.widths
         self.auto_styles.append(self._table_styles(ex.index, widths))
 
         cols = "".join(

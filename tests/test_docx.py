@@ -69,8 +69,10 @@ def document_xml(docx: Path) -> str:
 
 def cached_values(docx: Path) -> list[str]:
     """What each field shows to a reader that does not recalculate."""
-    return re.findall(r'separate"/></w:r><w:r><w:t>([^<]*)</w:t>',
-                      document_xml(docx))
+    # the run may carry properties (font, size, small caps) before its text
+    return re.findall(
+        r'separate"/></w:r><w:r>(?:<w:rPr>.*?</w:rPr>)?<w:t[^>]*>([^<]*)</w:t>',
+        document_xml(docx))
 
 
 @pandoc
@@ -107,20 +109,46 @@ def test_the_bookmark_wraps_the_field_and_not_the_line(tmp_path: Path) -> None:
         "give back the line rather than the number")
 
 
-@pandoc
-def test_a_gloss_says_it_is_not_laid_out_yet(tmp_path: Path, capsys) -> None:
-    """Phase 3 is the grid.  Until then this must not fail silently."""
-    src = tmp_path / "g.tex"
-    src.write_text(r"""\documentclass{article}
+GLOSS = r"""\documentclass{article}
 \usepackage{linguexx}
 \begin{document}
 \exg. il mio libro\\
-the my book\\
+the my \lpzg{3sg}\\
 \glt `my book'
 \end{document}
-""", encoding="utf-8")
-    assert main([str(src), "--to", "docx", "-o", str(tmp_path / "g.docx")]) == 0
-    assert "cannot lay out a gloss yet" in capsys.readouterr().err
+"""
+
+
+@pandoc
+def test_a_gloss_becomes_a_grid(tmp_path: Path) -> None:
+    """Phase 3: tiers in columns, not run together.
+
+    Three object words and three gloss words means three body columns, and
+    a cell per word on each tier -- which in OOXML is counted by span, not
+    by element, because a gridSpan of 3 is one cell occupying three
+    columns and ODF's covered-cell placeholders have no counterpart.
+    """
+    xml = document_xml(build(tmp_path, GLOSS, "g"))
+    words = [t for t in re.findall(r"<w:t[^>]*>([^<]*)</w:t>", xml) if t.strip()]
+    for w in ("il", "mio", "libro", "the", "my"):
+        assert w in words, f"{w!r} missing from {words}"
+    assert xml.count("<w:tr>") >= 3, "object tier, gloss tier and translation"
+
+
+@pandoc
+def test_inline_markup_is_interpreted_not_copied(tmp_path: Path) -> None:
+    r"""\lpzg{3sg} is small capitals, not eleven literal characters.
+
+    esc() alone put the command in the document verbatim.  It also matters
+    for the geometry: the width estimator measured the *drawn* text, small
+    caps and all, so a document that draws something else has columns
+    sized for a string it does not contain.
+    """
+    xml = document_xml(build(tmp_path, GLOSS, "m"))
+    assert "\\lpzg" not in xml, "the command reached the document literally"
+    assert "3sg" in xml
+    assert "<w:smallCaps/>" in xml, "the Leipzig gloss is not in small capitals"
+    assert "\u2018my book\u2019" in xml, "the quotes were not turned"
 
 
 @pandoc
@@ -170,3 +198,136 @@ def test_it_renders_the_same_as_the_odt_target(tmp_path: Path) -> None:
                 "Prose referring to (1) and (2), and bare 1.")
     assert from_docx.startswith(expected), from_docx
     assert from_odt.startswith(expected), from_odt
+
+
+BANDED = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\exg. Der ausserordentlich lange Hund bellte laut.\\
+the extraordinarily long dog barked loudly\\
+\glt `The dog barked.'
+
+\ex.
+\a. *a judged sub-example
+\b. a plain one
+\end{document}
+"""
+
+
+@pandoc
+@pytest.mark.skipif(shutil.which("soffice") is None, reason="soffice not installed")
+def test_a_gloss_sits_under_its_object_word(tmp_path: Path) -> None:
+    """The columns are the feature; measure them on the rendered page.
+
+    Every gloss word must start at exactly the x of the object word above
+    it. This caught the real Phase 3 defect: the grid was structurally
+    right and the words wrapped inside it, because the widths came from
+    _ADVANCE (Liberation Serif, 12pt) and pandoc's reference.docx draws in
+    neither. A column correct for a font the document does not use is not
+    a correct column.
+    """
+    docx = build(tmp_path, BANDED, "b")
+    outdir = tmp_path / "pdf"
+    outdir.mkdir()
+    subprocess.run(["soffice", "--headless", "--convert-to", "pdf",
+                    str(docx), "--outdir", str(outdir)],
+                   capture_output=True, timeout=300)
+    bbox = subprocess.run(
+        ["pdftotext", "-bbox", str(outdir / "b.pdf"), "-"],
+        capture_output=True, text=True).stdout
+    words = [(float(x), float(y), w) for x, y, w in re.findall(
+        r'<word xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>([^<]+)</word>', bbox)]
+    assert words, "nothing rendered"
+
+    # Per ROW, not a flat word->x map: "dog" is in the gloss tier and in
+    # the translation, and a flat map compares the wrong pair — which is
+    # how the first version of this test failed against correct output.
+    rows: dict[float, dict[str, float]] = {}
+    for x, y, w in words:
+        rows.setdefault(round(y / 3) * 3, {})[w] = x
+    by_y = [rows[k] for k in sorted(rows)]
+    obj = next(r for r in by_y if "Der" in r)
+    gloss = next(r for r in by_y if "the" in r and "Der" not in r)
+
+    for object_word, gloss_word in (("Der", "the"), ("lange", "long"),
+                                    ("Hund", "dog"), ("bellte", "barked")):
+        assert object_word in obj, f"{object_word!r} not on the object tier"
+        assert gloss_word in gloss, f"{gloss_word!r} not on the gloss tier"
+        assert obj[object_word] == pytest.approx(gloss[gloss_word], abs=1.0), (
+            f"{gloss_word!r} at {gloss[gloss_word]:.1f} is not under "
+            f"{object_word!r} at {obj[object_word]:.1f}"
+        )
+
+    # and nothing wrapped: a wrapped word appears as two fragments
+    rendered = {w for _x, _y, w in words}
+    assert "ausserordentlich" in rendered, (
+        f"a word wrapped inside its column: {sorted(rendered)}")
+
+
+@pandoc
+@pytest.mark.skipif(shutil.which("soffice") is None, reason="soffice not installed")
+def test_a_judgment_mark_hangs_against_its_text(tmp_path: Path) -> None:
+    r"""The mark sits snug against the example, as linguexx \llap's it.
+
+    Left-aligned in its own column it floats, leaving a hole between the
+    mark and the word it judges — measured at 10pt before the judgment
+    cell was given a right-aligned paragraph.
+    """
+    docx = build(tmp_path, BANDED, "j")
+    outdir = tmp_path / "jpdf"
+    outdir.mkdir()
+    subprocess.run(["soffice", "--headless", "--convert-to", "pdf",
+                    str(docx), "--outdir", str(outdir)],
+                   capture_output=True, timeout=300)
+    text = subprocess.run(["pdftotext", str(outdir / "j.pdf"), "-"],
+                          capture_output=True, text=True).stdout
+    assert "*a judged" in " ".join(text.split()), (
+        "the mark is not against its text; it has its own column but not "
+        "the right alignment that makes it hang")
+
+
+PARADIGM = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\ex.
+\ag. il mio libro\\
+the my book\\
+\bg. Ich habe geschlafen heute\\
+I have slept today\\
+\end{document}
+"""
+
+
+@pandoc
+def test_every_row_adds_up_to_the_grid_by_span(tmp_path: Path) -> None:
+    """The OOXML invariant, and the one idiom that is not a transcription.
+
+    ODF spans a cell and then emits a `covered-table-cell` placeholder for
+    each column swallowed, so every row has one element per grid column and
+    counting elements is enough. OOXML spans with `w:gridSpan` and emits
+    NOTHING for the columns taken: a row is complete when its spans total
+    the grid, and a row that merely has the right number of cells is a
+    table Word will render as a mess.
+
+    A paradigm of unequal tiers is used because it is what produces spans
+    at all — the grid is the union of both items' column boundaries, so a
+    word of one item covers several columns of the other. With equal tiers
+    every span is 1 and this test cannot fail.
+    """
+    xml = document_xml(build(tmp_path, PARADIGM, "p"))
+    n_cols = len(re.findall(r"<w:gridCol\b", xml))
+    assert n_cols > 1, "no grid to speak of"
+
+    spans_seen = [int(s) for s in re.findall(r'<w:gridSpan w:val="(\d+)"/>', xml)]
+    assert any(s > 1 for s in spans_seen), (
+        "no column spans in a paradigm of unequal tiers; this test cannot "
+        "prove anything about spans unless the input produces some")
+
+    for i, row in enumerate(re.findall(r"<w:tr>(.*?)</w:tr>", xml, re.S)):
+        cells = len(re.findall(r"<w:tc>", row))
+        spanned = sum(int(s) - 1
+                      for s in re.findall(r'<w:gridSpan w:val="(\d+)"/>', row))
+        assert cells + spanned == n_cols, (
+            f"row {i} covers {cells + spanned} of {n_cols} columns "
+            f"({cells} cells, {spanned} spanned)"
+        )

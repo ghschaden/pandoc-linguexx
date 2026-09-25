@@ -202,12 +202,43 @@ attribute: every instance takes the base class's default, the subclass's
 value never arrives, and every `RawBlock` goes out tagged `""`. It is a
 `ClassVar` now, and a test pins the two values.
 
-### Phase 3 — the grid (1–2 days)
-Gloss tiers, merged cells, judgment and marker columns, bands, `\exannot`.
-All the decisions are made; this is transcription into different element
-names, checked against the same rendered-geometry assertions the ODT target
-already has. Expect the merging idiom to be the only real thinking:
-`w:gridSpan` and `w:vMerge` do not behave like covered cells.
+### Phase 3 — the grid — DONE
+
+Gloss tiers, judgment and marker columns, bands, `\exannot`, sub-examples.
+`BaseEmitter.plan_table()` now holds the arithmetic both targets shared —
+lead widths, the bands, the annotation column, the filler — and returns a
+`TablePlan` of measurements with no markup in it. `emit_odt` went from
+computing that to rendering it; `emit_docx` renders the same plan as OOXML.
+
+**Measured, not assumed**: every gloss word starts at exactly the x of the
+object word above it, and the relative geometry matches the ODT target
+column for column (`a.` at 40/41, the judged text at 64, `judged` at 78).
+
+The merging idiom was the predicted difficulty and it was real. ODF spans a
+cell and emits a `covered-table-cell` for each column swallowed, so a row
+has one element per column; OOXML spans with `w:gridSpan` and emits nothing
+for the columns taken, so a row is complete when its **spans** total the
+grid. A test asserts exactly that, on a paradigm of unequal tiers — which
+is what produces spans at all, since with equal tiers every span is 1 and
+the test cannot fail.
+
+Two defects the geometry found, neither visible in the markup:
+
+- **Every long word wrapped inside its column.** The widths come from
+  `_ADVANCE` (Liberation Serif, 12pt) and pandoc's `reference.docx` draws
+  in neither, so a column correct for a font the document does not use is
+  not a correct column. Fact 10, arriving early: each run now names the
+  face and size the estimate targets. Phase 4 should replace that direct
+  formatting with a reference document.
+- **The judgment mark floated**, ten points from the text it judges,
+  because its column was left-aligned. linguexx `\llap`s the mark and the
+  ODT target gives it a right-aligned style; the OOXML cell now does too.
+
+Inline content goes through `InlineRenderer.runs()` rather than `esc()`,
+which had been putting `\lpzg{3sg}` in the document as eleven literal
+characters. Small capitals are direct formatting for now — a named
+character style is Phase 4 — but they had to be drawn in Phase 3 regardless,
+because the estimator measured them.
 
 ### Phase 4 — styles, the font baseline, and polish (1 day)
 Inject the styles so a Word user can restyle from the sidebar, as a Writer
