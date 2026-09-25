@@ -282,7 +282,8 @@ Skipped entirely when `--reference-doc` is given: the user's typeface is a
 choice, and the columns being a little off is the honest price of it.
 
 Measured after: the same columns at 113/136/221/252/284/322, and `pdffonts`
-shows Arial gone from the rendered PDF.
+shows Arial gone from the rendered PDF. Confirmed in OnlyOffice 9.4 by
+the reader who noticed the mismatch.
 
 Small capitals became the `LxLeipzig` character style; the judgment's right
 alignment became `LxJudgmentCell`'s; the continuation-band mark became
