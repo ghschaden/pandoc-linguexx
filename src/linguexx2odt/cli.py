@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from . import postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
 from .inject import inject
+from .latexutil import live_mask, scan_bibliography
 from .styles import Layout, named_styles
 
 MIN_PANDOC = (3, 0)
@@ -59,6 +61,102 @@ def _check_pandoc_version() -> str:
     if version < MIN_PANDOC:
         sys.exit(f"linguexx2odt: needs pandoc >= {'.'.join(map(str, MIN_PANDOC))}, found {line}")
     return line
+
+
+def _bibliographies(args, source: str, workdir: Path, warn) -> list[Path]:
+    r"""The .bib files to resolve citations against.
+
+    ``--bibliography`` wins outright: a user naming one has answered the
+    question.  Otherwise the document is asked, since it already says where
+    its bibliography is, in ``\addbibresource`` or ``\bibliography``, and
+    making them type a path they have already written is a worse default
+    than reading it.
+
+    A name that does not resolve is reported rather than passed on -- pandoc
+    would stop with its own error, and "no such file" from a tool the user
+    did not invoke is a poor way to learn about a typo in a .tex file.
+    """
+    if args.bibliography:
+        named = [(p if p.is_absolute() else Path.cwd() / p) for p in args.bibliography]
+    else:
+        named = [workdir / name for name in scan_bibliography(source)]
+
+    found = []
+    for path in named:
+        if path.is_file():
+            found.append(path.resolve())
+        else:
+            warn(f"bibliography {path.name} not found next to the document; "
+                 f"citations to it are rendered as their keys")
+    return found
+
+
+#: natbib forms pandoc's reader flattens, and what the flattening costs.
+#: Everything not listed here -- \cite, \citet, \citep, and their optional
+#: prefix and suffix -- comes through with the right mode and needs nothing.
+_CITE_FLATTENED = {
+    "citeauthor": "prints the year as well, which \\citeauthor suppresses",
+    "Citeauthor": "prints the year as well, which \\Citeauthor suppresses",
+    "citealt": "prints the year in parentheses, which \\citealt omits",
+    "citealp": "prints the year in parentheses, which \\citealp omits",
+    "citeyear": "prints the year in parentheses, which \\citeyear omits",
+}
+
+
+def _warn_citation_forms(source: str, warn) -> None:
+    r"""Name the natbib forms that survive but do not read the same.
+
+    Pandoc's reader has one author-in-text mode, so every natbib spelling
+    that differs only in its punctuation arrives as the same node and comes
+    out as ``Author (Year)``.  For \citet that is right; for \citeauthor it
+    is a year the author asked not to print.  Small, but silent otherwise --
+    and the run is supposed to say what it could not carry.
+    """
+    live = live_mask(source)
+    for name, effect in _CITE_FLATTENED.items():
+        n = sum(1 for m in re.finditer(rf"\\{name}(?![a-zA-Z])", source)
+                if live[m.start()])
+        if n:
+            warn(f"{n} \\{name} citation(s): resolved, but the style {effect}")
+
+
+def _degrade_citations(ast: dict, warn) -> int:
+    r"""Make every unresolved citation print its keys, and say how many.
+
+    A ``Cite`` carries the citation and a fallback rendering; pandoc's LaTeX
+    reader fills the fallback with the ``RawInline "latex"`` it came from,
+    and the ODT and docx writers both drop a raw LaTeX inline.  So an
+    unresolved citation is not degraded, it is deleted, and a sentence
+    closes over the gap: "According to authors like , the Latin
+    construction..." -- 41 times in one paper, silently.
+
+    Replacing the fallback with the keys keeps the citation visible and
+    keeps it obviously unresolved, which is the honest state of it.
+    """
+    count = 0
+
+    def walk(node):
+        nonlocal count
+        if isinstance(node, list):
+            return [walk(x) for x in node]
+        if not isinstance(node, dict):
+            return node
+        if node.get("t") == "Cite":
+            citations, _fallback = node["c"]
+            keys = ", ".join(c["citationId"] for c in citations)
+            count += 1
+            return {"t": "Cite", "c": [citations,
+                                       [{"t": "Str", "c": f"[{keys}]"}]]}
+        if node.get("c") is not None:
+            node = dict(node)
+            node["c"] = walk(node["c"])
+        return node
+
+    ast["blocks"] = walk(ast.get("blocks", []))
+    if count:
+        warn(f"{count} citation(s) not resolved; rendered as their keys. "
+             f"Give a .bib with --bibliography, or name one in the document")
+    return count
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,6 +203,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--page", choices=("a4", "a4-wide", "letter", "keep"), default="a4",
                    help="page geometry to write into the ODT (default: a4; "
                         "'keep' leaves pandoc's US Letter default alone)")
+    p.add_argument("--bibliography", type=Path, action="append", metavar="BIB",
+                   help="a .bib file for resolving citations; repeatable. "
+                        "By default the ones the document names with "
+                        "\\addbibresource or \\bibliography are used")
+    p.add_argument("--csl", type=Path, metavar="STYLE",
+                   help="CSL style for the citations and the reference list "
+                        "(default: pandoc's Chicago author-date, which is what "
+                        "natbib's author-year mode looks like)")
+    p.add_argument("--no-citeproc", action="store_true",
+                   help="do not resolve citations; they are then rendered as "
+                        "their keys, since a Cite pandoc cannot resolve "
+                        "otherwise reaches the page as nothing at all")
     p.add_argument("--reference-doc", type=Path,
                    help="pandoc reference.odt supplying the base styles")
     p.add_argument("--keep-intermediates", type=Path, metavar="DIR",
@@ -179,6 +289,23 @@ def main(argv: list[str] | None = None) -> int:
                 cwd=workdir,
             ).stdout
         )
+        # Citations: pandoc's LaTeX reader already understands natbib and
+        # biblatex -- \citet, \citep, \citealt, \citeauthor, the optional
+        # prefix and suffix, several keys at once -- and gives back a Cite
+        # node with the right mode.  What it cannot do without a
+        # bibliography is SAY anything, and a Cite whose content nothing
+        # resolved is written out as nothing: 41 citations in the paper this
+        # was found in reached the page as 41 empty gaps, with no warning.
+        # So citeproc runs when there is a .bib to run it against, and when
+        # there is not the keys are printed rather than the citation losing
+        # its text entirely.
+        bibs = _bibliographies(args, source, workdir, warnings.append)
+        citeproc = bool(bibs) and not args.no_citeproc
+        if citeproc:
+            _warn_citation_forms(source, warnings.append)
+        if not citeproc:
+            _degrade_citations(ast, warnings.append)
+
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
                           emitter=emitter)
 
@@ -187,6 +314,15 @@ def main(argv: list[str] | None = None) -> int:
 
         raw_odt = tmp / f"raw.{args.to}"
         pandoc_args = ["-f", "json", str(ast_path), "-o", str(raw_odt)]
+        if citeproc:
+            # On the way OUT, not on the way in: the AST pandoc reads back
+            # is the one the injector has already rewritten, so citeproc
+            # must see that rather than the residue.
+            pandoc_args.append("--citeproc")
+            for bib in bibs:
+                pandoc_args += ["--bibliography", str(bib)]
+            if args.csl:
+                pandoc_args += ["--csl", str(args.csl)]
         if args.reference_doc:
             pandoc_args += ["--reference-doc", str(args.reference_doc)]
         _pandoc(pandoc_args, cwd=workdir)

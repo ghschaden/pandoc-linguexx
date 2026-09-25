@@ -322,3 +322,43 @@ def scan_brackets(src: str, warn=None) -> Brackets:
         values[field_name] = group[0].strip()
 
     return Brackets(**values)
+
+
+#: How a document names its bibliography.  biblatex's \addbibresource takes
+#: a filename with its extension; bibtex's \bibliography takes a
+#: comma-separated list of stems without one.
+_BIB_CMD = re.compile(r"\\(addbibresource|bibliography)\s*(?=[\[{])")
+
+
+def scan_bibliography(src: str) -> list[str]:
+    r"""The .bib files a document declares, in the order it declares them.
+
+    Both spellings, because a linguistics paper is as likely to be biblatex
+    as bibtex, and the difference is only whether the extension is written
+    out.  Comments are skipped: an author swapping bibliographies comments
+    the old line out, and picking up both would be picking up one they
+    deliberately turned off.
+    """
+    live = live_mask(src)
+    out: list[str] = []
+    for m in _BIB_CMD.finditer(src):
+        if not live[m.start()]:
+            continue
+        i = m.end()
+        if src[i : i + 1] == "[":          # \addbibresource[label=...]{...}
+            opt = find_optional(src, i)
+            if opt is None:
+                continue
+            i = opt[1]
+        group = find_group(src, i)
+        if group is None:
+            continue
+        for name in group[0].split(","):
+            name = name.strip()
+            if not name:
+                continue
+            if m.group(1) == "bibliography" and not name.endswith(".bib"):
+                name += ".bib"
+            if name not in out:
+                out.append(name)
+    return out
