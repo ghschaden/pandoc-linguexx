@@ -45,6 +45,9 @@ ITALIC = "LxItalic"
 BOLD = "LxBold"
 SMALLCAPS = "LxSmallCaps"
 JUDGMENT = "LxJudgment"
+UNDERLINE = "LxUnderline"
+SUBSCRIPT = "LxSubscript"
+SUPERSCRIPT = "LxSuperscript"
 
 WRAPPERS = {
     "lpzg": LEIPZIG,
@@ -53,11 +56,33 @@ WRAPPERS = {
     "emph": ITALIC,
     "textbf": BOLD,
     "textsc": SMALLCAPS,
+    # A paper that discusses one word of each example underlines it, so
+    # this is not decoration -- it is which word the example is ABOUT.
+    "underline": UNDERLINE,
+    "textsubscript": SUBSCRIPT,
+    "textsuperscript": SUPERSCRIPT,
     "textrm": "",
     "text": "",
     "mbox": "",
     "textnormal": "",
 }
+
+#: Size switches: declarations, so no braced argument to find -- they apply
+#: to the rest of their group.  Dropped rather than unhandled, and the
+#: difference is not cosmetic.  An unhandled command sends its whole
+#: enclosing group to pandoc as a fragment, and `{\small \begin{forest}...}`
+#: then came back as "] [Voice' ...": pandoc does not know forest either, so
+#: the tree lost its head.  Nothing here carries a font size anyway, so
+#: dropping the switch keeps everything that was inside it.
+DECLARATIONS = frozenset({
+    "tiny", "scriptsize", "footnotesize", "small", "normalsize",
+    "large", "Large", "LARGE", "huge", "Huge",
+})
+
+#: Commands whose braced argument is a length, and which leave no text.
+#: A kern has no inline equivalent here, and an example's columns are
+#: measured, not spaced by hand.
+DISCARD_ARG = frozenset({"hspace", "vspace"})
 
 SYMBOLS = {
     "dag": "†", "ddag": "‡", "S": "§", "P": "¶",
@@ -67,6 +92,7 @@ SYMBOLS = {
     "aa": "å", "AA": "Å", "o": "ø", "O": "Ø",
     "ss": "ß", "l": "ł", "L": "Ł", "i": "ı",
     "j": "ȷ", "&": "&", "%": "%", "#": "#", "$": "$", "_": "_",
+    "textunderscore": "_",
     "{": "{", "}": "}", " ": " ", ",": " ", "-": "",
 }
 
@@ -264,6 +290,22 @@ class InlineRenderer:
         if name in SYMBOLS:
             out.append(esc(SYMBOLS[name]))
             return j
+
+        if name in DECLARATIONS:
+            # A control word absorbs the whitespace after it, so `{\small x}`
+            # is "x" and not " x".  It matters: the width estimator measures
+            # this string, and a leading space in a cell is a column that
+            # does not line up with the one above it.
+            while j < len(s) and s[j] in " \t\n":
+                j += 1
+            return j
+
+        if name in DISCARD_ARG:
+            k = j + 1 if j < len(s) and s[j] == "*" else j
+            grp = find_group(s, k)
+            if grp is None:
+                raise Unsupported(f"\\{name} without a braced length")
+            return grp[1]
 
         if name in ("begin", "end"):
             end = self._tree_environment(s, name, j, out)

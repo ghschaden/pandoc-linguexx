@@ -330,6 +330,12 @@ def named_styles(layout: Layout) -> str:
             char("LxBold", 'fo:font-weight="bold"'),
             char("LxSmallCaps", 'fo:font-variant="small-caps"'),
             char("LxJudgment", 'fo:font-style="normal"'),
+            char("LxUnderline",
+                 'style:text-underline-style="solid"'
+                 ' style:text-underline-width="auto"'
+                 ' style:text-underline-color="font-color"'),
+            char("LxSubscript", 'style:text-position="sub 58%"'),
+            char("LxSuperscript", 'style:text-position="super 58%"'),
         ]
     )
 
