@@ -1,9 +1,13 @@
 # What still needs a real Word
 
-Everything in `plan-docx.md`'s verified facts was measured in LibreOffice,
-because that is what is installed here. Three questions remain that only
-Microsoft Word can answer, and the whole `.docx` plan rests on the first of
-them. None takes more than five minutes once Word is in front of you.
+Two readers have now seen the sample and agree: LibreOffice and OnlyOffice
+9.4 both read it correctly and neither refuses it. What is left needs
+Microsoft Word specifically, and it is less than it was — the schema check
+and OnlyOffice between them have retired most of the repair-prompt risk, and
+the cache fix has removed the dependency on a reader recalculating anything.
+
+What remains is below. None takes more than five minutes once Word is in
+front of you.
 
 ## The file
 
@@ -149,9 +153,15 @@ Worth doing anyway, and it shrinks what Word has to answer:
   Wire it into CI in Phase 1, once there is emitter output worth
   validating; validating only the sample on every push would cost an 8 MB
   download to check a file nobody is editing.
-- **Open the sample in OnlyOffice**, per above: a second independent OOXML
-  reader, and the one thing here that tests acceptance rather than
-  conformance.
+- **Open the sample in OnlyOffice — done, 2026-09-25, and it passes.**
+  Reads (1) and (2) with matching references, prints the same, and does not
+  offer to repair the file. That is a second independent OOXML
+  implementation *accepting* the markup, which is evidence of a different
+  kind from the schema check: conformance says the file is well-formed
+  against a standard, acceptance says a real reader will have it.
+
+  It is also the reader that found the cache bug, by disagreeing with
+  LibreOffice. Worth reaching for early whenever the emitter changes.
 
 None of these can answer Test 1. Field recalculation is behaviour, not
 markup, and only an implementation can tell you.

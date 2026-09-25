@@ -88,6 +88,13 @@ sources are throwaway; what matters is that the answers are measurements.
     and with them LibreOffice still shows (1) (2) while the raw cached text
     is `1, 2, 1, 2`, so both kinds of reader agree.
 
+    **Confirmed in the reader that exposed it**: with correct caches,
+    OnlyOffice 9.4 reads (1) and (2) with matching references, and prints
+    the same. It also opened the file without offering to repair it —
+    a second independent OOXML implementation accepting the markup, which
+    is worth as much as the schema validation and is evidence of a
+    different kind.
+
     This does not weaken the target: the field stays live, so inserting an
     example and refreshing still renumbers, which is the feature. It removes
     a dependency on the reader for the document merely being *correct when
