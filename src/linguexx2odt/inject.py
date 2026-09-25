@@ -58,6 +58,71 @@ def _text_of(inlines: Any) -> str:
     return "".join(out)
 
 
+ENV_NAME = re.compile(r"\\begin\s*\{([^}]*)\}")
+
+
+def _free_trapped_placeholders(node: Any, warn: Callable[[str], None]) -> Any:
+    r"""Lift placeholders out of raw LaTeX pandoc could not parse.
+
+    An environment pandoc does not know -- ``multicols`` is the one a real
+    paper hit -- arrives whole, as one ``RawBlock "latex"`` holding its own
+    ``\begin``, its content and its ``\end``.  The ODT and docx writers drop
+    a raw LaTeX block, so a placeholder inside one is not a placeholder at
+    all: it never becomes a Para, the injector never sees it, and the
+    example is simply gone from the output.  The count at the end of a run
+    catches it, which is how this was found, but catching is not keeping.
+
+    Splitting the raw block at each placeholder gives the injector the Para
+    it needs and leaves the LaTeX either side as raw, exactly as unhandled
+    as it already was.  No general list of environments to maintain: this
+    works for any construct that comes back raw.
+
+    The expansion happens in place in whatever list the raw block sits in.
+    That is safe without knowing which lists hold blocks, because a
+    ``RawBlock`` can only ever BE an element of a block list -- so a list
+    containing one is a block list.
+    """
+    if isinstance(node, list):
+        out = []
+        for item in node:
+            item = _free_trapped_placeholders(item, warn)
+            if isinstance(item, dict) and item.get("t") == "RawBlock":
+                fmt, text = (item.get("c") or ["", ""])[:2]
+                if fmt in ("latex", "tex") and PLACEHOLDER_RE.search(text):
+                    out.extend(_split_raw(text, warn))
+                    continue
+            out.append(item)
+        return out
+    if isinstance(node, dict):
+        if node.get("c") is not None:
+            node = dict(node)
+            node["c"] = _free_trapped_placeholders(node["c"], warn)
+        return node
+    return node
+
+
+def _split_raw(text: str, warn: Callable[[str], None]) -> list[dict]:
+    """One raw LaTeX block as raw/placeholder/raw/... in source order."""
+    env = ENV_NAME.search(text)
+    where = f" inside \\begin{{{env.group(1)}}}" if env else ""
+    out: list[dict] = []
+    pos = 0
+    for m in PLACEHOLDER_RE.finditer(text):
+        before = text[pos : m.start()]
+        if before.strip():
+            out.append({"t": "RawBlock", "c": ["latex", before]})
+        out.append({"t": "Para", "c": [{"t": "Str", "c": m.group(0)}]})
+        pos = m.end()
+        warn(
+            f"example{where} was inside LaTeX pandoc kept raw; the example is "
+            f"recovered but the surrounding markup is not carried over"
+        )
+    rest = text[pos:]
+    if rest.strip():
+        out.append({"t": "RawBlock", "c": ["latex", rest]})
+    return out
+
+
 def _placeholder_index(block: dict) -> int | None:
     if block.get("t") not in ("Para", "Plain"):
         return None
@@ -102,7 +167,8 @@ class Injector:
 
     def run(self, doc: dict) -> dict:
         doc = dict(doc)
-        doc["blocks"] = [self._node(b) for b in doc.get("blocks", [])]
+        blocks = _free_trapped_placeholders(doc.get("blocks", []), self.warn)
+        doc["blocks"] = [self._node(b) for b in blocks]
         return doc
 
     def _node(self, node):
