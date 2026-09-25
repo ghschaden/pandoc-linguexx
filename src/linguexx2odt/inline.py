@@ -304,7 +304,7 @@ class InlineRenderer:
 
         body = " ".join(s[grp[1]:stop].split())
         self.warn(
-            f"{env} tree kept as bracket notation; select it in Writer and "
+            f"{env} tree kept as bracket notation; open the file in Writer, select it and "
             f"run LinguExx > Typeset unnumbered tree (the example already "
             f"supplies the number)"
         )
@@ -335,7 +335,7 @@ class InlineRenderer:
 
         body = " ".join(s[start:k].split()).replace("[.", "[")
         self.warn(
-            "qtree tree kept as bracket notation; select it in Writer and "
+            "qtree tree kept as bracket notation; open the file in Writer, select it and "
             "run LinguExx > Typeset unnumbered tree (the example already "
             "supplies the number)"
         )

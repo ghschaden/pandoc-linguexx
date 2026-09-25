@@ -60,17 +60,51 @@ all. It duplicates the converter's constants on purpose — see below.
   `LINGUEXX2ODT_ALLOW_MISSING=1` turns that back into a skip for a run you
   know is partial. CI may not set it, and a test asserts that.
 
+## Two targets, one IR
+`--to odt` is the complete one; `--to docx` (plan-docx.md, Phases 1–4) does
+numbers, references, the gloss grid and the named styles. The split is
+deliberate and worth keeping:
+
+- **Shared**: `extract.py` and `ir.py` (the parse), `measure.py` (widths,
+  `Grid`, `_ADVANCE`), and `emit_base.BaseEmitter` — `prepare()`,
+  `_bands()`, the lead widths, and `plan_table()`, which returns a
+  `TablePlan` of pure measurements with no markup in it.
+- **Not shared**: the markup. `emit_odt` and `emit_docx` render the same
+  plan in different vocabularies and are not an abstraction over each
+  other. A test enforces that `measure` and `emit_base` name no markup at
+  all: an emitter reaching for `table:` in format-agnostic code breaks
+  nothing today and breaks the other target the day it is written.
+- An emitter registers itself with `@register("name")` and is reached
+  through `emitter_for()`. `RAW_FORMAT` and `reference()` are what the
+  inject pass asks it for — **`RAW_FORMAT` must be a `ClassVar`**: annotated
+  plainly on a dataclass it becomes a field, every instance takes the base
+  class's empty default, and every `RawBlock` goes out tagged `""`.
+
 ## Architecture invariants
 - **Examples are never pandoc `Table` AST nodes.** Each becomes one opaque
-  `RawBlock` of `opendocument` that this code controls completely — column
-  widths, merged cells, fields, styles. `plan.md` records why, under
-  "Verified facts"; that section is not to be re-litigated without
-  re-running its spikes.
-- **Numbers are `text:sequence` fields**, references are
-  `text:sequence-ref`. That is the entire point of the tool: a number that
-  is text renumbers nothing.
+  `RawBlock` — `opendocument` or `openxml` — that this code controls
+  completely: column widths, merged cells, fields, styles. `plan.md`
+  records why, under "Verified facts"; that section is not to be
+  re-litigated without re-running its spikes.
+- **Numbers are fields, not text.** `text:sequence` and
+  `text:sequence-ref` in ODF; `SEQ` and `REF` in OOXML. That is the entire
+  point of the tool: a number that is text renumbers nothing.
+- **In .docx the cached value must be correct.** A field carries the text a
+  reader shows when it does not recalculate, and readers differ —
+  LibreOffice recalculates on open, OnlyOffice 9.4 does not. The cache is
+  not a hint somebody's reader will fix; it is what somebody sees.
+- **OOXML spans by `w:gridSpan`, with no covered cells.** ODF emits a
+  `covered-table-cell` for each column a span swallows, so a row has one
+  element per column; OOXML emits nothing for them, so a row is complete
+  when its *spans* total the grid. A row with the right number of cells
+  and the wrong spans is a table Word renders as a mess.
+- **A `w:pStyle` naming an undefined style is not an error.** The reference
+  survives and the paragraph renders with the default — so styles must be
+  injected (`postprocess_docx`), and a missing injection looks like nothing
+  rather than like a failure. It is also where the body face lives, and the
+  columns are measured for that face.
 - **Column widths are estimated**, from a table of per-character advances
-  measured off Liberation Serif (`emit_odt._ADVANCE`, checked by `make
+  measured off Liberation Serif (`measure._ADVANCE`, checked by `make
   advances`). There are no font metrics at conversion time. Text is
   estimated as *drawn*, not as spelled — `\lpzg` and `\textsc` set small
   capitals, which are wider than the lowercase they replace.

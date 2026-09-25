@@ -153,6 +153,36 @@ Le corps d'un exemple se termine là où linguexx le termine : ligne vide,
 Tout le reste du document — sections, prose, emphase, notes de bas de
 page, citations — est converti par pandoc comme d'habitude.
 
+## A.5bis Le second format : `--to docx`
+
+```
+linguexx2odt article.tex --to docx -o article.docx
+```
+
+Produit un fichier Word dont les numéros d'exemple sont des champs `SEQ`
+vivants et les renvois des champs `REF` : insérer un exemple renumérote les
+suivants, là aussi. La grille de gloses, les jugements, les sous-exemples,
+les bandes et `\exannot` sont mis en page, avec les colonnes vérifiées sur
+la géométrie rendue comme pour le `.odt`, et les mêmes styles nommés — un
+utilisateur de Word peut donc remettre en forme tous les exemples depuis le
+volet Styles.
+
+Deux choses méritent d'être sues.
+
+**Chaque champ est écrit avec sa valeur déjà correcte**, de sorte que le
+document se lit juste que votre logiciel recalcule les champs à l'ouverture
+ou non. Ils diffèrent sur ce point : LibreOffice recalcule, OnlyOffice 9.4
+non. Le champ reste vivant dans les deux cas, ce qui est ce qui permet la
+renumérotation à l'édition.
+
+**Le fichier n'a jamais été ouvert dans Word.** Tout a été mesuré avec
+LibreOffice, validé contre les schémas ECMA-376 transitional, et ouvert
+dans OnlyOffice comme second lecteur indépendant. `WORD-TESTS-TODO.md` dit
+ce qu'il reste à demander à Word lui-même.
+
+Le `.odt` reste le format de référence : c'est celui dont relèvent la macro
+Writer, le document de référence et ce manuel.
+
 ## A.6 Ce qu'il ne fait pas, et le dit
 
 Les étiquettes structurales `\exannot{…}` sont converties, dans une colonne
@@ -162,6 +192,8 @@ toute la largeur et renvoie son étiquette à la ligne suivante ; ce
 convertisseur découpe l'exemple en bandes, ce qu'il fait déjà de tout
 exemple trop large, pour que la colonne reste une colonne à toute longueur.
 L'argument optionnel (forme orale) est abandonné.
+
+Sauf mention contraire, le tableau ci-dessous vaut pour les deux formats.
 
 **Cible linguexx 1.3.2.** L'écart est autrement invisible : ce convertisseur
 a été écrit pour la 1.2 et a continué pendant un mois à produire

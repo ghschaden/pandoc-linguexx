@@ -1,7 +1,10 @@
 # What still needs a real Word
 
-Two readers have now seen the sample and agree: LibreOffice and OnlyOffice
-9.4 both read it correctly and neither refuses it. What is left needs
+Two readers have now seen the full Phase-4 document and agree to the point:
+LibreOffice and OnlyOffice 9.4 lay it out with identical column offsets
+(`0, 23, 108, 139, 171, 209` from the text start), the same 41pt
+number-to-text indent, and the `\exannot` column at 362 against 361.
+Neither refuses the file. What is left needs
 Microsoft Word specifically, and it is less than it was — the schema check
 and OnlyOffice between them have retired most of the repair-prompt risk, and
 the cache fix has removed the dependency on a reader recalculating anything.

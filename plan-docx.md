@@ -116,6 +116,20 @@ sources are throwaway; what matters is that the answers are measurements.
     Not Word, so not conclusive for Word. But this is the feature the whole
     target exists for, and it works in a real implementation that is not
     the one the design was developed against.
+14. **Two independent readers lay the output out identically.** The full
+    Phase-4 document (`tests/e2e/word-sample.tex`) rendered by LibreOffice
+    and by OnlyOffice 9.4 agrees column for column: offsets from the text
+    start of `0, 23, 108, 139, 171, 209` in both, a number-to-text indent
+    of 41 in both, and the `\exannot` column at 362 against 361 — a point,
+    over 13 cm.
+
+    Both also show (1)–(5) in order with the cross-references reading (1),
+    (2), (5) and a bare 1, which is the cache-correctness of fact 12 doing
+    its job in the reader that does not recalculate.
+
+    Not Word. But the design was developed against one renderer, and the
+    second one agreeing to the point is better evidence than any amount of
+    re-reading the markup.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.

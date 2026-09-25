@@ -180,19 +180,34 @@ column at every length rather than the rule changing at one. The optional
 spoken argument is dropped — it is what a PDF screen reader says, and an
 ODT has nowhere to put it.
 
-There is an experimental second output format: `--to docx` writes a Word
-file whose numbers are live `SEQ` fields and whose cross-references are
-`REF` fields, so inserting an example renumbers the rest there too. Through Phase 3 of
-`plan-docx.md` it also lays out the gloss grid, judgments, sub-examples,
-bands and `\exannot`, with the columns measured against the same rendered
-geometry the `.odt` target is held to. Examples carry named
-styles — the same names the `.odt` target uses — so a Word user can restyle
-every example from the Styles pane, and the body face is declared there
-rather than on each run.
+## The second target: `--to docx`
 
-It has not been opened in Word. Everything above is measured through
-LibreOffice and checked against the ECMA-376 schemas; `WORD-TESTS-TODO.md`
-says what is left to ask of Word itself.
+```
+linguexx2odt paper.tex --to docx -o paper.docx
+```
+
+A Word file whose example numbers are live `SEQ` fields and whose
+cross-references are `REF` fields, so inserting an example renumbers the
+rest there too. It lays out the gloss grid, judgments, sub-examples, bands
+and `\exannot`, with the columns held to the same rendered-geometry
+assertions as the `.odt` target, and it carries the same named styles, so a
+Word user can restyle every example from the Styles pane.
+
+Two things are worth knowing.
+
+**Every field is written with its correct value already in it**, so the
+document reads right whether or not your reader recalculates fields on
+open. They differ about that: LibreOffice recalculates, OnlyOffice 9.4 does
+not. The field stays live either way, which is what makes editing renumber.
+
+**It has never been opened in Word.** Everything is measured through
+LibreOffice, validated against the ECMA-376 transitional schemas
+(`make schemas`, then `tools/validate_docx.py`), and opened in OnlyOffice as
+a second independent reader. `WORD-TESTS-TODO.md` says what is left to ask
+of Word itself, and how to build the file to ask it with.
+
+The `.odt` target remains the reference one: it is what the Writer macro,
+the reference document and the French manual are about.
 
 **Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
 invisible: this converter was written against 1.2 and silently kept
@@ -207,6 +222,8 @@ at an environment boundary, or at a closing brace.
 The converter never fails silently. Anything it cannot render faithfully
 produces a warning naming the construct and the line, and degrades to
 readable output rather than to nothing:
+
+Unless a row says otherwise, this is true of both targets.
 
 | construct | what happens |
 |---|---|
@@ -223,7 +240,7 @@ readable output rather than to nothing:
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignored — they describe what a PDF screen reader says, which has no ODT counterpart |
 | gb4e `exe`/`xlist` syntax, `[legacy]` mode | out of scope |
 | math inside examples | handed to pandoc; may not survive |
-| anything else unknown | handed to `pandoc -f latex+raw_tex -t opendocument` |
+| anything else unknown | handed to pandoc, as `opendocument` or `openxml` |
 
 ### Why `\GlossTransSide` is normalised rather than reproduced
 
