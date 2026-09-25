@@ -1604,13 +1604,34 @@ def check_tree_formatting(ctx) -> int:
     return bad
 
 
+#: ODF lengths, in cm.  LibreOffice writes a table column's width in the
+#: profile's measurement unit, which follows the locale -- centimetres here,
+#: inches on a en-US CI runner.  Reading only "cm" gave a KeyError on the
+#: column style, which says nothing about the cause; the widths are
+#: compared with each other, so any unit does as long as they share one.
+_TO_CM = {"cm": 1.0, "mm": 0.1, "in": 2.54, "pt": 2.54 / 72, "pc": 2.54 / 6}
+
+
+def _length_cm(s: str) -> float:
+    m = re.fullmatch(r"([\d.]+)([a-z]+)", s)
+    if not m or m.group(2) not in _TO_CM:
+        raise AssertionError(f"column width in an unknown unit: {s!r}")
+    return float(m.group(1)) * _TO_CM[m.group(2)]
+
+
 def column_widths(odt: Path) -> list[float]:
     content = postprocess.read(odt, "content.xml")
     widths = dict(re.findall(
         r'<style:style style:name="([^"]+)" style:family="table-column">'
-        r'<style:table-column-properties style:column-width="([\d.]+)cm"', content))
-    return [float(widths[n]) for n in
-            re.findall(r'<table:table-column table:style-name="([^"]+)"', content)]
+        r'<style:table-column-properties style:column-width="([\d.]+[a-z]+)"',
+        content))
+    used = re.findall(r'<table:table-column table:style-name="([^"]+)"', content)
+    absent = [n for n in used if n not in widths]
+    if absent:
+        raise AssertionError(
+            f"{odt.name}: column styles used but never given a width: "
+            f"{absent}.  Declared widths: {sorted(widths)}")
+    return [_length_cm(widths[n]) for n in used]
 
 
 def check_small_caps(ctx, out: Path, profile: Path) -> int:
