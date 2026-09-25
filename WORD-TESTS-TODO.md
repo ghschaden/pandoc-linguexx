@@ -49,6 +49,13 @@ original, select all, press **F9**. The numbers and the references should
 follow the new order. *This* is the feature: a number that never changes is
 a number the user could have typed.
 
+**Passed in OnlyOffice 9.4 (2026-09-25).** Three examples read (1) (2) (3),
+and the cross-references read (2) and (3) — the bookmarks stayed on the
+original examples instead of being duplicated onto the pasted copy, so each
+reference still pointed at the example it names. That is the failure this
+test was written to catch, and it did not happen. Word is still worth
+asking, but it is now a confirmation rather than a discovery.
+
 If 1b fails, the target is in real trouble and nothing else in this file
 matters much. If 1a fails while 1b works, Word disagrees with both other
 readers about caches, which would be strange and very much worth knowing.
@@ -85,7 +92,9 @@ needs more than a validator.
 
 ## Test 3 — does inserting an example renumber the rest?
 
-The point of the whole tool, and the one thing a static render cannot show.
+The point of the whole tool. **Already passed in OnlyOffice** (see 1b);
+this is the same procedure in Word, and now a confirmation rather than an
+open question.
 
 1. Click just before the **(1)** example.
 2. Type a line of ordinary text, press Enter.

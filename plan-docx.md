@@ -101,6 +101,21 @@ sources are throwaway; what matters is that the answers are measurements.
     opened*. Phase 2 must compute every number and every reference at build
     time — which it can, since `inject.py` already resolves every label to
     an example index for ODT.
+13. **Editing renumbers, and the references follow — the feature works.**
+    A copy of the first example pasted above the original, then a refresh,
+    in OnlyOffice 9.4: the three examples read (1) (2) (3) and the
+    cross-references read **(2) and (3)**.
+
+    Read that second part carefully, because it is the interesting half.
+    The bookmarks stayed on the ORIGINAL examples rather than being
+    duplicated onto the pasted copy, so `exone` — now example 2 — is what
+    its reference resolved to. A duplicated bookmark would have sent the
+    reference to the copy, or made it ambiguous, and that was the named
+    risk in this test. It did not happen.
+
+    Not Word, so not conclusive for Word. But this is the feature the whole
+    target exists for, and it works in a real implementation that is not
+    the one the design was developed against.
 
 Consequence: **the ODT architecture transfers whole.** The differences are
 smaller than the similarities, and two of them are in docx's favour.
