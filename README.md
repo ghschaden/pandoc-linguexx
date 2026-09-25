@@ -29,13 +29,18 @@ instructions d'installation sous Windows, macOS et Linux.
 No install is needed to run it. From a checkout:
 
 ```
-python3 -m linguexx2odt paper.tex -o paper.odt
+PYTHONPATH=src python3 -m linguexx2odt paper.tex -o paper.odt
 ```
 
-That works from a bare clone with no virtualenv, which is the quickest way
+The `PYTHONPATH` is not optional — this is a src-layout project, so a bare
+`python3 -m linguexx2odt` from the repository root does not find the
+package. What it buys is needing no virtualenv, which is the quickest way
 past a `.venv` that has gone stale — or, if this checkout is synced by a
 service that does not preserve the executable bit, past a
 `.venv/bin/linguexx2odt` that exists and will not run.
+
+(The test suite needs no `PYTHONPATH`: `pyproject.toml` sets it for pytest.
+The two are different, and conflating them cost an afternoon.)
 
 For the `linguexx2odt` command itself: Arch/Manjaro (and most current
 distros) mark the system Python as externally managed, so `pip install -e .`
@@ -212,6 +217,29 @@ answering it in passing would turn an accident into a promise.
 
 So the converter says what it did and moves on. If you want the side layout
 in the `.odt`, it is a column drag in Writer, once, per example.
+
+### `\exannot` and the Writer macro do not yet round-trip
+
+The macro can take a converted example back apart (*Untypeset*), and an
+example carrying an `\exannot` label does not survive the trip. The macro
+has no annotation column, so it reads that cell as ordinary content: a
+converted
+
+```
+\ex. \gll que Pierre est fatigu\'e \exannot{[CP]}\\
+     that Pierre is tired\\
+\glt `that Pierre is tired'
+```
+
+comes back as `que Pierre est fatigué [CP]` — the `\exannot` wrapper gone
+and the label now a fifth object word. Re-typesetting that builds an
+eight-column grid where the original has seven, so the gloss stops sitting
+under its word. Measured, not feared.
+
+Nothing is lost on the page from converting; this affects only the
+round trip back through the macro. The fix is to teach the macro to
+recognise the `LxAnnot` paragraph style, the way it already recognises
+`LxExampleBand` — see `MACRO_STYLES_NOT_SHARED` in `styles.py`.
 
 ## Things you will want to fix by hand
 

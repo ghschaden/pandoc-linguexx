@@ -87,6 +87,11 @@ Const SC_RATIO    As Double = 0.8
 '   text_width_cm — the macro reads the real page style instead
 '   font_pt — the macro reads the real font instead
 '   width_safety — the macro measures, so it needs no margin for error
+'   judgment_cm — the macro measures the mark rather than reserving a width for it; it shares JUDG_GAP_CM, which measuring cannot supply
+'   space_above_cm — converter-only: a CLI override.  The macro carries one SPACE_CM and lets the SPACE_ABOVE/SPACE_BELOW styles hold any difference, which is what a Writer user edits
+'   space_below_cm — converter-only, as space_above_cm
+'   annot_column_ratio — the macro has no \exannot column at all.  Until it does, sharing the number would say the two agree about a thing only one of them has — see MACRO_STYLES_NOT_SHARED for what that costs
+'   annot_sep_em — as annot_column_ratio
 ' --- END GENERATED
 
 Const JUDG_CHARS   As String = "*?#%!"

@@ -23,13 +23,14 @@ more thing that can be missing, out of date, or — as happened here — synced
 between machines by a service that does not preserve the executable bit, so
 that ``.venv/bin/linguexx2odt`` exists and will not run.
 
-This module needs none of that.  From a bare checkout::
+This module needs no venv and no install -- only ``src/`` on the import
+path, which with this project's src-layout means saying so::
 
-    python3 -m linguexx2odt paper.tex -o paper.odt
+    PYTHONPATH=src python3 -m linguexx2odt paper.tex -o paper.odt
 
-works as long as ``src/`` is importable, which ``pip install -e .`` and
-``PYTHONPATH=src`` both arrange, and which pytest already does for the
-suite through ``pythonpath`` in pyproject.toml.
+``pip install -e .`` arranges it permanently; pytest arranges it for the
+suite through ``pythonpath`` in pyproject.toml, which is why the tests need
+no PYTHONPATH.  Running the module from a bare checkout does.
 """
 
 import sys

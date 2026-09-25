@@ -105,10 +105,47 @@ MACRO_LENGTHS: dict[str, str] = {
 
 #: Deliberately *not* shared, with the reason — so that a value missing from
 #: the macro is a decision on the record rather than an oversight.
+#:
+#: test_every_layout_field_is_accounted_for enforces that: a Layout field
+#: belongs either to MACRO_LENGTHS or to this table.  It was added after
+#: five fields had quietly reached neither, three of them for months —
+#: which is the oversight this table's own comment claims to prevent, and
+#: a comment cannot.
 MACRO_NOT_SHARED: dict[str, str] = {
     "text_width_cm": "the macro reads the real page style instead",
     "font_pt": "the macro reads the real font instead",
     "width_safety": "the macro measures, so it needs no margin for error",
+    "judgment_cm": (
+        "the macro measures the mark rather than reserving a width for it; "
+        "it shares JUDG_GAP_CM, which measuring cannot supply"),
+    "space_above_cm": (
+        "converter-only: a CLI override.  The macro carries one SPACE_CM "
+        "and lets the SPACE_ABOVE/SPACE_BELOW styles hold any difference, "
+        "which is what a Writer user edits"),
+    "space_below_cm": "converter-only, as space_above_cm",
+    "annot_column_ratio": (
+        "the macro has no \\exannot column at all.  Until it does, sharing "
+        "the number would say the two agree about a thing only one of them "
+        "has — see MACRO_STYLES_NOT_SHARED for what that costs"),
+    "annot_sep_em": "as annot_column_ratio",
+}
+
+#: The same, for paragraph styles: a style the converter writes and the
+#: macro knows nothing about, with what that costs.
+#:
+#: This is not free.  The macro reads a converted table back with
+#: LxRowText, which takes every cell from the lead columns rightwards, so
+#: an annotation comes back as a trailing word of the object tier rather
+#: than as \\exannot{...}.  Measured, not feared: untypesetting a converted
+#: `\\gll que Pierre est fatigué \\exannot{[CP]}` gives back
+#: "que Pierre est fatigué [CP]", and re-typesetting that builds an
+#: eight-column grid where linguexx's is seven, so the gloss stops sitting
+#: under its word.  Teaching LxRowText to recognise ANNOT_PARA — the way it
+#: already recognises BAND_PARA — is the fix, and it is macro work.
+MACRO_STYLES_NOT_SHARED: dict[str, str] = {
+    "ANNOT_PARA": (
+        "the macro has no annotation column; a converted example that has "
+        "one does not survive Untypeset intact"),
 }
 
 

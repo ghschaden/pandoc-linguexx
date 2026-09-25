@@ -9,9 +9,11 @@
 #   make venv      recreate .venv (see the note below)
 #   make clean     remove build artefacts and caches
 #
-# No PYTHONPATH anywhere: pyproject.toml sets `pythonpath = ["src"]` for
-# pytest, and `python3 -m linguexx2odt` finds the package from a bare
-# checkout.  If you have been exporting PYTHONPATH=src, you can stop.
+# `make test` needs no PYTHONPATH: pyproject.toml sets
+# `pythonpath = ["src"]` for pytest.  Running the converter by hand from a
+# bare checkout DOES, this being a src-layout project:
+#     PYTHONPATH=src python3 -m linguexx2odt paper.tex -o paper.odt
+# The two are different questions and were briefly answered as one.
 
 PYTHON ?= python3
 
@@ -42,7 +44,7 @@ lint:
 # lengths exist twice.  This writes the second copy from the first;
 # tests/test_macro_sync.py fails when they drift.
 macro:
-	@$(PYTHON) tools/sync_macro.py
+	@$(PYTHON) tools/sync_macro.py --write
 
 oxt:
 	@$(PYTHON) tools/build_oxt.py

@@ -14,11 +14,14 @@ all. It duplicates the converter's constants on purpose — see below.
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
   versioned interface), LibreOffice for the rendering half, poppler for
   reading the result back.
-- **No `PYTHONPATH` needed.** `pyproject.toml` sets
-  `pythonpath = ["src"]` for pytest, and `python3 -m linguexx2odt` runs
-  from a bare checkout. Exporting `PYTHONPATH=src` is a habit worth
-  dropping; it is what a whole session was prefixed with before anyone
-  read the config.
+- **Two different path questions, easily conflated.** *pytest* needs no
+  `PYTHONPATH`: `pyproject.toml` sets `pythonpath = ["src"]`, so plain
+  `pytest` works, and a whole session was prefixed with `PYTHONPATH=src`
+  before anyone read the config. *Running the module* does need it, this
+  being a src-layout project:
+  `PYTHONPATH=src python3 -m linguexx2odt paper.tex -o paper.odt`.
+  Asserting the first about the second is an overclaim that reached the
+  README before a probe caught it.
 - `.venv/bin/linguexx2odt` may exist and refuse to run: pCloud syncs this
   checkout and does not preserve the executable bit. `make venv` rebuilds
   it; `python3 -m linguexx2odt` sidesteps it.
