@@ -169,7 +169,11 @@ function expected(read) {
   const sel = linesFromRead(read);
   const ex = toExample(parseLines(sel.lines).items);
   const width = read.widthTwips / TWIPS_PER_CM;
-  const [layout, anyJudgment] = prepareSelection(ex, { ...LAYOUT, text_width_cm: width }, { formats: sel.formats });
+  // the document's face and size, as prepareJob lays it out
+  const face = read.font || LAYOUT.font_name;
+  const size = read.sizeHalfPt ? read.sizeHalfPt / 2 : LAYOUT.font_pt;
+  const [layout, anyJudgment] = prepareSelection(ex,
+    { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: sel.formats });
   const { plan } = planTable(ex, layout, { anyJudgment, formats: sel.formats });
   return exampleTable(ex, plan, { number: { id: 1, name: "x", cached: "1" }, formats: sel.formats });
 }
@@ -368,6 +372,37 @@ try {
   Asc.scope.job = prepC.job;
   LinguExx.insertExample();
   log.C = prepC.job.bookmark;
+
+  // Phase 4: A, which the reference points at, untypeset and typeset again.
+  function rowsOf(name) {
+    var t = doc.GetBookmarkRange(name).GetParagraph(0).GetParentTable(), rows = [];
+    for (var r = 0; r < t.GetRowsCount(); r++) {
+      var cells = [];
+      for (var c = 0; c < t.GetRow(r).GetCellsCount(); c++) cells.push(t.GetRow(r).GetCell(c).GetContent().GetElement(0).GetText());
+      rows.push(cells.join("|"));
+    }
+    return rows;
+  }
+  log.rowsBefore = rowsOf(log.A);
+  doc.GetBookmarkRange(log.A).GetParagraph(0).Select();
+  var u = LinguExx.untypesetJob(LinguExx.readExampleTable());
+  if (u.refusal) throw new Error("untypeset refused: " + u.refusal);
+  Asc.scope.back = u.back;
+  LinguExx.writeLines();
+  var at = u.back.pos, nl = u.back.lines.length;
+  log.untypeset = [];
+  for (var q = 0; q < nl; q++) log.untypeset.push(doc.GetElement(at + q).GetText());
+  log.untypesetA = { shown: doc.GetBookmarkRange(log.A).GetText(),
+                     inTable: !!doc.GetBookmarkRange(log.A).GetParagraph(0).GetParentTable() };
+  doc.GetElement(at).GetRange().ExpandTo(doc.GetElement(at + nl - 1).GetRange()).Select();
+  var again = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 9);
+  if (again.refusal) throw new Error("retypeset refused: " + again.refusal);
+  log.retypeset = { takeOver: again.job.takeOver, bookmark: again.job.bookmark };
+  Asc.scope.job = again.job;
+  LinguExx.insertExample();
+  log.names = doc.GetAllBookmarksNames();
+  log.retypesetA = { inTable: !!doc.GetBookmarkRange(log.A).GetParagraph(0).GetParentTable() };
+  log.rowsAfter = log.retypesetA.inTable ? rowsOf(log.A) : [];
 } catch (e) { log.error = String(e && e.stack || e); }
 var out = Api.CreateParagraph(); out.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, out);
 builder.SaveFile("docx", ${JSON.stringify(scenarioDocx)});
@@ -433,6 +468,26 @@ const idToNameScenario = (id) => scenarioIds[id] || id;
     if (runFmt[word] === undefined) problems.push(`scenario: "${word}" is not a run of C`);
     else if (have !== fmt.split(" ").sort().join(" ")) problems.push(`scenario: "${word}" has ${have || "no format"}, not ${fmt || "no format"}`);
   }
+  // Phase 4: A out and back in, its identity -- and the reference -- intact
+  const lines = (log.untypeset || []).map((t) => t.replace(/\r?\n$/, ""));
+  if (JSON.stringify(lines) !== JSON.stringify(["(2)\tIch habe geschlafen", "I have slept"])) {
+    problems.push(`untypeset: A came back as ${JSON.stringify(lines)}`);
+  }
+  if (!log.untypesetA || log.untypesetA.shown !== "2" || log.untypesetA.inTable) {
+    problems.push(`untypeset: A's number ${JSON.stringify(log.untypesetA)}, not "2" outside a table`);
+  }
+  if (!log.retypeset || !log.retypeset.takeOver || log.retypeset.bookmark !== log.A) {
+    problems.push(`retypeset: the number was not taken over: ${JSON.stringify(log.retypeset)}`);
+  }
+  if (!log.names || log.names.filter((n) => n === log.A).length !== 1) {
+    problems.push(`retypeset: A's bookmark is there ${log.names ? log.names.filter((n) => n === log.A).length : "?"} times`);
+  }
+  if (!log.retypesetA || !log.retypesetA.inTable) problems.push("retypeset: A is not a table again");
+  // and the same table: out and back in changes nothing a reader sees
+  if (JSON.stringify(log.rowsAfter) !== JSON.stringify(log.rowsBefore)) {
+    problems.push(`retypeset: A reads ${JSON.stringify(log.rowsAfter)}, not ${JSON.stringify(log.rowsBefore)}`);
+  }
+  console.log(`--- untypeset A: ${JSON.stringify(lines)}; typeset again, taking over ${log.retypeset && log.retypeset.bookmark === log.A ? "its own number" : "?"}`);
   console.log(`--- scenario: right after B, A read ${log.afterB.A}; B, A, C read ${got.B}, ${got.A}, ${got.C}; ` +
     `the reference to A reads ${refShown}; C's formats ${JSON.stringify(runFmt)}`);
 }

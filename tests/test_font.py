@@ -154,3 +154,26 @@ def test_a_different_face_moves_the_columns(tmp_path: Path) -> None:
     assert sum(dejavu[:-1]) > sum(times[:-1]), (
         f"DejaVu Serif is the wider face, but its content columns "
         f"({sum(dejavu[:-1])}) are no wider than Times' ({sum(times[:-1])})")
+
+
+def test_a_measured_face_needs_no_font_file(monkeypatch) -> None:
+    """Aptos -- Word's default since 2023 -- is carried as numbers, so it is
+    estimated from its own metrics where it is not installed, which is
+    everywhere but Windows and Mac, CI included.  Measured from Microsoft's
+    Aptos.ttf by tools/measure_face.py."""
+    from linguexx2odt import measure
+
+    def no_file(name):
+        raise AssertionError(f"read a font file for {name!r}")
+
+    monkeypatch.setattr(measure, "_font_file", no_file)
+    measure.advances_for.cache_clear()
+    try:
+        aptos = advances_for("Aptos")
+        assert aptos is measure._FACE_ADVANCE["aptos"]
+        assert advances_for("aptos") is aptos
+        # wider than Times, which is why a Times estimate wraps it
+        word = "ausserordentlich"
+        assert sum(aptos[c] for c in word) > 1.1 * sum(_ADVANCE[c] for c in word)
+    finally:
+        measure.advances_for.cache_clear()

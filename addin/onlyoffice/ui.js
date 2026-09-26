@@ -103,9 +103,36 @@
     });
   }
 
+  /**
+   * The example the cursor is in, back as its typed lines, the number --
+   * the same field -- at the head of the first; typesetting them again
+   * takes that number over, so references to it survive.
+   */
+  function untypeset() {
+    if (!busy("Untypesetting…")) return;
+    note([]);
+    plugin.callCommand(LinguExx.readExampleTable, false, false, function (read) {
+      var u;
+      try {
+        u = LinguExx.untypesetJob(read);
+      } catch (e) {
+        idle();
+        return say(String(e.message || e), "error");
+      }
+      if (u.refusal) { idle(); return say(u.refusal, "error"); }
+      window.Asc.scope.back = u.back;
+      plugin.callCommand(LinguExx.writeLines, false, true, function (res) {
+        idle();
+        if (!res || res.error) return say((res && res.error) || "The example was not taken apart.", "error");
+        say("Back as text. Edit it, select the lines, and typeset them again: the number stays the same.", "ok");
+      });
+    });
+  }
+
   plugin.init = function () {
     $("typeset").onclick = typeset;
     $("refs").onclick = listExamples;
+    $("untypeset").onclick = untypeset;
     say("Select the lines of an example, then Typeset.");
   };
 

@@ -94,3 +94,16 @@ test("the package is well-formed, with and without its styles", () => {
   const styled = flatPackage(t, { withStyles: true });
   for (const id of STYLE_IDS) assert.ok(styled.includes(`w:styleId="${id}"`), id);
 });
+
+test("the styles part carries the document's face, so Word does not fix Times into the styles", () => {
+  const pkg = flatPackage("<w:p/>", { withStyles: true, defaults: { face: "Aptos", halfPoints: 24 } });
+  assert.equal(wellFormed(pkg), true);
+  assert.match(pkg, /<w:styles [^>]*><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Aptos" w:cs="Aptos"\/><w:sz w:val="24"\/>/);
+  assert.ok(!flatPackage("<w:p/>", { withStyles: true }).includes("docDefaults"));
+  // and without the Lx styles: the text must still resolve to the face
+  const bare = flatPackage("<w:p/>", { defaults: { face: "Aptos", halfPoints: 24 } });
+  assert.equal(wellFormed(bare), true);
+  assert.match(bare, /Target="styles.xml"/);
+  assert.match(bare, /<w:rFonts w:ascii="Aptos"/);
+  assert.ok(!bare.includes("LxExampleCell"), "the Lx styles only when asked for");
+});

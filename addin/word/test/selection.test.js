@@ -81,12 +81,30 @@ test("a field shows its result, not its code; deletions are not text; insertions
   assert.deepEqual(sel.lines.map(strip), ["on today now here"]);
 });
 
-test("a selection holding an example number or a table is refused, saying why", () => {
-  const seq = '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> SEQ NumEx \\* ARABIC </w:instrText></w:r>' +
-    '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' + r("3") + '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
-  assert.match(readSelection(pkg(p(r("("), seq, r(") Ich")))).refusal, /example number/);
-  assert.match(readSelection(pkg(p('<w:fldSimple w:instr=" SEQ NumEx ">', r("3"), "</w:fldSimple>"))).refusal,
-    /example number/);
+// An example number in a selection is TAKEN OVER (LxTakeNumber): an example
+// untypeset and typeset again keeps the field its references point at.
+const seqField = (shown, name = "LxEx5", id = "7") =>
+  `<w:bookmarkStart w:id="${id}" w:name="${name}"/>` +
+  '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> SEQ NumEx \\* ARABIC </w:instrText></w:r>' +
+  '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' + r(shown) + '<w:r><w:fldChar w:fldCharType="end"/></w:r>' +
+  `<w:bookmarkEnd w:id="${id}"/>`;
+
+test("a leading example number is taken over: its bookmark kept, its brackets dropped", () => {
+  const sel = readSelection(pkg(p(r("("), seqField("3"), r(")"), '<w:r><w:tab/></w:r>', r("Ich habe")) + p(r("I have"))));
+  assert.equal(sel.refusal, "");
+  assert.deepEqual(sel.number, { bookmark: "LxEx5", shown: "3" });
+  assert.deepEqual(parseLines(sel.lines).items[0].tiers.map((t) => t.map(strip)), [["Ich", "habe"], ["I", "have"]]);
+  // the simple-field form a converter or another editor may write
+  const simple = readSelection(pkg(p(r("("), '<w:bookmarkStart w:id="1" w:name="NumEx0"/>',
+    '<w:fldSimple w:instr=" SEQ NumEx ">', r("1"), "</w:fldSimple>", '<w:bookmarkEnd w:id="1"/>', r(") Ich"))));
+  assert.deepEqual(simple.number, { bookmark: "NumEx0", shown: "1" });
+  assert.deepEqual(simple.lines.map(strip).map((l) => l.trim()), ["Ich"]);
+});
+
+test("two numbers, or one part-way through, are refused -- a number must not move", () => {
+  assert.match(readSelection(pkg(p(r("("), seqField("1"), r(") a")) + p(r("("), seqField("2", "LxEx6", "8"), r(") b")))).refusal,
+    /two example numbers/);
+  assert.match(readSelection(pkg(p(r("Ich habe")) + p(r("("), seqField("2"), r(") b")))).refusal, /part-way/);
   assert.match(readSelection(pkg("<w:tbl><w:tr><w:tc>" + p(r("x")) + "</w:tc></w:tr></w:tbl>")).refusal, /table/);
 });
 

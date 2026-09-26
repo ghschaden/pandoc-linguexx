@@ -71,6 +71,10 @@ GOLDEN = ROOT / "tests" / "fixtures" / "typed-examples.plans.json"
 DOCX_GOLDEN = ROOT / "tests" / "fixtures" / "typed-examples.docx.json"
 TEXT_WIDTHS = (17.0, 12.0, 7.0)
 
+#: Faces besides Times, each at 17 cm: the widths must follow the face, and
+#: the core is held to the converter's own advances_for() for it.
+FACES = ("Aptos",)
+
 _SPECIAL = {
     "\\": r"\textbackslash{}", "{": r"\{", "}": r"\}", "%": r"\%", "#": r"\#",
     "&": r"\&", "$": r"\$", "_": r"\_", "^": r"\^{}",
@@ -115,8 +119,8 @@ def example(parse: dict, where: str) -> Example:
         for k, it in enumerate(items)))
 
 
-def plan(ex: Example, text_width: float) -> dict:
-    em = BaseEmitter(layout=Layout(text_width_cm=text_width))
+def plan(ex: Example, text_width: float, face: str = "Times New Roman") -> dict:
+    em = BaseEmitter(layout=Layout(text_width_cm=text_width, font_name=face))
     em.prepare([ex])
     p = em.plan_table(ex)
     lay = em.layout
@@ -149,6 +153,7 @@ def golden() -> dict:
             continue
         ex = example(parse, key)
         out[key] = {f"{w:g}": plan(ex, w) for w in TEXT_WIDTHS}
+        out[key].update({f"17 {face}": plan(ex, 17.0, face) for face in FACES})
     return out
 
 

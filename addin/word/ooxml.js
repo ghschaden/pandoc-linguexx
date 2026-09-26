@@ -185,29 +185,53 @@ export function exampleTable(ex, plan, opts = {}) {
 export const AFTER_EXAMPLE = "<w:p/>";
 
 /**
+ * The document defaults a styles part carries: the face and size the
+ * document's own text is in.  Without them OOXML's implicit default is
+ * Times New Roman, and Word resolved the imported styles against it and
+ * wrote "Times New Roman, 12" into LxExampleCell -- examples in Times in an
+ * Aptos document (the second live test showed it; the Styles pane said so).
+ */
+export function docDefaults(face, halfPoints) {
+  if (!face) return "";
+  const f = esc(face);
+  const size = halfPoints ? `<w:sz w:val="${halfPoints}"/><w:szCs w:val="${halfPoints}"/>` : "";
+  return "<w:docDefaults><w:rPrDefault><w:rPr>" +
+    `<w:rFonts w:ascii="${f}" w:hAnsi="${f}" w:eastAsia="${f}" w:cs="${f}"/>${size}` +
+    "</w:rPr></w:rPrDefault></w:docDefaults>";
+}
+
+/**
  * A flat OPC package for Body/Range.insertOoxml: *bodyXml* as the document
  * body, and -- when *withStyles* -- the Lx styles as its styles part.
+ * *defaults* ({face, halfPoints}) go into a styles part whether or not the
+ * Lx styles do: without them the inserted text resolves, inside the
+ * package, to OOXML's implicit Times New Roman, and Word keeps that "source
+ * formatting" as direct formatting on the text even when the document's
+ * own style says otherwise -- which is what the live test after the first
+ * fix still showed.
  * Styles travel only when the document lacks one (plan-addins.md,
  * Phase 2): re-sending a styles part the document has was never isolated
  * from the page-state failure of S6 fact 2.
  */
-export function flatPackage(bodyXml, { withStyles = false } = {}) {
+export function flatPackage(bodyXml, { withStyles = false, defaults = null } = {}) {
   const parts = [
     ["/_rels/.rels", "application/vnd.openxmlformats-package.relationships+xml",
       `<Relationships xmlns="${REL_NS}"><Relationship Id="rId1" ` +
       `Type="${OFFDOC}/officeDocument" Target="word/document.xml"/></Relationships>`],
     ["/word/_rels/document.xml.rels", "application/vnd.openxmlformats-package.relationships+xml",
       `<Relationships xmlns="${REL_NS}">` +
-      (withStyles ? `<Relationship Id="rId1" Type="${OFFDOC}/styles" Target="styles.xml"/>` : "") +
+      (withStyles || defaults ? `<Relationship Id="rId1" Type="${OFFDOC}/styles" Target="styles.xml"/>` : "") +
       "</Relationships>"],
     ["/word/document.xml",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
       `<w:document xmlns:w="${W_NS}"><w:body>${bodyXml}</w:body></w:document>`],
   ];
-  if (withStyles) {
+  if (withStyles || defaults) {
     parts.push(["/word/styles.xml",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
-      `<w:styles xmlns:w="${W_NS}">${STYLES_FRAGMENT}</w:styles>`]);
+      `<w:styles xmlns:w="${W_NS}">` +
+      (defaults ? docDefaults(defaults.face, defaults.halfPoints) : "") +
+      `${withStyles ? STYLES_FRAGMENT : ""}</w:styles>`]);
   }
   const inner = parts.map(([name, type, xml]) =>
     `<pkg:part pkg:name="${name}" pkg:contentType="${type}"><pkg:xmlData>${xml}</pkg:xmlData></pkg:part>`)

@@ -17,9 +17,10 @@ add-in (`addin/word/`), is built and has passed a first live test in Word
 on the web. `python3 tools/serve_addin.py` serves it over HTTPS on
 localhost and writes the `manifest.xml` Word's "Upload My Add-in" wants.
 Phase 3, the OnlyOffice plugin (`addin/onlyoffice/`), is done and confirmed
-in OnlyOffice Desktop: `make onlyoffice` builds it into `dist/`, and `make
-onlyoffice-test` runs its editor half in Document Builder -- as does CI, in
-a job of its own, with Document Builder pinned to 9.4.0 by SHA-256. Its
+in OnlyOffice Desktop, and so is Phase 4, Untypeset, in both hosts. `make
+onlyoffice` builds the plugin into `dist/`, and `make onlyoffice-test` runs
+its editor half in Document Builder -- as does CI, in a job of its own,
+with Document Builder pinned to 9.4.0 by SHA-256. Its
 free build watermarks the page header; nothing in the test reads headers,
 and a check that ever renders to PDF must skip that band.
 
@@ -48,7 +49,8 @@ and a check that ever renders to PDF must skip that band.
 
 ## Make
 `make check` is lint plus suite, which is what CI runs. `make test`,
-`make js-test`, `make onlyoffice`, `make onlyoffice-test`, `make lint`, `make macro`, `make oxt`, `make advances`,
+`make js-test`, `make onlyoffice`, `make onlyoffice-test`, `make lint`,
+`make macro`, `make oxt`, `make advances`,
 `make venv`, `make clean`. The Makefile's header says what each is for.
 
 ## Verification — non-negotiable
@@ -181,6 +183,14 @@ deliberate and worth keeping:
   `core/table.js` decides which cell goes where; Word serializes it as
   OOXML and OnlyOffice builds it with builder calls. The OnlyOffice styles
   are `STYLES_FRAGMENT` restated (`job.stylesJob`), not a second set.
+- **Faces besides Times are measured once and committed**
+  (`measure._FACE_ADVANCE`, written by `tools/measure_face.py` from the
+  font file with `measure_font_file`, the converter's own method). Aptos is
+  there, being Word's default and 7–12% wider than Times. Never hand-edit
+  the block; re-measure. The font files are not committed.
+- **A package inserted into Word carries the document's face as its
+  defaults**, or Word resolves the imported styles against OOXML's implicit
+  Times New Roman and writes "Times New Roman, 12" into LxExampleCell.
 - **In the OnlyOffice builder API, `AddText` inherits the previous run's
   formatting.** Write formatted text with fresh runs (`Api.CreateRun`,
   `AddElement`) — the plugin's cells leaked small caps and a character

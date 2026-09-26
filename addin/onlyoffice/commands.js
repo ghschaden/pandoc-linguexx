@@ -64,10 +64,26 @@ export function readSelection() {
     runsOf(paras[k], runs);
     out.paragraphs.push({ inTable: !!paras[k].GetParentTable(), runs: runs });
   }
+  // An example number in the selection -- a bookmark round a bare number,
+  // outside any table -- is reported by its bookmark, to be TAKEN OVER
+  // (the Writer macro's LxTakeNumber): the builder API does not show where
+  // a field begins, but the bookmark round the whole field says which it is.
+  var at = paras.map(function (p) { return p.GetParentTable() ? -1 : p.GetPosInParent(); });
+  out.numbers = [];
+  for (var b = 0; b < out.bookmarks.length; b++) {
+    var br = doc.GetBookmarkRange(out.bookmarks[b]);
+    if (!br || !/^\s*\d+\s*$/.test(br.GetText())) continue;
+    var bp = br.GetParagraph(0);
+    if (!bp || bp.GetParentTable()) continue;
+    var k2 = at.indexOf(bp.GetPosInParent());
+    if (k2 >= 0) out.numbers.push({ bookmark: out.bookmarks[b], shown: br.GetText().trim(), paragraph: k2 });
+  }
   var sec = paras[0].GetSection ? paras[0].GetSection() : doc.GetFinalSection();
   if (sec) out.widthTwips = sec.GetPageWidth() - sec.GetPageMarginLeft() - sec.GetPageMarginRight();
   var def = doc.GetDefaultTextPr();
   out.font = def ? def.GetFontFamily() || "" : "";
+  // half-points, as the builder reports sizes
+  out.sizeHalfPt = def && def.GetFontSize ? def.GetFontSize() || 0 : 0;
   return out;
 }
 
@@ -103,6 +119,10 @@ export function insertExample() {
   var paras = range ? range.GetAllParagraphs() : [];
   if (!paras || !paras.length) return { error: "Select the lines of an example first." };
   var pos = paras[0].GetPosInParent();
+  // A number taken over: the old bookmark goes first, so that at no moment
+  // do two claim its name -- the macro's order.  Its field goes with the
+  // selected paragraphs, below.
+  if (job.takeOver) doc.DeleteBookmark(job.bookmark);
 
   var nRows = job.rows.length, nCols = job.grid.length;
   var t = Api.CreateTable(nRows, nCols);
@@ -247,4 +267,110 @@ export function completeReference() {
   found[0].AddField("REF " + ref.bookmark + " \\h");
   doc.UpdateAllFields();
   return { ok: true };
+}
+
+/**
+ * The example the cursor is in, as data: its rows' cells -- the paragraph
+ * style's name and the runs -- its number's bookmark, and where it sits.
+ * core/untypeset.js reads it (by way of job.untypesetJob).
+ */
+export function readExampleTable() {
+  var doc = Api.GetDocument();
+  var range = doc.GetRangeBySelect();
+  var para = range ? range.GetParagraph(0) : doc.GetCurrentParagraph();
+  var table = para ? para.GetParentTable() : null;
+  if (!table) return { error: "Put the cursor in the example you want back as text." };
+  function runsOf(container, into) {
+    var n = container.GetElementsCount();
+    for (var i = 0; i < n; i++) {
+      var el = container.GetElement(i);
+      if (el.GetClassType() === "run") {
+        var st = el.GetStyle();
+        into.push({
+          text: el.GetText(), bold: !!el.GetBold(), italic: !!el.GetItalic(),
+          smallCaps: !!el.GetSmallCaps(), underline: !!el.GetUnderline(),
+          vertAlign: el.GetVertAlign() || "", style: st ? st.GetName() : "",
+        });
+      } else if (el.GetElementsCount) runsOf(el, into);
+    }
+  }
+  var rows = [];
+  for (var r = 0; r < table.GetRowsCount(); r++) {
+    var row = table.GetRow(r), cells = [];
+    for (var c = 0; c < row.GetCellsCount(); c++) {
+      var content = row.GetCell(c).GetContent();
+      var style = "", runs = [];
+      for (var e = 0; e < content.GetElementsCount(); e++) {
+        var p = content.GetElement(e);
+        if (p.GetClassType() !== "paragraph") continue;
+        if (!style && p.GetStyle()) style = p.GetStyle().GetName();
+        if (runs.length) runs.push({ text: " " });
+        runsOf(p, runs);
+      }
+      cells.push({ style: style, runs: runs });
+    }
+    rows.push(cells);
+  }
+  var pos = table.GetPosInParent();
+  var number = null, names = doc.GetAllBookmarksNames() || [];
+  for (var b = 0; b < names.length && !number; b++) {
+    var br = doc.GetBookmarkRange(names[b]);
+    if (!br || !/^\s*\d+\s*$/.test(br.GetText())) continue;
+    var bp = br.GetParagraph(0), bt = bp ? bp.GetParentTable() : null;
+    if (bt && bt.GetPosInParent() === pos) number = { bookmark: names[b], shown: br.GetText().trim() };
+  }
+  return { rows: rows, number: number, pos: pos };
+}
+
+/**
+ * Replace the example table at Asc.scope.back.pos with its lines, the
+ * number -- the same bookmark's name -- at the head of the first, as the
+ * macro writes it: "(", the field, ")", a tab.  The table goes first, so
+ * the name is never claimed twice.
+ */
+export function writeLines() {
+  var back = Asc.scope.back;
+  var doc = Api.GetDocument();
+  var table = doc.GetElement(back.pos);
+  if (!table || table.GetClassType() !== "table") return { error: "The example has moved; try again." };
+  // Deleting the table would take the bookmark with it; it is removed first
+  // all the same, so the order -- old identity gone, then the new claim -- is
+  // stated rather than left to a side effect (a mutation test showed the
+  // line changes nothing today).
+  if (back.number) doc.DeleteBookmark(back.number.bookmark);
+  table.Delete();
+  for (var i = 0; i < back.lines.length; i++) {
+    var par = Api.CreateParagraph();
+    doc.AddElement(back.pos + i, par);
+    if (i === 0 && back.number) {
+      par.AddText("(");
+      par.AddText("0").GetRange().AddField("SEQ NumEx \\* ARABIC");
+      par.AddText(")");
+      var n = par.GetElementsCount(), first = -1, last = -1;
+      for (var e = 0; e < n; e++) {
+        var t = par.GetElement(e).GetText();
+        if (t === "(" && first < 0) first = e;
+        if (t === ")") last = e;
+      }
+      par.GetElement(first + 1).GetRange().ExpandTo(par.GetElement(last - 1).GetRange())
+        .AddBookmark(back.number.bookmark);
+      var tab = Api.CreateRun(); tab.AddText("\t"); par.AddElement(tab);
+    }
+    var runs = back.lines[i];
+    for (var k = 0; k < runs.length; k++) {
+      var run = Api.CreateRun();
+      run.AddText(runs[k].text);
+      par.AddElement(run);
+      var f = runs[k].fmt || {};
+      var style = f.rStyle ? doc.GetStyle(f.rStyle) : null;
+      if (style) run.SetStyle(style);
+      if (f.bold) run.SetBold(true);
+      if (f.italic) run.SetItalic(true);
+      if (f.smallCaps && !style) run.SetSmallCaps(true);
+      if (f.underline) run.SetUnderline(true);
+      if (f.vertAlign) run.SetVertAlign(f.vertAlign);
+    }
+  }
+  doc.UpdateAllFields();
+  return { ok: true, lines: back.lines.length };
 }

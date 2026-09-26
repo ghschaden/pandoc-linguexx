@@ -23,10 +23,10 @@ const read = (rel) => JSON.parse(readFileSync(
 const FIXTURES = read("../../../tests/fixtures/typed-examples.json");
 const PLANS = read("../../../tests/fixtures/typed-examples.plans.json");
 
-function corePlan(lines, textWidth) {
+function corePlan(lines, textWidth, face = LAYOUT.font_name) {
   const parsed = parseLines(lines);
   const ex = toExample(parsed.items);
-  const [layout, anyJudgment] = prepareDocument([ex], { ...LAYOUT, text_width_cm: textWidth });
+  const [layout, anyJudgment] = prepareDocument([ex], { ...LAYOUT, text_width_cm: textWidth, font_name: face });
   const { plan, warnings } = planTable(ex, layout, { anyJudgment });
   return {
     prepared: {
@@ -51,9 +51,11 @@ test("the plan golden covers every fixture that parses", () => {
 
 for (const key of keys) {
   const [group, name] = key.split("/");
-  for (const [width, want] of Object.entries(PLANS[key])) {
-    test(`plans ${key} at ${width} cm as the converter does`, () => {
-      assert.deepStrictEqual(corePlan(FIXTURES[group][name].lines, Number(width)), want);
+  // keys are "17", "12", "7" -- Times -- or "17 Aptos": a width and a face
+  for (const [variant, want] of Object.entries(PLANS[key])) {
+    const [width, ...face] = variant.split(" ");
+    test(`plans ${key} at ${variant} cm as the converter does`, () => {
+      assert.deepStrictEqual(corePlan(FIXTURES[group][name].lines, Number(width), face.join(" ") || undefined), want);
     });
   }
 }
@@ -101,4 +103,16 @@ test("a selection's number column holds (00)", () => {
   const ex = toExample(parseLines(["Das Kind", "the child"]).items);
   const [lay] = prepareSelection(ex);
   assert.ok(lay.number_cm - lay.judgment_cm >= LAYOUT.number_cm);
+});
+
+test("a face is measured with its own metrics, or said to be unmeasured", async () => {
+  const { advancesFor } = await import("../measure.js");
+  const { ADVANCE, FACE_ADVANCE } = await import("../constants.js");
+  assert.equal(advancesFor("Times New Roman").advances, ADVANCE);
+  assert.equal(advancesFor("Liberation Serif").known, true);
+  assert.equal(advancesFor("Aptos").advances, FACE_ADVANCE.aptos);
+  assert.deepEqual([advancesFor("Arial").advances === ADVANCE, advancesFor("Arial").known], [true, false]);
+  // Aptos is wider than Times, which is why it is measured at all
+  const lines = ["Ich habe geschlafen", "I have slept"];
+  assert.ok(corePlan(lines, 17, "Aptos").columns.every((c, i) => c >= corePlan(lines, 17).columns[i]));
 });

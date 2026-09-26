@@ -113,3 +113,12 @@ test("the plugin's linguexx.js gives the modules' answers", { skip: !existsSync(
   const r = read([{ inTable: false, runs: [run("*Das Kind")] }, { inTable: false, runs: [run("the "), run("child", { smallCaps: true })] }]);
   assert.deepEqual(JSON.parse(JSON.stringify(L.prepareJob(r, 7))), prepareJob(r, 7));
 });
+
+test("measured for the document's face: Aptos by its own metrics, and without a note", () => {
+  const r = (font) => read([{ inTable: false, runs: [run("Ich habe geschlafen")] }, { inTable: false, runs: [run("I have slept")] }],
+    { font, sizeHalfPt: 24 });
+  const aptos = prepareJob(r("Aptos"));
+  const times = prepareJob(r("Times New Roman"));
+  assert.deepEqual(aptos.notes, []);
+  assert.ok(aptos.job.grid.slice(0, -1).reduce((a, b) => a + b) > times.job.grid.slice(0, -1).reduce((a, b) => a + b));
+});

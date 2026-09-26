@@ -20,7 +20,7 @@
  */
 
 import { LAYOUT } from "./constants.js";
-import { Grid, emCm, pySum, runsWidthCm, textWidthCm } from "./measure.js";
+import { Grid, emCm, layoutAdvances, pySum, runsWidthCm, textWidthCm } from "./measure.js";
 import { strip, tagIndex } from "./parse.js";
 
 /**
@@ -91,25 +91,26 @@ export function prepareDocument(examples, layout = LAYOUT, options = {}) {
   const runs = options.runs || ((s) => runsOf(s, options.formats));
   const wrap = options.wrap || ((n) => `(${n})`);
   const em = emCm(layout);
+  const adv = layoutAdvances(layout);
 
   const marks = examples.flatMap((ex) => bodiesOf(ex).map(([, b]) => b.judgment)).filter(Boolean);
   const anyJudgment = marks.length > 0;
   let judgment = 0;
   if (anyJudgment) {
     let widest = -Infinity;
-    for (const m of marks) widest = Math.max(widest, runsWidthCm(runs(m), em, layout.sc_ratio));
+    for (const m of marks) widest = Math.max(widest, runsWidthCm(runs(m), em, layout.sc_ratio, adv));
     judgment = layout.judgment_gap_cm + widest;
   }
 
   let numbers = examples.map((ex) => ex.customLabel || wrap(String(ex.index + 1)));
   if (numbers.length === 0) numbers = [wrap("1")];
   let number = -Infinity;
-  for (const n of numbers) number = Math.max(number, runsWidthCm(runs(n), em, layout.sc_ratio));
+  for (const n of numbers) number = Math.max(number, runsWidthCm(runs(n), em, layout.sc_ratio, adv));
 
   let letters = examples.flatMap((ex) => ex.items.map((it) => strip(it.marker)));
   if (letters.length === 0) letters = ["a."];
   let letter = -Infinity;
-  for (const m of letters) letter = Math.max(letter, textWidthCm(m, em));
+  for (const m of letters) letter = Math.max(letter, textWidthCm(m, em, adv));
 
   return [{
     ...layout,
@@ -131,7 +132,8 @@ export function prepareDocument(examples, layout = LAYOUT, options = {}) {
 export function prepareSelection(example, layout = LAYOUT, options = {}) {
   const runs = options.runs || ((s) => runsOf(s, options.formats));
   const em = emCm(layout);
-  const w = (s) => runsWidthCm(runs(s), em, layout.sc_ratio);
+  const adv = layoutAdvances(layout);
+  const w = (s) => runsWidthCm(runs(s), em, layout.sc_ratio, adv);
 
   let judgment = w("*");
   for (const [, b] of bodiesOf(example)) if (b.judgment) judgment = Math.max(judgment, w(b.judgment));
@@ -199,10 +201,11 @@ export function leadWidths(layout, hasMarker, hasJudgment) {
 /** BaseEmitter._word_widths, for one body. */
 export function wordWidths(body, layout, runs) {
   const em = emCm(layout);
+  const adv = layoutAdvances(layout);
   const widest = new Array(widthOfBody(body)).fill(0);
   for (const tier of body.tiers) {
     tier.forEach((cell, i) => {
-      widest[i] = Math.max(widest[i], runsWidthCm(runs(cell), em, layout.sc_ratio));
+      widest[i] = Math.max(widest[i], runsWidthCm(runs(cell), em, layout.sc_ratio, adv));
     });
   }
   return widest.map((w) =>

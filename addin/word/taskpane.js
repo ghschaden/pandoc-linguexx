@@ -25,12 +25,13 @@
 /* global Office, Word */
 
 import { LAYOUT } from "../core/constants.js";
-import { isTimesMetric } from "../core/measure.js";
+import { advancesFor } from "../core/measure.js";
 import { parseLines, strip } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { audit, freshBookmark, isExampleNumber, numberAt, refTarget, staleMessage } from "./numbering.js";
 import { AFTER_EXAMPLE, exampleTable, flatPackage, sequenceRef } from "./ooxml.js";
 import { readSelection } from "./selection.js";
+import { untypesetPackage } from "./untypeset.js";
 import { STYLE_IDS } from "./styles.js";
 
 /** Set after Word reports an insertion error: see the module comment. */
@@ -100,6 +101,9 @@ async function renumber(ctx) {
   let fields = await allFields(ctx);
   let { numbers, stale } = audit(fields);
   if (!stale.length) return "";
+  // Word on the web accepts updateResult and does nothing (S6 fact 4):
+  // asking, and reading every field back afterwards, only costs round trips.
+  if (Office.context.platform === Office.PlatformType.OfficeOnline) return staleMessage(stale);
   try {
     for (const f of fields) {
       const target = refTarget(f.code);
@@ -119,6 +123,8 @@ async function typeset() {
   note([]);
   let name = "";
   let inserting = false;   // only an error from the insertion itself breaks the page
+  let needAudit = true;
+  let wanted = "";
   const notes = [];
   try {
     await Word.run(async (ctx) => {
@@ -126,9 +132,16 @@ async function typeset() {
       const ooxml = sel.getOoxml();
       const ahead = ctx.document.body.getRange("Start").expandTo(sel.getRange("Start")).fields;
       ahead.load("items/code");
+      const every = ctx.document.body.fields;
+      every.load("items/code");
       const marks = ctx.document.body.getRange("Whole").getBookmarks(true, true);
       const styles = ctx.document.getStyles();
       styles.load("items/nameLocal");
+      // The face the lines are typed in is the face the example is set in
+      // and measured for -- Word reports it resolved ("Aptos", not a theme
+      // slot).
+      const typed = sel.paragraphs.getFirst().font;
+      typed.load("name,size");
       await ctx.sync();
 
       const read = readSelection(ooxml.value);
@@ -141,26 +154,38 @@ async function typeset() {
       if (read.textWidthCm === null) {
         notes.push(`Word did not say how wide the text block is; the example is laid out for ${width} cm.`);
       }
-      const face = read.fonts[0];
-      if (face && !isTimesMetric(face)) {
-        notes.push(`The columns are estimated for Times New Roman, and this document's body face is ` +
-          `${face.startsWith("theme:") ? "a theme font" : face}. Words may wrap in their columns; ` +
-          `setting the LxExampleCell style to Times New Roman makes the estimate right.`);
+      const face = typed.name || LAYOUT.font_name;
+      wanted = face;
+      const size = typed.size || LAYOUT.font_pt;
+      if (!advancesFor(face).known) {
+        notes.push(`The columns are estimated from Times New Roman's metrics, and this text is in ` +
+          `${face}, which has not been measured. Words may wrap in their columns.`);
       }
-      const [layout, anyJudgment] = prepareSelection(ex, { ...LAYOUT, text_width_cm: width },
-        { formats: read.formats });
+      const [layout, anyJudgment] = prepareSelection(ex,
+        { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: read.formats });
       const { plan, warnings } = planTable(ex, layout, { anyJudgment, formats: read.formats });
       notes.push(...warnings);
 
-      name = freshBookmark(marks.value);
+      // A number the selection leads with is taken over, not remade: an
+      // example untypeset and typeset again keeps the field its references
+      // point at.  Its old bookmark goes with the selection it is in.
+      name = read.number ? read.number.bookmark : freshBookmark(marks.value);
       const id = 100000 + Math.floor(Math.random() * 800000);
       const n = numberAt(ahead.items.map((f) => f.code));
+      // Nothing can be stale when no example follows this one -- inserting
+      // at the end, the common case -- and a taken-over number kept its
+      // value: then the audit, every field and every bookmark read back over
+      // a slow connection, is skipped.
+      const seq = (fs) => fs.filter((f) => isExampleNumber(f.code)).length;
+      const later = seq(every.items) - seq(ahead.items) - (read.number ? 1 : 0);
+      needAudit = later > 0 || (read.number && String(read.number.shown).trim() !== String(n));
       const table = exampleTable(ex, plan, { number: { id, name, cached: String(n) }, formats: read.formats });
       const have = new Set(styles.items.map((s) => s.nameLocal));
       const withStyles = STYLE_IDS.some((s) => !have.has(s));
 
       inserting = true;
-      sel.insertOoxml(flatPackage(table + AFTER_EXAMPLE, { withStyles }), "Replace");
+      sel.insertOoxml(flatPackage(table + AFTER_EXAMPLE,
+        { withStyles, defaults: { face, halfPoints: Math.round(size * 2) } }), "Replace");
       await ctx.sync();
     });
   } catch (e) {
@@ -180,19 +205,80 @@ async function typeset() {
       RELOAD + ` (Word said: ${e.message})`, "error");
   }
 
+  // Check, don't trust: the face the example came out in.  A version of this
+  // add-in inserted examples Word set in Times New Roman in an Aptos
+  // document, twice, for two different reasons; this says so if it happens.
   try {
     await Word.run(async (ctx) => {
-      const left = await renumber(ctx);
-      if (left) notes.push(left);
+      const mark = ctx.document.getBookmarkRangeOrNullObject(name);
+      mark.load("isNullObject");
+      await ctx.sync();
+      if (mark.isNullObject) return;
+      const cell = mark.parentTableCellOrNullObject;
+      cell.load("isNullObject");
+      await ctx.sync();
+      if (cell.isNullObject) return;
+      const row = cell.parentRow;
+      row.load("cellCount");
+      await ctx.sync();
+      const text = row.cells;
+      text.load("items/body/font/name");
+      await ctx.sync();
+      const faces = [...new Set(text.items.map((c) => c.body.font.name).filter(Boolean))];
+      if (faces.length && !faces.every((f) => f === wanted)) {
+        notes.push(`Word set this example in ${faces.join(", ")}, not in ${wanted} as asked.`);
+      }
     });
-  } catch (e) {
-    notes.push(`The example is in, but its numbering could not be checked: ${e.message}`);
+  } catch (e) { /* the check is a courtesy; the example is in */ }
+
+  if (needAudit) {
+    try {
+      await Word.run(async (ctx) => {
+        const left = await renumber(ctx);
+        if (left) notes.push(left);
+      });
+    } catch (e) {
+      notes.push(`The example is in, but its numbering could not be checked: ${e.message}`);
+    }
   }
   say("Done.", "ok");
   note(notes);
 }
 
 class Refusal extends Error {}
+
+/**
+ * The example the cursor is in, back as the lines it was typed as, its
+ * number -- the same field -- at the head of the first (plan-addins.md,
+ * Phase 4; the Writer macro's Untypeset).
+ */
+async function untypeset() {
+  if (broken) return say(RELOAD, "error");
+  note([]);
+  let inserting = false;
+  try {
+    await Word.run(async (ctx) => {
+      const table = ctx.document.getSelection().parentTableOrNullObject;
+      table.load("isNullObject");
+      await ctx.sync();
+      if (table.isNullObject) throw new Refusal("Put the cursor in the example you want back as text.");
+      const range = table.getRange("Whole");
+      const ooxml = range.getOoxml();
+      await ctx.sync();
+      const u = untypesetPackage(ooxml.value, 100000 + Math.floor(Math.random() * 800000));
+      if (u.refusal) throw new Refusal(u.refusal);
+      inserting = true;
+      range.insertOoxml(u.pkg, "Replace");
+      await ctx.sync();
+    });
+  } catch (e) {
+    if (e instanceof Refusal) return say(e.message, "error");
+    if (!inserting) return say(`Could not read the example: ${e.message}`, "error");
+    broken = true;
+    return say(RELOAD + ` (Word said: ${e.message})`, "error");
+  }
+  say("Back as text. Edit it, select the lines, and typeset them again: the number stays the same.", "ok");
+}
 
 /** The examples in the document, for the reference list. */
 async function listExamples() {
@@ -260,6 +346,7 @@ Office.onReady(() => {
   }
   $("typeset").onclick = () => busy("Typesetting…", typeset);
   $("refs").onclick = () => busy("Reading the document's examples…", listExamples);
+  $("untypeset").onclick = () => busy("Untypesetting…", untypeset);
   say("Select the lines of an example, then Typeset.");
 });
 

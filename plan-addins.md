@@ -573,7 +573,7 @@ in inline at the cursor through the pasted placeholder — the one path the
 headless test cannot take — and read (1) and (2); the list shows both; the
 font note fired correctly (Arial default).
 
-### Phase 4 — Untypeset, in both (~3 days)
+### Phase 4 — Untypeset, in both — DONE, confirmed in Word on the web and OnlyOffice Desktop (2026-09-26)
 
 Read a built table back into lines, by style name, as the macro does. The
 macro's lessons carry over as tests from day one: the band mark, the
@@ -581,6 +581,82 @@ number that has to survive (`numex_ids`), and the character-style leak
 fixed in `79e155f`. That bug looked right and was wrong. The
 `MACRO_STYLES_NOT_SHARED` discipline carries over too: a style the add-in
 cannot identify is a broken round trip.
+
+**What was built.** `core/untypeset.js`: the macro's `LxReadTable`, ported
+(trees aside), reading any host's table as rows of `{style, text}` — style
+by name, text tagged. Word: `readExampleTable` and `untypesetPackage`
+(`word/untypeset.js`), sharing one run reader with the selection reader;
+OnlyOffice: `readExampleTable`/`writeLines` in the editor and
+`untypesetJob` beside them. Out, the lines come back with the SAME number
+field — bookmark name, shown value — then a tab, as `LxWriteLines` writes
+it. Back in, **a number the selection leads with is taken over**, by the
+macro's `LxTakeNumber` rules: its bookmark kept, its brackets dropped; two
+numbers, or one part-way through, refused. Before, both hosts refused a
+selection holding a number.
+
+**Tested against the macro's own expectation.** All eight
+`UNTYPESET_CASES` come back exactly as typed; every fixture, built and read
+back, is the same example — at 17 and 7 cm, and built by the converter's
+rule too, which is the only case where the text's first column is found
+from the translation (a mutation there survived until that case was
+added). In Word, typed → table → untypeset → read as a selection gives the
+same example, the same number identity and the same formats, for every
+fixture. In Document Builder, the example a reference points at goes out
+and back in with its number taken over, its bookmark there once, its table
+reading exactly as before — and the reference still reads 2.
+
+**Refused on purpose:** a table holding several examples, which is what
+Word makes of a converted document's consecutive examples (S6 fact 3).
+Untypesetting "the table" there would take them all out as one.
+
+**Live:** in OnlyOffice Desktop and in Word on the web, an example with a
+reference to it, untypeset, edited and typeset again, kept its number and
+the reference still resolved.
+
+**Word on the web is slow**, and the add-in was part of why: after every
+insertion it read every field and every field's bookmarks, and on the web
+asked Word to update fields — which it ignores — and read them all again.
+Now the audit is skipped when nothing can be stale (no example after the
+insertion point, and a taken-over number kept its value — inserting at
+the end, or editing in place), and on the web updateResult is not asked
+for. Not yet measured live.
+
+### The face an example is set in (2026-09-26)
+
+**Found live:** in an Aptos document Word set the add-in's examples in
+Times New Roman, and the Styles pane said why: `LxExampleCell` read
+"Times New Roman, 12". The inserted package carried the Lx styles with no
+document defaults, OOXML's implicit default face is Times New Roman, and
+Word wrote the resolved face into the style on import.
+
+- **The package now carries the document's own face and size as its
+  defaults** (`ooxml.docDefaults`), whether or not the Lx styles travel,
+  taken from the typeset lines themselves — Word reports the face resolved
+  ("Aptos", not a theme slot). In a new document the example comes out in
+  Aptos, the prose's face, as the converter's examples do in theirs
+  (confirmed in Word on the web).
+- **Aptos is measured.** It is 7–12% wider than Times, so columns
+  estimated for Times would wrap it. Its advances were measured from
+  Microsoft's own Aptos.ttf (Download Center 106087, fonts 4.40, Aptos 2.01)
+  by `measure.measure_font_file()` — the converter's own method for an
+  installed face — and committed as `measure._FACE_ADVANCE`, so it is
+  estimated from its own metrics where it is not installed, CI included.
+  `tools/measure_face.py` writes and checks that block; the font itself is
+  not committed. The converter's `advances_for("Aptos")`, the add-in core
+  (`advancesFor`, threaded through every width as Python's `Layout.advances`
+  is) and both hosts use it; the oracle adds an Aptos layout for every
+  fixture and the core matches it exactly (leaving the face out of the word
+  widths fails 27 tests). OnlyOffice measures for the document's default
+  face and size too.
+- **A face not measured** is estimated from Times's metrics, and the pane
+  says so.
+- **Not done:** repairing a document an earlier add-in version spoiled
+  (its `LxExampleCell` already fixed at Times). Setting the style's font
+  through Office.js had no effect on the web, and the attempt was removed;
+  the manual fix is Styles ▸ LxExampleCell ▸ Modify ▸ the document's face.
+  Only test documents are affected.
+- The add-in reads back the face Word set the example in, and says so if
+  it is not the one asked for.
 
 ### Phase 5 — say so (½ day)
 

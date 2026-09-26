@@ -19,7 +19,7 @@
  * does this.
  */
 
-import { ADVANCE, FALLBACK_OTHER, FALLBACK_UPPER, GRID_TOL, TIMES_METRIC } from "./constants.js";
+import { ADVANCE, FACE_ADVANCE, FALLBACK_OTHER, FALLBACK_UPPER, GRID_TOL, TIMES_METRIC } from "./constants.js";
 
 /**
  * Python's builtin sum() over floats, as CPython 3.12+ computes it: Neumaier's
@@ -84,6 +84,25 @@ export function runsWidthCm(runs, emCm, scRatio, advances = ADVANCE) {
 export function isTimesMetric(name) {
   const key = String(name).toLowerCase().replace(/ /g, "");
   return TIMES_METRIC.some((f) => f.replace(/ /g, "") === key);
+}
+
+/**
+ * The advances to estimate *name* with -- measure.advances_for, less the
+ * reading of font files a browser cannot do: Times metrics for a
+ * Times-metric face, a measured face's own table (Aptos), and otherwise
+ * Times metrics with {known: false}, so the caller can say the columns are
+ * estimated for another face.
+ */
+export function advancesFor(name) {
+  const key = String(name || "").toLowerCase().replace(/ /g, "");
+  if (!key || isTimesMetric(name)) return { advances: ADVANCE, known: true };
+  if (FACE_ADVANCE[key]) return { advances: FACE_ADVANCE[key], known: true };
+  return { advances: ADVANCE, known: false };
+}
+
+/** The advances a layout's face is estimated with (Layout.advances). */
+export function layoutAdvances(layout) {
+  return advancesFor(layout.font_name).advances;
 }
 
 /** Layout.em_cm */
