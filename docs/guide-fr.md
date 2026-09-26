@@ -686,15 +686,22 @@ Mes compléments ▸ *Charger mon complément*, et choisissez
 `addin/word/manifest.xml`. Un bouton **LinguExx ▸ Examples** apparaît dans
 l'onglet Accueil. Le serveur doit tourner tant qu'on se sert du complément.
 
-**OnlyOffice.** `make onlyoffice` construit l'extension dans
-`dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/`. Copiez ce dossier
-dans le dossier des extensions utilisateur d'OnlyOffice Desktop et
-redémarrez ; **LinguExx** apparaît dans l'onglet Modules complémentaires.
-Pour la version Flatpak, ce dossier est
-`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`
-— le seul endroit où cela a été essayé. `dist/linguexx-onlyoffice.plugin`
-est le même dossier compressé, pour le gestionnaire d'extensions
-d'OnlyOffice.
+**OnlyOffice.** `make onlyoffice` construit l'extension sous la forme
+`dist/linguexx-onlyoffice.plugin`. Dans OnlyOffice Desktop, ouvrez le
+gestionnaire de modules (*Plugin Manager*, dans l'onglet des modules
+complémentaires) et installez ce fichier ; **LinguExx** apparaît dans l'onglet Modules complémentaires.
+Installer une version plus récente de la même façon remplace l'ancienne
+(essayé avec OnlyOffice Desktop 9.4, en Flatpak).
+
+Le gestionnaire a besoin du réseau : il charge d'abord la boutique en
+ligne d'OnlyOffice, et sans réseau il reste indéfiniment sur son
+indicateur de chargement — constaté sur un Flatpak privé de réseau par une
+surcharge (`flatpak override --user --share=network
+org.onlyoffice.desktopeditors` le lui rend). Hors ligne, copiez plutôt le
+dossier `dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/` dans le
+dossier des extensions utilisateur d'OnlyOffice Desktop et redémarrez ;
+pour la version Flatpak, c'est
+`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`.
 
 ---
 

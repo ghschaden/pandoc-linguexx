@@ -497,13 +497,20 @@ Examples** button appears on the Home tab. The server has to run while the
 add-in is used; `--manifest-only --base URL` writes a manifest for serving
 `addin/` from anywhere else.
 
-**OnlyOffice:** `make onlyoffice` builds the plugin into
-`dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/`. Copy that folder
-into OnlyOffice Desktop's user plugin folder and restart; **LinguExx**
-appears on the Plugins tab. For the Flatpak build that folder is
-`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`
-— the one place this has been tried. `dist/linguexx-onlyoffice.plugin` is
-the same folder zipped, for OnlyOffice's plugin manager.
+**OnlyOffice:** `make onlyoffice` builds the plugin as
+`dist/linguexx-onlyoffice.plugin`. In OnlyOffice Desktop, open *Plugins ▸
+Plugin Manager* and install that file; **LinguExx** appears on the Plugins
+tab. Installing a newer build the same way replaces the old one (tried
+with OnlyOffice Desktop 9.4, the Flatpak).
+
+The Plugin Manager needs network: it loads OnlyOffice's online store
+before anything else, and without network it stays on its loading
+spinner for good — measured, on a Flatpak whose network had been taken
+away by an override (`flatpak override --user --share=network
+org.onlyoffice.desktopeditors` gives it back). Offline, copy the folder
+`dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/` into OnlyOffice
+Desktop's user plugin folder instead and restart; for the Flatpak that is
+`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`.
 
 ## Checking the renumbering
 
