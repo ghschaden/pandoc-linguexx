@@ -79,10 +79,53 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # The OnlyOffice bundle is built first: a test holds it to the modules.
       - name: node --test
         run: |
           node --version
-          cd addin && node --test core/test/ word/test/
+          python3 tools/build_onlyoffice.py
+          cd addin && node --test core/test/ word/test/ onlyoffice/test/
+
+  # The OnlyOffice plugin's editor half, in Document Builder: the builder API
+  # a plugin's callCommand runs in the editor, headless.  Every fixture is
+  # typeset by the plugin's own shipped code and held to the Word layer's
+  # markup (tools/run_onlyoffice_test.mjs).
+  #
+  # Pinned, by version and by checksum: "latest" would change what CI tests
+  # under it, and a corrupted or replaced download must fail here rather
+  # than run.  The free build watermarks the page header ("Unregistered
+  # Version"), which nothing in the test reads; the documents it makes are
+  # thrown away.  Cached, being 68 MB.
+  onlyoffice:
+    runs-on: ubuntu-latest
+    env:
+      DOCBUILDER_VER: "9.4.0"
+      DOCBUILDER_SHA256: "15c02892fea158b76ad343f4d580763c30cbd151a98f0595478d7b6f8599437a"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Cache Document Builder
+        id: docbuilder
+        uses: actions/cache@v4
+        with:
+          path: ~/documentbuilder
+          key: documentbuilder-${{ env.DOCBUILDER_VER }}-${{ env.DOCBUILDER_SHA256 }}
+      - name: Download Document Builder
+        if: steps.docbuilder.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL --retry 3 -o /tmp/docbuilder.tar.xz \
+            "https://github.com/ONLYOFFICE/DocumentBuilder/releases/download/v${DOCBUILDER_VER}/onlyoffice-documentbuilder-linux-x86_64.tar.xz"
+          echo "${DOCBUILDER_SHA256}  /tmp/docbuilder.tar.xz" | sha256sum -c -
+          mkdir -p ~/documentbuilder
+          tar xJf /tmp/docbuilder.tar.xz -C ~/documentbuilder
+      - name: Run the plugin in Document Builder
+        env:
+          DOCBUILDER: /home/runner/documentbuilder/opt/onlyoffice/documentbuilder/docbuilder
+        run: |
+          python3 tools/build_onlyoffice.py
+          node tools/run_onlyoffice_test.mjs "$RUNNER_TEMP/onlyoffice"
 
   # The Writer macro, driven inside a real LibreOffice: the .bas that ships
   # is installed into a throwaway profile and invoked through the script

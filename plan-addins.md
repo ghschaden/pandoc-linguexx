@@ -509,11 +509,69 @@ Still to test: Word desktop (the `updateResult()` branch), the previews,
 and a document whose body face is Times — the font note fired in both
 live documents, which use a theme face.
 
-### Phase 3 — OnlyOffice MVP (~4 days, only if the S7 gate passed)
+### Phase 3 — OnlyOffice MVP — DONE, confirmed in OnlyOffice Desktop 9.4.0 (2026-09-26)
 
 The same two commands through the builder API. Tested with Document
 Builder in CI if S9 passed, otherwise by a script run by hand, like
 `run_macro_test.py` before it had a CI job.
+
+**What was built.** `addin/onlyoffice/`: `job.js` (pure: the editor's
+report of a selection → tagged lines → the core's parse and plan → a
+*job*, the example as plain data, styles included), `commands.js` (what
+runs inside the editor through `callCommand`: self-contained functions,
+input only through `Asc.scope`), the panel (`index.html`, `ui.js`,
+`config.json` modelled on the bundled Typograf plugin). `make onlyoffice`
+(`tools/build_onlyoffice.py`) joins the ES modules into one classic
+script, `linguexx.js` — a plugin is loaded from local files, where module
+loading is not to be relied on — and writes `dist/onlyoffice/{GUID}/` and
+a `.plugin`. A node test holds the bundle to the modules.
+
+**One row logic for both hosts.** The rows moved from `word/ooxml.js` into
+`core/table.js` (no markup: which cell spans what, its width, its style,
+whether it holds the number or text); `ooxml.js` now only serializes them,
+and the 111-table comparison with the converter proved the move changed
+nothing. The OnlyOffice layer builds the same rows. **The styles come from
+one source too**: `job.stylesJob()` restates `STYLES_FRAGMENT` — the OOXML
+the converter injects — as builder properties.
+
+**S9, answered by use.** `make onlyoffice-test`
+(`tools/run_onlyoffice_test.mjs`) runs the plugin's own editor code — the
+shipped `linguexx.js` — in Document Builder: every fixture typed as
+paragraphs, selected, and typeset into one document (37 examples and the
+refusal refused), each table held to the Word layer's markup for the same
+selection (grid, spans, widths to a twip, styles by name, text), numbers
+1..37, whole-field bookmarks, fixed layout, no insets, no borders, and every
+`Lx` style exactly as the converter defines it. A scenario adds what the
+fixtures cannot reach: an example typed directly above another's table
+(it must renumber at once and the tables must not touch), a reference
+completed from a pasted placeholder, and formatted text compared exactly.
+In CI as a job of its own (decided 2026-09-26): Document Builder pinned to
+9.4.0 by version and SHA-256 and cached. The free build's watermark is a
+page header ("Unregistered Version") that nothing in the test reads, and
+the documents are thrown away; the risks that remained were the download's
+— an unpinned "latest", a changed file, missing runner libraries — which
+the pin and the checksum answer, and the first CI run settles the last.
+
+**Mutation-tested: 13 breaks of `commands.js`, all caught** — after the
+first run let three through (no renumbering, no paragraph after the table,
+a format not applied), each a scenario that was missing. And a real bug:
+
+- **The builder's `AddText` makes a run that INHERITS the previous run's
+  formatting.** A plain ".3" after small-caps "pst" came out small caps,
+  and a subscript after an `LxLeipzig` run took the style — the Writer
+  macro's style leak (79e155f) in another API. Cells are now written with
+  fresh runs (`Api.CreateRun` + `AddElement`), and the scenario compares
+  every word's format exactly, plain words included; with the old code it
+  fails on precisely those words. The test's own setup typed through
+  `AddText` at first and so manufactured a leak of its own.
+
+**Live, in OnlyOffice Desktop 9.4.0 (Flatpak), installed by copying the
+built folder into the user's `sdkjs-plugins/`:** the panel opens from the
+Plugins tab; two examples typeset, the one typed above numbered (1) and
+the other renumbered to (2) without anyone updating fields; references go
+in inline at the cursor through the pasted placeholder — the one path the
+headless test cannot take — and read (1) and (2); the list shows both; the
+font note fired correctly (Arial default).
 
 ### Phase 4 — Untypeset, in both (~3 days)
 

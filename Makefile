@@ -3,7 +3,9 @@
 #   make test      the suite (pytest); fails if a required tool is missing
 #   make lint      ruff over src/, tests/ and tools/
 #   make check     lint and test, which is what CI runs
-#   make js-test   the add-in core's suite (node --test); needs Node >= 18
+#   make js-test   the add-ins' suite (node --test); needs Node >= 18
+#   make onlyoffice       build the OnlyOffice plugin into dist/
+#   make onlyoffice-test  run its editor half in Document Builder
 #   make macro     rewrite the macro's and the add-in core's constants
 #   make oxt       package the Writer macro as a LibreOffice extension
 #   make advances  check the width table against the font it describes
@@ -19,7 +21,7 @@
 
 PYTHON ?= python3
 
-.PHONY: all check test js-test lint macro oxt advances schemas venv clean
+.PHONY: all check test js-test onlyoffice onlyoffice-test lint macro oxt advances schemas venv clean
 
 all: check
 
@@ -46,13 +48,28 @@ lint:
 # converter's plan_table() through the goldens in tests/fixtures/.  Node is
 # needed here and nowhere else: `make test` stays Python-only, and CI runs
 # this as a job of its own.  No npm install -- the core has no dependencies.
-js-test:
+js-test: onlyoffice
 	@if command -v node >/dev/null 2>&1; then \
-	  cd addin && node --test core/test/ word/test/; \
+	  cd addin && node --test core/test/ word/test/ onlyoffice/test/; \
 	else \
 	  echo "node is not installed; the add-in core's suite needs Node >= 18"; \
 	  exit 1; \
 	fi
+
+# The OnlyOffice plugin: the add-in modules joined into one classic script
+# (a plugin is loaded from local files, where ES modules are not to be relied
+# on), with config.json, the panel and icons, in dist/ -- and as a .plugin
+# file for OnlyOffice's plugin manager.
+onlyoffice:
+	@$(PYTHON) tools/build_onlyoffice.py
+
+# The plugin's editor half, headless: every fixture inserted by the plugin's
+# own commands in Document Builder and held to the Word layer's markup, plus
+# a renumbering scenario.  Needs Document Builder (plan-addins.md, S9); CI
+# runs it in a job of its own, pinned to 9.4.0 by checksum.  The free build
+# watermarks the page header, which nothing in the test reads.
+onlyoffice-test: onlyoffice
+	@node tools/run_onlyoffice_test.mjs
 
 # The macro is Basic and the add-in core JavaScript; neither can import
 # anything, so the style names and layout lengths exist three times.  This

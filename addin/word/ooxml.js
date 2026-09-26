@@ -21,8 +21,8 @@
  */
 
 import { NAMES } from "../core/constants.js";
-import { pySum } from "../core/measure.js";
 import { tagIndex } from "../core/parse.js";
+import { tableRows } from "../core/table.js";
 import { STYLES_FRAGMENT } from "./styles.js";
 
 const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -31,12 +31,6 @@ const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFDOC = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 
 const CELL_PARA = NAMES.CELL_PARA;
-const TRANSLATION_PARA = NAMES.TRANS_PARA;
-const JUDGMENT_PARA = NAMES.JUDG_PARA;
-const BAND_PARA = NAMES.BAND_PARA;
-const ANNOT_PARA = NAMES.ANNOT_PARA;
-const SPACE_ABOVE_PARA = NAMES.SPACE_ABOVE;
-const SPACE_BELOW_PARA = NAMES.SPACE_BELOW;
 
 /** twentieths of a point per centimetre, which is what OOXML measures in */
 export const DXA = 566.93;
@@ -156,13 +150,10 @@ export const TABLE_PR =
   '<w:bottom w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/>' +
   "</w:tblCellMar>";
 
-// Every sum() in emit_docx is Python's builtin, compensated since 3.12
-// (see core/measure.js); a last-place difference can round to another twip.
-const sum = pySum;
-
 /**
  * One example as a w:tbl -- DocxEmitter._table.  *plan* is core/plan.js's
- * planTable().plan for *ex*.
+ * planTable().plan for *ex*; which cell goes where is core/table.js's, and
+ * this only writes it down.
  *
  * opts.number: {id, name, cached} for the SEQ field and its bookmark.
  * opts.formats: the host's formats the cells' tag marks stand for.
@@ -172,90 +163,20 @@ export function exampleTable(ex, plan, opts = {}) {
   const formats = opts.formats || [];
   const left = opts.brackets?.left ?? "(";
   const right = opts.brackets?.right ?? ")";
-  const p = plan;
-  const widths = p.widths;
-  const gridCols = widths.map((w) => `<w:gridCol w:w="${dxa(w)}"/>`).join("");
-  const R = (s) => runs(s, formats);
-
   const number = () =>
     (left ? run(left) : "") + sequenceField(opts.number || { id: 1, name: "NumEx0", cached: "1" }) +
     (right ? run(right) : "");
-
-  const ncols = p.columns.length + p.filler;
-  const fillerWidth = () => (p.filler ? widths[p.lead.length + p.columns.length] : 0);
-
-  function bodyRows(marker, body, first, k) {
-    const rows = [];
-    let headUsed = false;
-
-    const leadCells = (active) => {
-      let out = cell(p.lead[0], active && first ? number() : "");
-      let i = 1;
-      if (p.hasMarker) {
-        out += cell(p.lead[i], active ? R(marker) : "");
-        i += 1;
-      }
-      if (p.hasJudgment) {
-        out += cell(p.lead[i], active && body.judgment ? R(body.judgment) : "", 1, JUDGMENT_PARA);
-      }
-      return out;
-    };
-    const annotCell = (active) => {
-      if (!p.hasAnnot) return "";
-      return cell(widths[widths.length - 1], active && body.annot ? R(body.annot) : "", 1, ANNOT_PARA);
-    };
-    const bodySpan = (content, style = CELL_PARA) =>
-      cell(sum(p.columns) + fillerWidth(), content, ncols, style);
-
-    if (body.tiers.length) {
-      p.grid.bandsOf(k).forEach((band, b) => {
-        body.tiers.forEach((tier, tr) => {
-          const style = b && !tr ? BAND_PARA : CELL_PARA;
-          rows.push("<w:tr>" + leadCells(!headUsed) + bandCells(tier, band, k, style) +
-                    annotCell(!headUsed) + "</w:tr>");
-          headUsed = true;
-        });
-      });
-    } else {
-      rows.push("<w:tr>" + leadCells(true) + bodySpan(R(body.text)) + annotCell(true) + "</w:tr>");
-      headUsed = true;
-    }
-
-    const trailer = [body.translation, body.source].filter(Boolean).join(" ");
-    if (trailer) {
-      rows.push("<w:tr>" + leadCells(false) + bodySpan(R(trailer), TRANSLATION_PARA) +
-                annotCell(false) + "</w:tr>");
-    }
-    return rows;
-  }
-
-  // One tier's cells for one band, padded to the grid by SPAN; each cell as
-  // wide as the grid columns it covers (emit_docx._band_cells).
-  function bandCells(cells, [start, stop], k, style) {
-    let out = "";
-    let covered = 0;
-    for (let j = start; j < stop; j++) {
-      const span = p.grid.span(k, j);
-      const content = j < cells.length ? R(cells[j]) : "";
-      out += cell(sum(p.columns.slice(covered, covered + span)), content, span, style);
-      covered += span;
-    }
-    const remaining = p.columns.length + p.filler - covered;
-    if (remaining > 0) {
-      out += cell(sum(p.columns.slice(covered)) + fillerWidth(), "", remaining, style);
-    }
-    return out;
-  }
-
-  let rows = [];
-  p.bodies.forEach(([marker, body], k) => {
-    rows = rows.concat(bodyRows(marker, body, k === 0, k));
-  });
-  const spacer = (style) => "<w:tr>" + cell(sum(widths), "", widths.length, style) + "</w:tr>";
-  rows = [spacer(SPACE_ABOVE_PARA), ...rows, spacer(SPACE_BELOW_PARA)];
-
+  const content = (c) => {
+    if (c.kind === "number") return number();
+    if (c.kind === "text") return runs(c.text, formats);
+    return "";
+  };
+  const t = tableRows(ex, plan);
+  const gridCols = t.grid.map((w) => `<w:gridCol w:w="${dxa(w)}"/>`).join("");
+  const rows = t.rows.map((row) =>
+    "<w:tr>" + row.map((c) => cell(c.widthCm, content(c.content), c.span, c.style)).join("") + "</w:tr>");
   return (
-    `<w:tbl><w:tblPr><w:tblW w:w="${dxa(sum(widths))}" w:type="dxa"/>${TABLE_PR}</w:tblPr>` +
+    `<w:tbl><w:tblPr><w:tblW w:w="${dxa(t.widthCm)}" w:type="dxa"/>${TABLE_PR}</w:tblPr>` +
     `<w:tblGrid>${gridCols}</w:tblGrid>` + rows.join("") + "</w:tbl>"
   );
 }

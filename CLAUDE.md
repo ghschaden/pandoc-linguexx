@@ -16,6 +16,12 @@ the spikes measured; Phase 1, the core, is done, and Phase 2, the Word
 add-in (`addin/word/`), is built and has passed a first live test in Word
 on the web. `python3 tools/serve_addin.py` serves it over HTTPS on
 localhost and writes the `manifest.xml` Word's "Upload My Add-in" wants.
+Phase 3, the OnlyOffice plugin (`addin/onlyoffice/`), is done and confirmed
+in OnlyOffice Desktop: `make onlyoffice` builds it into `dist/`, and `make
+onlyoffice-test` runs its editor half in Document Builder -- as does CI, in
+a job of its own, with Document Builder pinned to 9.4.0 by SHA-256. Its
+free build watermarks the page header; nothing in the test reads headers,
+and a check that ever renders to PDF must skip that band.
 
 ## Environment
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
@@ -42,7 +48,7 @@ localhost and writes the `manifest.xml` Word's "Upload My Add-in" wants.
 
 ## Make
 `make check` is lint plus suite, which is what CI runs. `make test`,
-`make js-test`, `make lint`, `make macro`, `make oxt`, `make advances`,
+`make js-test`, `make onlyoffice`, `make onlyoffice-test`, `make lint`, `make macro`, `make oxt`, `make advances`,
 `make venv`, `make clean`. The Makefile's header says what each is for.
 
 ## Verification — non-negotiable
@@ -171,6 +177,15 @@ deliberate and worth keeping:
   out from the cells. The converter summed `tcW` from the columns at the
   word's index until 2026-09-26, invisible everywhere but OnlyOffice, which
   drew every banded or paradigm example as letters in slivers.
+- **The row logic and the styles exist once for both add-in hosts.**
+  `core/table.js` decides which cell goes where; Word serializes it as
+  OOXML and OnlyOffice builds it with builder calls. The OnlyOffice styles
+  are `STYLES_FRAGMENT` restated (`job.stylesJob`), not a second set.
+- **In the OnlyOffice builder API, `AddText` inherits the previous run's
+  formatting.** Write formatted text with fresh runs (`Api.CreateRun`,
+  `AddElement`) — the plugin's cells leaked small caps and a character
+  style onto the next word until they were. A test that types its input
+  with `AddText` manufactures the same leak.
 - **A style the macro does not know is a broken round trip, not a cosmetic
   gap.** It reads converted tables back cell by cell, so a cell it cannot
   identify becomes content: `LxAnnot` unknown meant an `\exannot` label

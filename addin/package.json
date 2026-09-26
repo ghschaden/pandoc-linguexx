@@ -5,6 +5,6 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "test": "node --test core/test/ word/test/"
+    "test": "node --test core/test/ word/test/ onlyoffice/test/"
   }
 }

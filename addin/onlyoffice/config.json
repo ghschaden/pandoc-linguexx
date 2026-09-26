@@ -1,0 +1,21 @@
+{
+  "name": "LinguExx",
+  "guid": "asc.{D71895BD-806D-4964-ACA4-0A531FE92454}",
+  "version": "0.1.0",
+  "variations": [
+    {
+      "description": "Numbered, glossed linguistic examples with live numbers and cross-references, as linguexx sets them.",
+      "url": "index.html",
+      "icons": ["resources/icon.png", "resources/icon@2x.png"],
+      "isViewer": false,
+      "EditorsSupport": ["word"],
+      "isVisual": true,
+      "isModal": false,
+      "isInsideMode": true,
+      "initDataType": "none",
+      "initData": "",
+      "isUpdateOleOnResize": false,
+      "buttons": []
+    }
+  ]
+}

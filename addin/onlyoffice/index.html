@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>LinguExx</title>
+  <script src="../v1/plugins.js"></script>
+  <script src="../v1/plugins-ui.js"></script>
+  <link rel="stylesheet" href="../v1/plugins.css">
+  <script src="linguexx.js"></script>
+  <script src="ui.js"></script>
+  <style>
+    body { font: 12px/1.4 Arial, sans-serif; margin: 0; padding: 10px 12px; }
+    p.help { opacity: 0.75; margin: 0 0 10px; }
+    button { margin: 0 6px 6px 0; }
+    #status { margin: 8px 0; min-height: 1.4em; }
+    #status.error { color: #c0392b; } #status.ok { color: #27864a; }
+    #notes { white-space: pre-wrap; opacity: 0.75; }
+    ol#examples { list-style: none; padding: 0; margin: 6px 0; }
+    ol#examples button { width: 100%; text-align: left; }
+    hr { border: 0; border-top: 1px solid rgba(128, 128, 128, 0.35); margin: 12px 0; }
+  </style>
+</head>
+<body>
+  <p class="help">Type an example as lines &mdash; object language, gloss, and a quoted
+    translation; <em>a.</em>, <em>b.</em> for sub-examples; a leading <em>*</em> or
+    <em>?</em> for a judgment &mdash; select them, and typeset.</p>
+  <button id="typeset" class="btn-text-default">Typeset selection</button>
+  <button id="refs" class="btn-text-default">Insert reference&hellip;</button>
+  <label><input type="checkbox" id="bare"> bare number</label>
+  <div id="status" role="status"></div>
+  <ol id="examples"></ol>
+  <hr>
+  <div id="notes"></div>
+</body>
+</html>
