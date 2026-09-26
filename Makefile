@@ -48,7 +48,7 @@ lint:
 # this as a job of its own.  No npm install -- the core has no dependencies.
 js-test:
 	@if command -v node >/dev/null 2>&1; then \
-	  cd addin && node --test core/test/; \
+	  cd addin && node --test core/test/ word/test/; \
 	else \
 	  echo "node is not installed; the add-in core's suite needs Node >= 18"; \
 	  exit 1; \

@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinguExx</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script type="module" src="taskpane.js"></script>
+  <style>
+    :root { color-scheme: light dark; --fg: #1b1b1b; --bg: #ffffff; --muted: #5c5c5c;
+            --ok: #0b6a0b; --err: #a4262c; --line: #d6d6d6; --accent: #1f4e79; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e8e8e8; --bg: #1f1f1f; --muted: #a8a8a8; --ok: #6ccb5f;
+              --err: #ff99a4; --line: #3d3d3d; --accent: #8cb8e8; }
+    }
+    body { font: 14px/1.4 "Segoe UI", system-ui, sans-serif; color: var(--fg);
+           background: var(--bg); margin: 0; padding: 12px 14px; }
+    h1 { font-size: 16px; margin: 0 0 10px; }
+    p.help { color: var(--muted); margin: 0 0 12px; }
+    button { font: inherit; padding: 6px 12px; margin: 0 6px 6px 0; cursor: pointer;
+             border: 1px solid var(--line); border-radius: 3px; background: transparent; color: var(--fg); }
+    button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+    #status { margin: 10px 0; min-height: 1.4em; }
+    #status.ok { color: var(--ok); } #status.error { color: var(--err); }
+    #notes { white-space: pre-wrap; color: var(--muted); font-size: 13px; }
+    ol#examples { list-style: none; padding: 0; margin: 6px 0; }
+    ol#examples button { width: 100%; text-align: left; margin: 0 0 4px; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+  </style>
+</head>
+<body>
+  <h1>LinguExx</h1>
+  <p class="help">Type an example as lines &mdash; object language, gloss, and a
+    quoted translation; <em>a.</em>, <em>b.</em> for sub-examples; a leading
+    <em>*</em> or <em>?</em> for a judgment &mdash; select them, and typeset.</p>
+  <!-- Both actions first, the notes last: after an insertion near the top
+       of a long document the notes run to a paragraph, and the first live
+       test found "Insert reference" pushed out of sight below them. -->
+  <button id="typeset" class="primary">Typeset selection</button>
+  <button id="refs">Insert reference&hellip;</button>
+  <label><input type="checkbox" id="bare"> bare number</label>
+  <div id="status" role="status"></div>
+  <ol id="examples"></ol>
+  <hr>
+  <div id="notes"></div>
+</body>
+</html>

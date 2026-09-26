@@ -82,7 +82,7 @@ jobs:
       - name: node --test
         run: |
           node --version
-          cd addin && node --test core/test/
+          cd addin && node --test core/test/ word/test/
 
   # The Writer macro, driven inside a real LibreOffice: the .bas that ships
   # is installed into a throwaway profile and invoked through the script

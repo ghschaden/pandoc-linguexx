@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     The Word add-in's manifest.  {{BASE}} is where addin/ is served from;
+     tools/serve_addin.py writes manifest.xml from this with the base filled
+     in (https://localhost:3000 for development). -->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>bb240fec-5ec8-468d-af30-f057721da2f1</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>pandoc-linguexx</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="LinguExx"/>
+  <Description DefaultValue="Numbered, glossed linguistic examples with live numbers and cross-references, as linguexx sets them."/>
+  <IconUrl DefaultValue="{{BASE}}/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="{{BASE}}/assets/icon-64.png"/>
+  <SupportUrl DefaultValue="https://github.com/ghschaden/pandoc-linguexx"/>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WordApi" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="{{BASE}}/word/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="LinguExx.Group">
+                <Label resid="LinguExx.Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="LinguExx.Icon16"/>
+                  <bt:Image size="32" resid="LinguExx.Icon32"/>
+                  <bt:Image size="80" resid="LinguExx.Icon80"/>
+                </Icon>
+                <Control xsi:type="Button" id="LinguExx.Open">
+                  <Label resid="LinguExx.Button.Label"/>
+                  <Supertip>
+                    <Title resid="LinguExx.Button.Label"/>
+                    <Description resid="LinguExx.Button.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="LinguExx.Icon16"/>
+                    <bt:Image size="32" resid="LinguExx.Icon32"/>
+                    <bt:Image size="80" resid="LinguExx.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>LinguExx.Taskpane</TaskpaneId>
+                    <SourceLocation resid="LinguExx.Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="LinguExx.Icon16" DefaultValue="{{BASE}}/assets/icon-16.png"/>
+        <bt:Image id="LinguExx.Icon32" DefaultValue="{{BASE}}/assets/icon-32.png"/>
+        <bt:Image id="LinguExx.Icon80" DefaultValue="{{BASE}}/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="LinguExx.Taskpane.Url" DefaultValue="{{BASE}}/word/taskpane.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="LinguExx.Group.Label" DefaultValue="LinguExx"/>
+        <bt:String id="LinguExx.Button.Label" DefaultValue="Examples"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="LinguExx.Button.Tip" DefaultValue="Typeset the selected lines as a numbered example, or insert a reference to one."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

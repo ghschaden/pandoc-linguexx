@@ -12,7 +12,10 @@ all. It duplicates the converter's constants on purpose — see below.
 
 A third is being built: a Word add-in and an OnlyOffice plugin over one
 JavaScript core, `addin/`. `plan-addins.md` is its plan and records what
-the spikes measured; Phase 1, the core, is done.
+the spikes measured; Phase 1, the core, is done, and Phase 2, the Word
+add-in (`addin/word/`), is built and has passed a first live test in Word
+on the web. `python3 tools/serve_addin.py` serves it over HTTPS on
+localhost and writes the `manifest.xml` Word's "Upload My Add-in" wants.
 
 ## Environment
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
@@ -140,10 +143,10 @@ deliberate and worth keeping:
   `inline.DECLARATIONS` or `WRAPPERS` is therefore worth more than it looks.
 - **The constants exist three times, deliberately.** Basic and a browser
   module can import nothing from here. `make macro` (`tools/sync_macro.py`)
-  writes the generated block of `LinguExx.bas` and all of
-  `addin/core/constants.js` from `styles.py` and `measure.py`, and
-  `tests/test_macro_sync.py` fails when either drifts. Never hand-edit
-  either copy.
+  writes the generated block of `LinguExx.bas`, all of
+  `addin/core/constants.js` from `styles.py` and `measure.py`, and all of
+  `addin/word/styles.js` from `styles_docx.py`; `tests/test_macro_sync.py`
+  fails when any drifts. Never hand-edit a generated copy.
 - **The add-in core is held to two oracles, exactly.** Its parse must be
   the macro's: the typed-line cases live in
   `tests/fixtures/typed-examples.json`, shared by the macro suite and
@@ -151,14 +154,18 @@ deliberate and worth keeping:
   `ParseLinesQuiet`) is recorded there as `parsed` by
   `LINGUEXX_UPDATE_GOLDEN=1 python3 tools/run_macro_test.py`. Its plan must
   be the converter's: `tools/addin_oracle.py` writes `plan_table()`'s
-  answers to `typed-examples.plans.json`. Compared with no tolerance — so a
+  answers to `typed-examples.plans.json`, and the Word add-in's markup
+  must be `DocxEmitter.example()`'s, string for string
+  (`typed-examples.docx.json`). Compared with no tolerance — so a
   change to the macro's grammar or the converter's geometry fails a golden
   first, and the core after. Both goldens are read before committing.
 - **Python's `sum()` of floats is compensated from 3.12 on**, and the exact
   comparison depends on it: `measure.js` has `pySum` (CPython's Neumaier
   loop) wherever the Python calls `sum()`, and plain `+=` wherever the
   Python writes `+=`. "Tidying" either into the other is a change of
-  result in the last place, which the plan test reports.
+  result in the last place, which the plan test reports. Likewise
+  Python's `round()` sends halves to even; `ooxml.js` has `pyRound` for
+  the twips.
 - **A cell's `w:tcW` must equal the grid columns it spans.** Word and
   LibreOffice lay a fixed table out from `w:tblGrid`; OnlyOffice lays it
   out from the cells. The converter summed `tcW` from the columns at the

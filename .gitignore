@@ -19,3 +19,7 @@ tests/reference/*.fodt
 # LibreOffice's lock file, left behind beside a document it has open
 .~lock.*#
 .ooxml-schemas/
+
+# the Word add-in: dev certificate, and the manifest written from its template
+.addin-cert/
+addin/word/manifest.xml
