@@ -322,7 +322,13 @@ class DocxEmitter(BaseEmitter):
         for j in range(start, stop):
             span = p.grid.span(body_index, j)
             content = self._runs(cells[j]) if j < len(cells) else ""
-            width = sum(p.columns[j:j + span])
+            # The cell's first column is how many this row has covered, not
+            # the word's index: a continuation band starts back at column 0,
+            # and a paradigm's words land where the grid union put them.
+            # Word and LibreOffice lay out from w:tblGrid and never showed
+            # the difference; OnlyOffice lays out from w:tcW and drew banded
+            # examples as letters in slivers.
+            width = sum(p.columns[covered:covered + span])
             out.append(cell(width, content, span=span, style=style))
             covered += span
         remaining = len(p.columns) + p.filler - covered

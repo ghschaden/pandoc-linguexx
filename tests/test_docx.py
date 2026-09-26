@@ -334,6 +334,52 @@ def test_every_row_adds_up_to_the_grid_by_span(tmp_path: Path) -> None:
         )
 
 
+TWO_BANDS = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\exg. Dies ist ein extrem langes Beispiel um zu zeigen, was passiert,
+      wenn die Grenze einer Linie erst einmal \"uberschritten ist\\
+      This is a extreme long example for to show what happens
+      when the border a.gen line first once trespassed is\\
+\glt `Just a test'
+\end{document}
+"""
+
+
+@pandoc
+@pytest.mark.parametrize("source", ["TWO_BANDS", "PARADIGM"])
+def test_every_cell_is_as_wide_as_the_columns_it_spans(tmp_path: Path,
+                                                       source: str) -> None:
+    """A cell's w:tcW is the sum of the grid columns it covers.
+
+    LibreOffice and Word lay a fixed table out from w:tblGrid, so a wrong
+    tcW goes unseen there -- and OnlyOffice lays it out from the cells
+    (plan-addins.md, S8 fact 2).  The width used to be summed from the
+    columns at the word's *index*, which is its column only in a table of
+    one band and one body: a continuation band starts back at column 0, and
+    a paradigm's words land wherever the grid union put them.  OnlyOffice
+    drew the banded example below as letters stacked in slivers ("Bei",
+    "spi", "el"; "was passiert" as single characters) while LibreOffice drew
+    it correctly.
+    """
+    xml = document_xml(build(tmp_path, globals()[source], "w"))
+    grid = [int(g) for g in re.findall(r'<w:gridCol w:w="(\d+)"/>', xml)]
+    bad = []
+    for i, row in enumerate(re.findall(r"<w:tr>(.*?)</w:tr>", xml, re.S)):
+        col = 0
+        for width, span in re.findall(
+                r'<w:tcW w:w="(\d+)" w:type="dxa"/>(?:<w:gridSpan w:val="(\d+)"/>)?', row):
+            span = int(span or 1)
+            want = sum(grid[col:col + span])
+            # each width is rounded to whole dxa on its own, so a cell over
+            # n columns may differ from their sum by up to n
+            if abs(int(width) - want) > span:
+                bad.append(f"row {i}, columns {col}..{col + span - 1}: "
+                           f"tcW {width}, the grid says {want}")
+            col += span
+    assert not bad, "\n".join(bad[:8]) + (f"\n... {len(bad) - 8} more" if len(bad) > 8 else "")
+
+
 @pandoc
 def test_the_styles_an_example_uses_are_defined(tmp_path: Path) -> None:
     """Phase 4, and fact 6 is why it is not optional.
