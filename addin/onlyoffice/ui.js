@@ -129,10 +129,37 @@
     });
   }
 
+  var FIELDS = ["indentCm", "numberCm", "markerCm", "aboveCm", "belowCm"];
+
+  /** Fill the layout fields from the document. */
+  function loadLayout() {
+    plugin.callCommand(LinguExx.readLayout, false, false, function (read) {
+      var s = LinguExx.settingsFromRead(read || {});
+      FIELDS.forEach(function (k) { $(k).value = (Math.round(s[k] * 100) / 100).toString(); });
+    });
+  }
+
+  /** Store the fields' settings in the document, or say why not. */
+  function applyLayout() {
+    var s = {};
+    FIELDS.forEach(function (k) { s[k] = parseFloat(String($(k).value).replace(",", ".")); });
+    var j = LinguExx.layoutJob(s);
+    if (j.refusal) return say(j.refusal, "error");
+    if (!busy("Applying the layout…")) return;
+    window.Asc.scope.layout = j.layout;
+    plugin.callCommand(LinguExx.writeLayout, false, true, function (res) {
+      idle();
+      if (!res || res.error) return say((res && res.error) || "The layout was not applied.", "error");
+      say("Layout applied: the spacing now, the indents from the next example on.", "ok");
+    });
+  }
+
   plugin.init = function () {
     $("typeset").onclick = typeset;
     $("refs").onclick = listExamples;
     $("untypeset").onclick = untypeset;
+    $("applyLayout").onclick = applyLayout;
+    loadLayout();
     say("Select the lines of an example, then Typeset.");
   };
 

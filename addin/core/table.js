@@ -109,6 +109,7 @@ export function tableRows(ex, plan) {
   const spacer = (style) => [cell(sum(widths), empty, widths.length, style)];
   return {
     widthCm: sum(widths),
+    indentCm: p.indent || 0,
     grid: widths,
     rows: [spacer(NAMES.SPACE_ABOVE), ...rows, spacer(NAMES.SPACE_BELOW)],
   };

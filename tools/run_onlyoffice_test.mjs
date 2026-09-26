@@ -312,6 +312,74 @@ body.children.filter((c) => typeof c !== "string").forEach((el, i, all) => {
 
 console.log(`--- compared ${inserted.length} tables with the Word layer's markup; numbers ${numbers.join(" ")}`);
 
+// -- layout settings ------------------------------------------------------------
+//
+// Stored by the plugin's own writeLayout, read back by readLayout, and used
+// by the next insertion: the indent sets the table in, the number setting is
+// a floor for its column, the spacings are the styles' exact heights, and the
+// indents sit in docProps/custom.xml under the Writer macro's names -- which
+// LibreOffice reads as the user-defined properties the macro reads.
+
+const layoutDocx = join(OUT, "layout.docx");
+{
+  const bundleText = readFileSync(BUNDLE, "utf-8");
+  run(`builder.CreateFile("docx");
+${bundleText}
+if (typeof Asc.scope !== "object" || !Asc.scope) Asc.scope = {};
+var doc = Api.GetDocument();
+var log = {};
+try {
+  doc.GetFinalSection().SetPageSize(11906, 16838);
+  doc.GetFinalSection().SetPageMargins(1134, 1134, 1134, 1134);
+  var want = { indentCm: 1.5, numberCm: 2.0, markerCm: 0.7, aboveCm: 0.3, belowCm: 0.45 };
+  var lj = LinguExx.layoutJob(want);
+  Asc.scope.layout = lj.layout;
+  LinguExx.writeLayout();
+  log.readBack = LinguExx.settingsFromRead(LinguExx.readLayout());
+  doc.GetElement(0).AddText("Ich habe geschlafen");
+  var g = Api.CreateParagraph(); g.AddText("I have slept"); doc.Push(g);
+  var tail = Api.CreateParagraph(); tail.AddText("After."); doc.Push(tail);
+  doc.GetElement(0).GetRange().ExpandTo(doc.GetElement(1).GetRange()).Select();
+  var prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12);
+  Asc.scope.job = prep.job;
+  LinguExx.insertExample();
+  log.refused = LinguExx.layoutJob({ indentCm: 11, numberCm: 2, markerCm: 0.7, aboveCm: 0.3, belowCm: 0.3 }).refusal;
+  Asc.scope.layout = LinguExx.layoutJob({ indentCm: 1.5, numberCm: 2.0, markerCm: 0.7, aboveCm: 0.3, belowCm: 0.3 }).layout;
+  LinguExx.writeLayout();
+  log.equal = LinguExx.settingsFromRead(LinguExx.readLayout());
+} catch (e) { log.error = String(e && e.stack || e); }
+var out = Api.CreateParagraph(); out.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, out);
+builder.SaveFile("docx", ${JSON.stringify(layoutDocx)});
+builder.CloseFile();
+`, "layout");
+
+  const xml = unzip(layoutDocx, "word/document.xml");
+  const b = findAll(parse(xml), "w:body")[0];
+  const first = b.children.find((c) => typeof c !== "string" && c.name === "w:p");
+  const log = JSON.parse(findAll(first, "w:t").map(textOf).join("").replace(/^LXRESULT/, ""));
+  if (log.error) problems.push(`layout failed: ${log.error}`);
+  const near = (a, w) => Math.abs(a - w) < 0.002;
+  const rb = log.readBack || {};
+  for (const [k, v] of Object.entries({ indentCm: 1.5, numberCm: 2.0, markerCm: 0.7, aboveCm: 0.3, belowCm: 0.45 })) {
+    if (!near(rb[k], v)) problems.push(`layout: ${k} read back as ${rb[k]}, not ${v}`);
+  }
+  if (!/between 0 and 10 cm/.test(log.refused || "")) problems.push(`layout: 11 cm was not refused (${log.refused})`);
+  if (!log.equal || !near(log.equal.aboveCm, 0.3) || !near(log.equal.belowCm, 0.3)) {
+    problems.push(`layout: equal spacings read back as ${JSON.stringify(log.equal)}`);
+  }
+  const tbl = findAll(b, "w:tbl")[0];
+  const ind = tbl && child(child(tbl, "w:tblPr"), "w:tblInd");
+  if (!ind || Math.abs(Number(ind.attrs["w:w"]) - 850) > 1) problems.push(`layout: table indent ${ind ? ind.attrs["w:w"] : "missing"}, not 850`);
+  const grid = findAll(child(tbl, "w:tblGrid"), "w:gridCol").map((g) => Number(g.attrs["w:w"]));
+  if (!(grid[0] + grid[1] >= 1134 - 1)) problems.push(`layout: number column ${grid[0] + grid[1]} twips, under the 2 cm floor`);
+  const custom = unzip(layoutDocx, "docProps/custom.xml");
+  for (const n of ["LinguExxIndentCm", "LinguExxNumberCm", "LinguExxMarkerCm"]) {
+    if (!custom.includes(`name="${n}"`)) problems.push(`layout: ${n} is not a custom property`);
+  }
+  console.log(`--- layout: read back ${JSON.stringify(rb)}; table set in ${ind && ind.attrs["w:w"]} twips; ` +
+    `equal spacings ${log.equal && log.equal.aboveCm}/${log.equal && log.equal.belowCm}`);
+}
+
 // -- the scenario ---------------------------------------------------------------
 //
 // In the fixture document every example is appended, with prose after it, so

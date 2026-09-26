@@ -27,6 +27,9 @@
     ol#examples { list-style: none; padding: 0; margin: 6px 0; }
     ol#examples button { width: 100%; text-align: left; margin: 0 0 4px; }
     hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+    table.layout td { padding: 2px 8px 2px 0; }
+    table.layout input { width: 5em; font: inherit; }
+    summary { cursor: pointer; margin-bottom: 6px; }
   </style>
 </head>
 <body>
@@ -43,6 +46,21 @@
   <label><input type="checkbox" id="bare"> bare number</label>
   <div id="status" role="status"></div>
   <ol id="examples"></ol>
+  <hr>
+  <details id="layout">
+    <summary>Example layout</summary>
+    <p class="help">House style, kept in the document &mdash; the same settings the
+      Writer macro keeps. The indents apply to examples built afterwards; the
+      spacing restyles every example at once.</p>
+    <table class="layout">
+      <tr><td><label for="indentCm">Indent from the margin</label></td><td><input id="indentCm" type="number" min="0" max="10" step="0.05"> cm</td></tr>
+      <tr><td><label for="numberCm">Number column, at least</label></td><td><input id="numberCm" type="number" min="0" max="10" step="0.05"> cm</td></tr>
+      <tr><td><label for="markerCm">Letter column, at least</label></td><td><input id="markerCm" type="number" min="0" max="10" step="0.05"> cm</td></tr>
+      <tr><td><label for="aboveCm">Space above</label></td><td><input id="aboveCm" type="number" min="0" max="10" step="0.01"> cm</td></tr>
+      <tr><td><label for="belowCm">Space below</label></td><td><input id="belowCm" type="number" min="0" max="10" step="0.01"> cm</td></tr>
+    </table>
+    <button id="applyLayout">Apply layout</button>
+  </details>
   <hr>
   <div id="notes"></div>
 </body>

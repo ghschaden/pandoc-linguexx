@@ -630,6 +630,14 @@ les mêmes styles, la même séquence `NumEx`.
 - La mise en forme appliquée à la main passe (petites capitales, italique,
   gras, soulignement, exposants et indices, styles de caractère), et elle
   est mesurée telle qu'elle est dessinée.
+- **Mise en page** (*Example layout*) règle les cinq longueurs de la boîte
+  de la macro — le retrait depuis la marge, les colonnes du numéro et de la
+  lettre (comme largeurs minimales), l'espace au-dessus et au-dessous — et
+  les garde là où la macro les garde : les retraits comme propriétés
+  personnalisées du document, sous les noms de la macro, l'espacement dans
+  les styles `LxExampleSpace*`. Un document garde donc sa mise en page entre
+  Writer, Word et OnlyOffice. Les retraits valent pour les exemples créés
+  ensuite ; l'espacement remet en forme tous les exemples d'un coup.
 - **L'exemple prend la police du document, et les colonnes sont mesurées
   pour elle.** Les polices à métrique Times et Aptos (la police par défaut
   de Word) ont des métriques mesurées ; pour une autre police, l'estimation
@@ -641,9 +649,9 @@ les mêmes styles, la même séquence `NumEx`.
 |---|---|---|
 | renumérotation après une insertion | Word pour le bureau : Ctrl+A, F9. **Word sur le web ne renumérote jamais** et n'y autorise pas un complément : le nouvel exemple est bien numéroté, et le volet dit quels numéros et renvois sont périmés | immédiate — et tous les autres champs du document sont rafraîchis avec |
 | arbres | pas dessinés ; la notation à crochets reste du texte — utilisez la macro | pareil |
-| la boîte « Example layout » | aucune : les longueurs sont celles du convertisseur, l'espace autour d'un exemple est dans les styles `LxExampleSpace*` | pareil |
 | plusieurs exemples dans un tableau — un fichier converti avant le 26 septembre 2026 | *Untypeset* refuse ; reconvertissez le fichier (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
 | un document où une version antérieure du complément a écrit | son style `LxExampleCell` peut être en Times New Roman : Styles ▸ LxExampleCell ▸ Modifier ▸ la police du document | — |
+| un espacement réglé, puis rendu égal | — | OnlyOffice ne sait pas rendre un style à l'héritage une fois qu'il a sa propre valeur : les deux côtés sont justes, mais ne suivent plus une modification ultérieure de `LxExampleSpace` |
 | où il a tourné | Word sur le web. **Word pour le bureau n'a pas été essayé** | OnlyOffice Desktop 9.4 |
 
 Word sur le web est lent — chaque question d'un complément est un aller-retour

@@ -82,6 +82,14 @@ export function readSelection() {
   if (sec) out.widthTwips = sec.GetPageWidth() - sec.GetPageMarginLeft() - sec.GetPageMarginRight();
   var def = doc.GetDefaultTextPr();
   out.font = def ? def.GetFontFamily() || "" : "";
+  // the document's layout settings (core/settings.js): the indents as the
+  // macro's user-defined properties, the spacings as the styles hold them
+  var custom = doc.GetCustomProperties();
+  out.props = {};
+  ["LinguExxIndentCm", "LinguExxNumberCm", "LinguExxMarkerCm"].forEach(function (n) {
+    var v = custom ? custom.Get(n) : null;
+    if (v !== null && v !== undefined) out.props[n] = v;
+  });
   // half-points, as the builder reports sizes
   out.sizeHalfPt = def && def.GetFontSize ? def.GetFontSize() || 0 : 0;
   return out;
@@ -164,6 +172,7 @@ export function insertExample() {
   t.ReplaceByElement(t2);
   t = t2;
   t.SetTableBorderAll("none", 0, 0, 0, 0, 0);
+  if (job.indentTwips) t.SetTableInd(job.indentTwips);   // the document's indent
 
   // Each run made fresh and added, never par.AddText: AddText's new run
   // INHERITS the previous run's formatting (probed 2026-09-26), so a plain
@@ -373,4 +382,83 @@ export function writeLines() {
   }
   doc.UpdateAllFields();
   return { ok: true, lines: back.lines.length };
+}
+
+/**
+ * The document's layout settings as they stand: the three indents -- the
+ * Writer macro's user-defined properties -- and the two spacings as the
+ * LxExampleSpace styles hold them (twips of exact line height; a child
+ * that inherits reports null, and takes its parent's).
+ */
+export function readLayout() {
+  var doc = Api.GetDocument();
+  var custom = doc.GetCustomProperties();
+  var props = {};
+  ["LinguExxIndentCm", "LinguExxNumberCm", "LinguExxMarkerCm"].forEach(function (n) {
+    var v = custom ? custom.Get(n) : null;
+    if (v !== null && v !== undefined) props[n] = v;
+  });
+  function own(name) {
+    var st = doc.GetStyle(name);
+    if (!st) return null;
+    var v = st.GetParaPr().GetSpacingLineValue();
+    return v === null || v === undefined ? null : v;
+  }
+  var parent = own("LxExampleSpace");
+  var above = own("LxExampleSpaceAbove");
+  var below = own("LxExampleSpaceBelow");
+  return { props: props,
+           spacing: { aboveTwips: above !== null ? above : parent, belowTwips: below !== null ? below : parent } };
+}
+
+/**
+ * Store the settings in Asc.scope.layout: {props, spacing, styles}.  The
+ * indents go into the properties; the spacings into the styles, by
+ * core/settings.spacingPlan -- equal on the parent with the children
+ * inheriting, unequal on each child.  The builder API cannot clear a
+ * child's own value once set (probed), so a child that already has one
+ * is given the parent's rather than returned to inheriting: it looks the
+ * same, and no longer follows the parent's later edits.
+ *
+ * The Lx styles are created first if the document has none yet -- the same
+ * loop insertExample runs, repeated because a command sent to the editor
+ * can use nothing from outside itself.
+ */
+export function writeLayout() {
+  var job = Asc.scope.layout;
+  var doc = Api.GetDocument();
+  for (var s = 0; s < job.styles.length; s++) {
+    var sd = job.styles[s];
+    if (doc.GetStyle(sd.name)) continue;
+    var st = doc.CreateStyle(sd.name, sd.type);
+    if (sd.basedOn && doc.GetStyle(sd.basedOn)) st.SetBasedOn(doc.GetStyle(sd.basedOn));
+    if (sd.type === "paragraph") {
+      var pp = st.GetParaPr();
+      if (sd.para.before !== undefined) pp.SetSpacingBefore(sd.para.before);
+      if (sd.para.after !== undefined) pp.SetSpacingAfter(sd.para.after);
+      if (sd.para.line !== undefined) pp.SetSpacingLine(sd.para.line, sd.para.lineRule);
+      if (sd.para.firstLine !== undefined) pp.SetIndFirstLine(sd.para.firstLine);
+      if (sd.para.jc) pp.SetJc(sd.para.jc);
+    }
+    var tp = st.GetTextPr();
+    if (sd.run.size) tp.SetFontSize(sd.run.size);
+    if (sd.run.smallCaps) tp.SetSmallCaps(true);
+  }
+  var custom = doc.GetCustomProperties();
+  for (var name in job.props) custom.Add(name, job.props[name]);
+  var parentTwips = null;
+  for (var i = 0; i < job.spacing.length; i++) {
+    var item = job.spacing[i];
+    var style = doc.GetStyle(item.style);
+    if (!style) continue;
+    var ppr = style.GetParaPr();
+    if (item.inherit) {
+      var mine = ppr.GetSpacingLineValue();
+      if (mine !== null && mine !== undefined && parentTwips !== null) ppr.SetSpacingLine(parentTwips, "exact");
+    } else {
+      ppr.SetSpacingLine(item.twips, "exact");
+      parentTwips = item.twips;
+    }
+  }
+  return { ok: true };
 }

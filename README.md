@@ -445,6 +445,13 @@ and lays out as the converter lays out, and tests hold it to both exactly
 - Formatting typed by hand comes through (small caps, italic, bold,
   underline, raised and lowered text, character styles) and is measured as
   drawn.
+- **Example layout** sets the five lengths the Writer macro's dialog sets —
+  the indent from the margin, the number and letter columns (as minimum
+  widths), the space above and below — and keeps them where the macro
+  does: the indents as user-defined document properties under the macro's
+  names, the spacing as the `LxExampleSpace*` styles. So a document keeps
+  its layout between Writer, Word and OnlyOffice. The indents apply to
+  examples built afterwards; the spacing restyles every example at once.
 - **The example is set in the document's face and measured for it.**
   Times-metric faces and Aptos, Word's default, have measured metrics;
   another face is estimated from Times's, and the pane says so.
@@ -455,9 +462,9 @@ and lays out as the converter lays out, and tests hold it to both exactly
 |---|---|---|
 | renumbering after an insertion | Word for the desktop: Ctrl+A, F9. **Word on the web never renumbers fields** and will not let an add-in do it: the new example is numbered right, and the pane says which numbers and references are stale | at once — and every other field in the document is refreshed with them |
 | trees | not drawn; bracket notation stays text — use the Writer macro | the same |
-| the layout dialog | none: the lengths are the converter's, and the space around an example is the `LxExampleSpace*` styles | the same |
 | several examples in one table — a file converted before 2026-09-26 | *Untypeset* refuses it; reconvert the file (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
 | a document an earlier add-in build wrote into | its `LxExampleCell` may carry Times New Roman: Styles ▸ LxExampleCell ▸ Modify ▸ the document's face | — |
+| a spacing set, then set equal again | — | OnlyOffice cannot return a style to inheriting once it has its own value: both sides look right, and no longer follow a later edit of `LxExampleSpace` |
 | where it has run | Word on the web. **Word for the desktop has not been tried** | OnlyOffice Desktop 9.4 |
 
 Word on the web is slow — every question an add-in asks is a round trip —

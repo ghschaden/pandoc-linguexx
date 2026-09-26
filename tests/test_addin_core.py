@@ -114,3 +114,26 @@ def test_the_markup_check_can_fail() -> None:
     for fine in ["// renders as <w:tbl> in the Word layer",
                  'return { text: glossed ? "" : words };']:
         assert not MARKUP.search(_code(fine)), fine
+
+
+def test_the_layout_settings_are_the_macros() -> None:
+    """The add-ins keep a document's indents where the Writer macro keeps
+    them -- user-defined properties under the macro's names -- so one
+    document carries its settings between Writer, Word and OnlyOffice (a
+    .docx's custom properties are LibreOffice's user-defined ones, measured).
+    A name that drifts on either side breaks that silently, so the names
+    and the limit are read out of both and compared."""
+    from linguexx2odt import writermacro
+
+    bas = writermacro.source()
+    js = (CORE / "settings.js").read_text(encoding="utf-8")
+    names = (("indent", "OPT_INDENT"), ("number", "OPT_NUMBER"), ("marker", "OPT_MARKER"))
+    for key, const in names:
+        macro = re.search(rf'Const {const}\s+As String = "([^"]+)"', bas)
+        core = re.search(rf'{key}: "([^"]+)"', js)
+        assert macro and core, key
+        assert core.group(1) == macro.group(1), \
+            f"{key}: core {core.group(1)}, macro {macro.group(1)}"
+    macro_max = float(re.search(r"Const OPT_MAX_CM\s+As Double = ([\d.]+)", bas).group(1))
+    core_max = float(re.search(r"OPT_MAX_CM = ([\d.]+)", js).group(1))
+    assert core_max == macro_max

@@ -53,8 +53,8 @@ PLUGIN = ROOT / "dist" / "linguexx-onlyoffice.plugin"
 
 #: in dependency order: a module comes after everything it imports
 MODULES = [
-    "core/constants.js", "core/measure.js", "core/parse.js", "core/plan.js", "core/table.js",
-    "core/untypeset.js",
+    "core/constants.js", "core/measure.js", "core/parse.js", "core/settings.js", "core/plan.js",
+    "core/table.js", "core/untypeset.js",
     "word/xml.js", "word/styles.js", "word/ooxml.js", "word/numbering.js",
     "onlyoffice/job.js", "onlyoffice/commands.js",
 ]
@@ -63,8 +63,10 @@ MODULES = [
 #: of the core for looking at things from the console
 EXPOSE = {
     "onlyoffice/commands.js": ["readSelection", "insertExample", "listExamples",
-                               "completeReference", "readExampleTable", "writeLines"],
-    "onlyoffice/job.js": ["prepareJob", "linesFromRead", "stylesJob", "untypesetJob"],
+                               "completeReference", "readExampleTable", "writeLines",
+                               "readLayout", "writeLayout"],
+    "onlyoffice/job.js": ["prepareJob", "linesFromRead", "stylesJob", "untypesetJob",
+                          "settingsFromRead", "layoutJob"],
     "core/parse.js": ["parseLines", "strip"],
 }
 

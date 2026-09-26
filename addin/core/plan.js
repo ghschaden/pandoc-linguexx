@@ -22,6 +22,7 @@
 import { LAYOUT } from "./constants.js";
 import { Grid, emCm, layoutAdvances, pySum, runsWidthCm, textWidthCm } from "./measure.js";
 import { strip, tagIndex } from "./parse.js";
+import { effectiveIndent } from "./settings.js";
 
 /**
  * A cell's text as [[text, smallCaps], ...] -- what the widths are measured
@@ -127,10 +128,21 @@ export function prepareDocument(examples, layout = LAYOUT, options = {}) {
  * judged.  So the judgment column is reserved always -- at least a "*"
  * wide -- and the number column is sized for "(00)", so the first
  * ninety-nine examples all start their text at the same x.
- * Returns [layout, anyJudgment = true].
+ *
+ * options.settings (core/settings.js) are the document's house style, as
+ * LxLayOut applies them: the indent comes off the text block before
+ * anything is measured into it, and the table is set in by it; the number
+ * and letter settings are floors -- a column narrower than "(100)" would
+ * put the number under the first word.
+ * Returns [layout, anyJudgment = true]; layout.indent_cm is the indent.
  */
 export function prepareSelection(example, layout = LAYOUT, options = {}) {
   const runs = options.runs || ((s) => runsOf(s, options.formats));
+  const settings = options.settings || {};
+  const indent = effectiveIndent(settings.indentCm || 0, layout.text_width_cm);
+  layout = { ...layout, text_width_cm: layout.text_width_cm - indent, indent_cm: indent };
+  const numberFloor = settings.numberCm ?? layout.number_cm;
+  const markerFloor = settings.markerCm ?? layout.marker_cm;
   const em = emCm(layout);
   const adv = layoutAdvances(layout);
   const w = (s) => runsWidthCm(runs(s), em, layout.sc_ratio, adv);
@@ -139,12 +151,12 @@ export function prepareSelection(example, layout = LAYOUT, options = {}) {
   for (const [, b] of bodiesOf(example)) if (b.judgment) judgment = Math.max(judgment, w(b.judgment));
   judgment = judgment + layout.judgment_gap_cm;
 
-  const number = Math.max(layout.number_cm, w("(00)") + layout.pad_cm) + judgment;
-  let marker = layout.marker_cm;
+  const number = Math.max(numberFloor, w("(00)") + layout.pad_cm) + judgment;
+  let marker = markerFloor;
   if (example.items.length) {
     let letter = 0;
     for (const it of example.items) letter = Math.max(letter, w(it.marker));
-    marker = Math.max(layout.marker_cm, letter + layout.pad_cm) + judgment;
+    marker = Math.max(markerFloor, letter + layout.pad_cm) + judgment;
   }
   return [{ ...layout, judgment_cm: judgment, number_cm: number, marker_cm: marker }, true];
 }
@@ -270,7 +282,8 @@ export function planTable(ex, layout, options = {}) {
     widths = [...widths, layout.text_width_cm - sum(widths)];
   }
   return {
-    plan: { bodies, hasMarker, hasJudgment, hasAnnot, lead, columns, widths, grid, filler },
+    plan: { bodies, hasMarker, hasJudgment, hasAnnot, lead, columns, widths, grid, filler,
+            indent: layout.indent_cm || 0 },
     warnings,
   };
 }

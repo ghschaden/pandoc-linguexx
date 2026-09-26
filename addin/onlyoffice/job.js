@@ -25,6 +25,7 @@ import { parseLines, strip, tagIndex, tagRun } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { tableRows } from "../core/table.js";
 import { isExampleTable, readTable } from "../core/untypeset.js";
+import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
 import { freshBookmark } from "../word/numbering.js";
 import { dxa } from "../word/ooxml.js";
 import { STYLES_FRAGMENT } from "../word/styles.js";
@@ -194,8 +195,9 @@ export function prepareJob(read, now = Date.now()) {
   }
 
   const ex = toExample(parsed.items);
+  const settings = readSettings(read.props || {});
   const [layout, anyJudgment] = prepareSelection(ex,
-    { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: sel.formats });
+    { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: sel.formats, settings });
   const { plan, warnings } = planTable(ex, layout, { anyJudgment, formats: sel.formats });
   notes.push(...warnings);
 
@@ -211,6 +213,7 @@ export function prepareJob(read, now = Date.now()) {
   return {
     job: {
       widthTwips: dxa(t.widthCm),
+      indentTwips: t.indentCm > 0 ? dxa(t.indentCm) : 0,
       grid: t.grid.map(dxa),
       rows,
       styles: stylesJob(),
@@ -262,4 +265,28 @@ export function untypesetJob(read) {
   const got = readTable(rows);
   if (got.error) return { refusal: got.error };
   return { back: { pos: read.pos, number: read.number, lines: got.lines.map((l) => runsOf(l, formats)) } };
+}
+
+/** The settings commands.readLayout reported, as core/settings.js reads them. */
+export function settingsFromRead(read) {
+  const cm = (tw) => (tw === null || tw === undefined ? undefined : tw / TWIPS_PER_CM);
+  return readSettings(read.props || {},
+    { aboveCm: cm(read.spacing && read.spacing.aboveTwips), belowCm: cm(read.spacing && read.spacing.belowTwips) });
+}
+
+/**
+ * What commands.writeLayout needs to store *settings*: {layout} or
+ * {refusal}, refused with the macro's words when a length will not do.
+ */
+export function layoutJob(settings) {
+  const refusal = checkSettings(settings);
+  if (refusal) return { refusal };
+  return {
+    layout: {
+      props: { [OPT.indent]: settings.indentCm, [OPT.number]: settings.numberCm, [OPT.marker]: settings.markerCm },
+      spacing: spacingPlan(settings.aboveCm, settings.belowCm).map((it) =>
+        (it.inherit ? it : { style: it.style, twips: dxa(it.cm) })),
+      styles: stylesJob(),
+    },
+  };
 }

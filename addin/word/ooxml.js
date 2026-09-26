@@ -175,8 +175,12 @@ export function exampleTable(ex, plan, opts = {}) {
   const gridCols = t.grid.map((w) => `<w:gridCol w:w="${dxa(w)}"/>`).join("");
   const rows = t.rows.map((row) =>
     "<w:tr>" + row.map((c) => cell(c.widthCm, content(c.content), c.span, c.style)).join("") + "</w:tr>");
+  // The document's indent (core/settings.js), in CT_TblPr's place: after
+  // tblW, before the layout.  None at all when there is none, which keeps
+  // the markup the converter's, string for string.
+  const indent = t.indentCm > 0 ? `<w:tblInd w:w="${dxa(t.indentCm)}" w:type="dxa"/>` : "";
   return (
-    `<w:tbl><w:tblPr><w:tblW w:w="${dxa(t.widthCm)}" w:type="dxa"/>${TABLE_PR}</w:tblPr>` +
+    `<w:tbl><w:tblPr><w:tblW w:w="${dxa(t.widthCm)}" w:type="dxa"/>${indent}${TABLE_PR}</w:tblPr>` +
     `<w:tblGrid>${gridCols}</w:tblGrid>` + rows.join("") + "</w:tbl>"
   );
 }

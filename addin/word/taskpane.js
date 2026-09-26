@@ -24,15 +24,95 @@
 
 /* global Office, Word */
 
-import { LAYOUT } from "../core/constants.js";
+import { LAYOUT, NAMES } from "../core/constants.js";
 import { advancesFor } from "../core/measure.js";
 import { parseLines, strip } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
+import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
 import { audit, freshBookmark, isExampleNumber, numberAt, refTarget, staleMessage } from "./numbering.js";
 import { AFTER_EXAMPLE, exampleTable, flatPackage, sequenceRef } from "./ooxml.js";
 import { readSelection } from "./selection.js";
 import { untypesetPackage } from "./untypeset.js";
 import { STYLE_IDS } from "./styles.js";
+
+const POINTS_PER_CM = 72 / 2.54;
+const LAYOUT_FIELDS = ["indentCm", "numberCm", "markerCm", "aboveCm", "belowCm"];
+
+/** The document's indents: the Writer macro's user-defined properties. */
+async function readProps(ctx) {
+  const custom = ctx.document.properties.customProperties;
+  custom.load("items/key,items/value");
+  await ctx.sync();
+  const props = {};
+  for (const p of custom.items) if (Object.values(OPT).includes(p.key)) props[p.key] = p.value;
+  return props;
+}
+
+/** The spacing styles' line heights, in cm; absent where there is no style. */
+async function readSpacing(ctx) {
+  const styles = ctx.document.getStyles();
+  const get = (n) => styles.getByNameOrNullObject(n);
+  const found = [NAMES.SPACE_PARA, NAMES.SPACE_ABOVE, NAMES.SPACE_BELOW].map(get);
+  found.forEach((s) => s.load("isNullObject"));
+  await ctx.sync();
+  const fmts = found.map((s) => (s.isNullObject ? null : s.paragraphFormat));
+  fmts.forEach((f) => f && f.load("lineSpacing"));
+  await ctx.sync();
+  const cm = (f) => (f && f.lineSpacing ? f.lineSpacing / POINTS_PER_CM : undefined);
+  const parent = cm(fmts[0]);
+  return { aboveCm: cm(fmts[1]) ?? parent, belowCm: cm(fmts[2]) ?? parent };
+}
+
+async function loadLayout() {
+  await Word.run(async (ctx) => {
+    const s = readSettings(await readProps(ctx), await readSpacing(ctx));
+    for (const k of LAYOUT_FIELDS) $(k).value = String(Math.round(s[k] * 100) / 100);
+  });
+}
+
+/**
+ * Store the five lengths: the indents as the macro's properties, the
+ * spacings in the styles (core/settings.spacingPlan).  A style change is
+ * read back: changing a style's font through Office.js had no effect in
+ * Word on the web, so the spacing may not take either, and the pane says
+ * so rather than claiming it did.
+ */
+async function applyLayout() {
+  const s = {};
+  for (const k of LAYOUT_FIELDS) s[k] = parseFloat(String($(k).value).replace(",", "."));
+  const refusal = checkSettings(s);
+  if (refusal) return say(refusal, "error");
+  let spacingNote = "";
+  await Word.run(async (ctx) => {
+    const custom = ctx.document.properties.customProperties;
+    custom.add(OPT.indent, s.indentCm);
+    custom.add(OPT.number, s.numberCm);
+    custom.add(OPT.marker, s.markerCm);
+    await ctx.sync();
+
+    const styles = ctx.document.getStyles();
+    const plan = spacingPlan(s.aboveCm, s.belowCm).filter((it) => !it.inherit);
+    const targets = plan.map((it) => styles.getByNameOrNullObject(it.style));
+    targets.forEach((t) => t.load("isNullObject"));
+    await ctx.sync();
+    if (targets.some((t) => t.isNullObject)) {
+      spacingNote = "The spacing is a style an example brings: typeset one example first, then set it.";
+      return;
+    }
+    plan.forEach((it, i) => { targets[i].paragraphFormat.lineSpacing = it.cm * POINTS_PER_CM; });
+    await ctx.sync();
+    targets.forEach((t) => t.paragraphFormat.load("lineSpacing"));
+    await ctx.sync();
+    const missed = plan.filter((it, i) => Math.abs(targets[i].paragraphFormat.lineSpacing - it.cm * POINTS_PER_CM) > 0.1);
+    if (missed.length) {
+      spacingNote = "Word did not change the spacing: set it in the Styles pane instead -- " +
+        missed.map((it) => `${it.style}, line spacing Exactly ${(it.cm * POINTS_PER_CM).toFixed(1)} pt`).join("; ") + ".";
+    }
+  });
+  say(spacingNote ? "The indents are set." : "Layout applied: the spacing now, the indents from the next example on.",
+    spacingNote ? "error" : "ok");
+  note([spacingNote]);
+}
 
 /** Set after Word reports an insertion error: see the module comment. */
 let broken = false;
@@ -161,8 +241,9 @@ async function typeset() {
         notes.push(`The columns are estimated from Times New Roman's metrics, and this text is in ` +
           `${face}, which has not been measured. Words may wrap in their columns.`);
       }
+      const settings = readSettings(await readProps(ctx));
       const [layout, anyJudgment] = prepareSelection(ex,
-        { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: read.formats });
+        { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: read.formats, settings });
       const { plan, warnings } = planTable(ex, layout, { anyJudgment, formats: read.formats });
       notes.push(...warnings);
 
@@ -347,6 +428,8 @@ Office.onReady(() => {
   $("typeset").onclick = () => busy("Typesetting…", typeset);
   $("refs").onclick = () => busy("Reading the document's examples…", listExamples);
   $("untypeset").onclick = () => busy("Untypesetting…", untypeset);
+  $("applyLayout").onclick = () => busy("Applying the layout…", applyLayout);
+  loadLayout().catch(() => { /* a document Word cannot read yet keeps the defaults shown */ });
   say("Select the lines of an example, then Typeset.");
 });
 

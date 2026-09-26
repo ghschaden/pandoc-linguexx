@@ -690,6 +690,39 @@ step between consecutive examples by 1.0 pt and nothing else; and
 publishing either add-in, which the user has asked to wait. (Measuring the common
 Office faces besides Aptos was done the same day.)
 
+### Example layout, in both (2026-09-26)
+
+The Writer macro's layout dialog for the add-ins, at the user's request
+(it was on the out-of-scope list). `core/settings.js` holds the five
+lengths as the macro holds them: the three indents as user-defined
+document properties under the macro's own names (`LinguExxIndentCm`,
+`…NumberCm`, `…MarkerCm`), at most 10 cm, prose or out of range read as
+the default and refused when typed; the two spacings as the
+`LxExampleSpace*` styles, equal ones on the parent with the children
+inheriting, unequal ones on each child (`LxApplySpacing`). The planner
+applies them as `LxLayOut` does: the indent comes off the text block and
+sets the table in (`w:tblInd`, `SetTableInd`; no `tblInd` at all without
+one, so the converter comparison still holds), the number and letter
+settings are floors.
+
+- **One document, three tools.** A `.docx`'s custom properties are what
+  LibreOffice calls user-defined ones — measured: OnlyOffice's
+  `LinguExxIndentCm` 0.9 and `LinguExxNumberCm` 2 read back through the
+  API the macro's `LxOpt` uses. A test fails if the core's names or the
+  10 cm limit drift from the macro's `Const`s.
+- **Headless**, the Document Builder run stores unequal settings with the
+  plugin's own `writeLayout`, reads them back, typesets an example (table
+  set in 850 twips, number column at least 2 cm), refuses 11 cm, and sets
+  equal spacings.
+- **OnlyOffice cannot clear a child style's own value** (probed: setting
+  it to null or undefined changes nothing), so equal spacings after
+  unequal ones are written to the children too: right to look at, no
+  longer following the parent.
+- **Live:** in OnlyOffice Desktop and in Word on the web, an example typeset
+  after setting a 1.5 cm indent and 0.5 cm spacings sat 1.5 cm in with the
+  space around it. In Word the spacing change took, where changing a
+  style's font had not; the pane reads it back and would say otherwise.
+
 ## Risks, and what would settle each
 
 - **Word on the web drops or freezes fields** — S6. Mitigation above:
@@ -732,8 +765,8 @@ Office faces besides Aptos was done the same day.)
 
 - **Trees and movement arrows.** Office.js draws shapes poorly and the
   macro's tree code is a quarter of it. Revisit after Phase 4.
-- **The layout dialog.** Defaults come from `styles.py`; a settings pane
-  is later.
+- ~~**The layout dialog.**~~ Asked for and built, 2026-09-26: see "Example
+  layout" below.
 - **VBA.** Windows/Mac desktop only, has no text-width API, and would be
   a fourth implementation.
 - **Publishing** to Microsoft AppSource or the OnlyOffice plugin
