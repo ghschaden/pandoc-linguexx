@@ -202,7 +202,16 @@ class Reader {
       }
       let kid;
       if (c === "[") kid = this.node();
-      else { // a bare word is a leaf
+      else if (c === ",") {
+        // A comma where a child should begin: an option written after a
+        // label's closing brace -- "[{the big tree}, roof]" -- where it
+        // belongs inside.  Read on, the comma is an empty leaf and "roof"
+        // a word of the tree, drawn without a word said.
+        const after = strip(this.nodes[prev < 0 ? n : prev].label);
+        this.err = `A comma stands on its own after "${after}", so what follows it would be drawn ` +
+          `as words of the tree.\n\nA node option goes inside the braces, with its label: {${after}, roof}.`;
+        return -1;
+      } else { // a bare word is a leaf
         kid = this.newNode();
         if (kid >= 0) {
           this.nodes[kid].label = this.token();

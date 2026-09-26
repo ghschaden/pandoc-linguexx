@@ -88,6 +88,18 @@
       "lines": [
         "[CP [DP what] [TP [VP saw]]] \\draw(a)--(b)"
       ]
+    },
+    "comma_after_braces": {
+      "lines": [
+        "[DP tous [D' [D° les] [NP [{animaux marins}, roof]]]]"
+      ],
+      "why": "An option after a label's closing brace was read as an empty leaf and a leaf 'roof', and drawn without a word said (seen live, 2026-09-26)."
+    },
+    "comma_after_leaf": {
+      "lines": [
+        "[NP {animaux marins}, roof]"
+      ],
+      "why": "The same after a braced leaf: the comma follows a child, not the node's own label."
     }
   },
   "MOVES": {
@@ -1002,6 +1014,12 @@
     },
     "TREE_REFUSE/movement_arrow": {
       "error": "This does not read LaTeX (anything with a backslash).\n\nFor movement, name the two nodes and put a move line under the tree:\n    [CP [DP,name=wh what] [TP [V saw] [DP,name=t __]]]\n    move t -> wh"
+    },
+    "TREE_REFUSE/comma_after_braces": {
+      "error": "A comma stands on its own after \"animaux marins\", so what follows it would be drawn as words of the tree.\n\nA node option goes inside the braces, with its label: {animaux marins, roof}."
+    },
+    "TREE_REFUSE/comma_after_leaf": {
+      "error": "A comma stands on its own after \"animaux marins\", so what follows it would be drawn as words of the tree.\n\nA node option goes inside the braces, with its label: {animaux marins, roof}."
     },
     "MOVES/wh": {
       "judgment": "",

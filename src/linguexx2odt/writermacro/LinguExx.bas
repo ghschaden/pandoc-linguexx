@@ -3988,7 +3988,7 @@ End Function
 
 Function LxTNode() As Integer
     Dim n As Integer, nKid As Integer, nPrev As Integer
-    Dim c As String
+    Dim c As String, sAfter As String
 
     n = LxNewNode()
     If n < 0 Then
@@ -4015,6 +4015,20 @@ Function LxTNode() As Integer
         End If
         If c = "[" Then
             nKid = LxTNode()
+        ElseIf c = "," Then
+            ' A comma where a child should begin: an option written after a
+            ' label's closing brace -- "[{the big tree}, roof]" -- where it
+            ' belongs inside.  Read on, the comma is an empty leaf and
+            ' "roof" a word of the tree, drawn without a word said.
+            If nPrev < 0 Then sAfter = LxNdLabel(n) Else sAfter = LxNdLabel(nPrev)
+            sAfter = LxStrip(sAfter)
+            LxTErr = "A comma stands on its own after """ & sAfter & """, so " & _
+                     "what follows it would be drawn as words of the tree." & _
+                     Chr(10) & Chr(10) & _
+                     "A node option goes inside the braces, with its label: {" & _
+                     sAfter & ", roof}."
+            LxTNode = -1
+            Exit Function
         Else                                  ' a bare word is a leaf
             nKid = LxNewNode()
             If nKid >= 0 Then
