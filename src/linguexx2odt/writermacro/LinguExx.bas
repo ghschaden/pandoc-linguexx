@@ -2221,10 +2221,20 @@ End Sub
 ' comes out with no direct formatting at all, and a run that carried
 ' LxLeipzig still answers to LxLeipzig afterwards instead of being frozen
 ' into hard small caps.
+'
+' A run with no style has its style taken off, not left alone: inserted
+' text inherits the style of the text before it, so an unstyled word after
+' an LxUnderline one came out answering to LxUnderline.  It looked right —
+' the direct formatting below cancels the underline — and restyling
+' LxUnderline then changed words that were never underlined.
 Sub LxApplyFmt(oCur As Object, nFmt As Integer)
     If nFmt < 0 Then Exit Sub
     On Error Resume Next
-    If Len(LxFmtStyle(nFmt)) > 0 Then oCur.CharStyleName = LxFmtStyle(nFmt)
+    If Len(LxFmtStyle(nFmt)) > 0 Then
+        oCur.CharStyleName = LxFmtStyle(nFmt)
+    Else
+        oCur.setPropertyToDefault("CharStyleName")
+    End If
     If oCur.CharCaseMap <> LxFmtCase(nFmt) Then oCur.CharCaseMap = LxFmtCase(nFmt)
     If oCur.CharWeight <> LxFmtWeight(nFmt) Then oCur.CharWeight = LxFmtWeight(nFmt)
     If (oCur.CharPosture <> com.sun.star.awt.FontSlant.NONE) <> LxFmtItalic(nFmt) Then

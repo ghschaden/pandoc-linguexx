@@ -2323,6 +2323,7 @@ def check_untypeset(ctx, out: Path, profile: Path) -> int:
     bad += check_untypeset_references(ctx, out, profile)
     bad += check_untypeset_adjacent(ctx)
     bad += check_untypeset_converted(ctx, out)
+    bad += check_untypeset_converted_charstyles(ctx, out)
     bad += check_untypeset_annot(ctx, out)
     bad += check_untypeset_trees(ctx)
     bad += check_untypeset_formatting(ctx)
@@ -2486,6 +2487,166 @@ def check_untypeset_converted(ctx, out: Path) -> int:
         return 1
     print("    ok — a converted document untypesets and rebuilds, bands and all")
     return 0
+
+
+# Each formatted word is the widest thing in its column, so a column is as
+# wide as the macro measured that word to be.  Sub- and superscripts are
+# long because they are the ones whose width the format changes.
+CHARSTYLED = r"""\begin{document}
+Some prose before it.
+
+\ex. \gll \underline{Katerchen} a b \\
+     cat \textsubscript{nominative} \textsuperscript{accusative} \\
+\glt `The kitten.'
+
+Prose after it.
+\end{document}"""
+
+#: the converter's character styles, and the direct formatting that draws
+#: the same thing.  The heights are the ones styles.py writes.
+CHARSTYLE_DIRECT = {
+    "LxUnderline": {"CharUnderline": UNDERLINE_SINGLE},
+    "LxSubscript": {"CharEscapement": -33, "CharEscapementHeight": 58},
+    "LxSuperscript": {"CharEscapement": 33, "CharEscapementHeight": 58},
+}
+
+
+def _restyle(doc, how: str) -> None:
+    """Replace every converter character style in the body text.
+
+    `direct` draws the same thing by hand, which is the path
+    check_formatting_round_trip already vouches for; `plain` removes it;
+    anything else leaves the document alone.
+    """
+    if how not in ("direct", "plain"):
+        return
+    for para in paragraphs(doc):
+        if not para.supportsService("com.sun.star.text.Paragraph"):
+            continue
+        it = para.createEnumeration()
+        while it.hasMoreElements():
+            por = it.nextElement()
+            props = CHARSTYLE_DIRECT.get(por.CharStyleName)
+            if props is None:
+                continue
+            por.setPropertyToDefault("CharStyleName")
+            if how == "direct":
+                for k, v in props.items():
+                    por.setPropertyValue(k, v)
+
+
+def _word_formats(doc, in_table: bool) -> list:
+    """(word, (style, underline, escapement height)) for every word of the
+    body text, or of the table's cells."""
+    runs = []
+    for el in paragraphs(doc):
+        if el.supportsService("com.sun.star.text.TextTable"):
+            if in_table:
+                for name in el.getCellNames():
+                    it = el.getCellByName(name).getText().createEnumeration()
+                    while it.hasMoreElements():
+                        runs.extend(_portions(it.nextElement()))
+        elif not in_table:
+            runs.extend(_portions(el))
+    return [(w, (por.CharStyleName, por.CharUnderline,
+                 por.CharEscapementHeight))
+            for por in runs for w in por.getString().split()]
+
+
+def _portions(para) -> list:
+    out, it = [], para.createEnumeration()
+    while it.hasMoreElements():
+        por = it.nextElement()
+        if por.TextPortionType == "Text":
+            out.append(por)
+    return out
+
+
+def check_untypeset_converted_charstyles(ctx, out: Path) -> int:
+    r"""\underline, \textsubscript and \textsuperscript survive the macro.
+
+    The converter writes them as character styles; the macro was taught
+    them as direct formatting.  It reads a run's properties, and the
+    question is whether those include what a style supplies -- if not, the
+    style's name survives a rebuild while the word is measured as plain
+    text.  So the same untypeset example is rebuilt three ways in the same
+    document: styles kept, styles swapped for the equivalent direct
+    formatting, styles removed.  The first two must agree to the column,
+    and the third must not, or the comparison proves nothing.
+    """
+    tex = out / "charstyled.tex"
+    tex.write_text(CHARSTYLED, encoding="utf-8")
+    odt = out / "charstyled.odt"
+    built = subprocess.run(
+        [sys.executable, "-m", "linguexx2odt.cli", str(tex), "-o", str(odt)],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    if built.returncode or not odt.is_file():
+        print(f"    skipped — the converter did not run: "
+              f"{(built.stdout + built.stderr).strip()[:80]!r}")
+        return 0
+
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", ctx)
+    widths: dict[str, list[float]] = {}
+    formats: dict[str, tuple] = {}
+    for how in ("kept", "direct", "plain"):
+        doc = desktop.loadComponentFromURL(odt.as_uri(), "_blank", 0, ())
+        table = [el for el in paragraphs(doc)
+                 if el.supportsService("com.sun.star.text.TextTable")][0]
+        vc = doc.getCurrentController().getViewCursor()
+        vc.gotoRange(table.getCellByName("A1").getText().getStart(), False)
+        msg = run(ctx, "UntypesetSelectionQuiet")
+        if not msg and how == "kept":
+            formats.update((f"line {w}", f) for w, f in _word_formats(doc, False))
+        if not msg:
+            _restyle(doc, how)
+            select_paras(doc, 1, 3)
+            msg = run(ctx)
+        if msg:
+            doc.dispose()
+            print(f"    FAIL: charstyles ({how}): macro said {msg!r}")
+            return 1
+        if how == "kept":
+            formats.update((f"cell {w}", f) for w, f in _word_formats(doc, True))
+        rebuilt = out / f"charstyled-{how}.odt"
+        doc.storeToURL(rebuilt.as_uri(),
+                       (PropertyValue("FilterName", 0, "writer8", 0),))
+        doc.dispose()
+        widths[how] = column_widths(rebuilt)[:-1]    # not the filler column
+
+    # Asked of the untypeset lines and of the rebuilt cells, and of the
+    # unformatted words too: a style that leaks onto its neighbour is drawn
+    # correctly -- direct formatting cancels it -- and is only found by
+    # asking which style the neighbour answers to.
+    bad = 0
+    plain_fmt = ("", 0, 100)
+    want = {"Katerchen": ("LxUnderline", UNDERLINE_SINGLE, 100),
+            "nominative": ("LxSubscript", 0, 58),
+            "accusative": ("LxSuperscript", 0, 58),
+            "a": plain_fmt, "b": plain_fmt, "cat": plain_fmt,
+            "\u2018The": plain_fmt, "kitten.\u2019": plain_fmt}
+    for where in ("line", "cell"):
+        for word, fmt in want.items():
+            got = formats.get(f"{where} {word}")
+            if got != fmt:
+                print(f"    FAIL: charstyles: {word!r} as a {where} is {got}, "
+                      f"not {fmt}")
+                bad += 1
+    kept, direct, plain = widths["kept"], widths["direct"], widths["plain"]
+    if len(kept) != len(direct) or any(
+            abs(a - b) > 0.005 for a, b in zip(kept, direct)):
+        print(f"    FAIL: charstyles: measured {kept} with the styles, "
+              f"{direct} with the same formatting applied by hand")
+        bad += 1
+    if kept == plain:
+        print(f"    FAIL: charstyles: the plain control measured the same "
+              f"{plain}, so the comparison shows nothing")
+        bad += 1
+    if not bad:
+        print(f"    ok — styles kept and measured as drawn: {kept} cm, "
+              f"the same as by hand; {plain} cm without them")
+    return bad
 
 
 ANNOTATED = r"""\begin{document}
