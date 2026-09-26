@@ -183,7 +183,8 @@ markup for `tests/e2e/word-sample.tex` — five example tables, the
 cross-reference paragraph, `styles.xml` — packed as a flat OPC package
 for `Body.insertOoxml`. Each step reports tables, fields (code and
 displayed result), bookmarks and `Lx` styles back through the API.
-**Word desktop is not yet tested**, and it is what the gate names.
+**Word desktop was not tested, on purpose** — see the decision after
+fact 5.
 
 1. **Fields, bookmarks and styles survive `insertOoxml`.** All nine
    fields arrived as fields with their cached values (SEQ 1–5; REF 1,
@@ -232,6 +233,16 @@ LibreOffice on open, or by Word desktop on Ctrl+A, F9" (the latter as
 plan-docx.md fact 15 found for the converter's files). Untested and the
 last web route: replacing each whole field through `insertOoxml` at its
 bookmark's range, which is the call fact 2 shows to be fragile.
+
+**Decision (2026-09-26): no desktop test as a gate.** The web fixes the
+design whatever desktop does. An add-in that must work in Word on the
+web must work where nothing renumbers, so nothing in it may depend on
+renumbering; a desktop test could only add a convenience on top, and
+that convenience can be discovered at run time (call `updateResult()`,
+read the results back) rather than settled in advance. Desktop Word is
+tested in Phase 2 as ordinary testing of a working add-in, not as a
+spike. What desktop Word does with these fields on Ctrl+A, F9 is
+already known for the converter's markup (plan-docx.md fact 15).
 
 ## The shape
 
@@ -306,7 +317,9 @@ starts until its gate is decided.
 **Gate.** Word proceeds if S6 shows live, renumbering fields on desktop.
 A web-only failure narrows the promise ("Word desktop; on the web the
 numbers are fixed until opened on desktop") rather than stopping the work,
-and the README says so. OnlyOffice proceeds if S7 shows a `SEQ` with a
+and the README says so. **Decided on the web results (S6): Word
+proceeds, designed for a host that never renumbers** — see the decision
+under S6 and "Numbering without recalculation" in Phase 2. OnlyOffice proceeds if S7 shows a `SEQ` with a
 correct cache. Without that, the plugin would produce numbers that are
 text by another route, which is the one thing this project exists not to
 do, so OnlyOffice stops there.
@@ -332,16 +345,59 @@ a job of its own, like the macro's.
 
 ### Phase 2 — Word MVP (~4 days)
 
-*Typeset selection*, *Insert reference*, and the `Lx*` styles, injected
-on first use as `postprocess_docx` injects them. The markup is a port of
+*Typeset selection*, *Insert reference*, and the `Lx*` styles, which
+travel in the inserted package's styles part (S6 fact 1). They are sent
+only when `getStyles()` lacks one: whether re-sending a styles part the
+document already has is harmless was never isolated from the page-state
+failure of S6 fact 2. The markup is a port of
 `emit_docx`, checked by a differential test: the same example through
 Python and through JavaScript gives the same `w:tbl` modulo ids. Selection
 formatting (italics, small caps, the three new character styles) is read
 from `Range.getOoxml()` runs, not from the text, because the text loses it.
 The macro learned this the hard way (`check_small_caps`).
 
+**Numbering without recalculation.** S6 showed that Word on the web
+neither recalculates fields nor lets an add-in write their values, so
+the design assumes a host that never renumbers, and gets better where
+one does:
+
+- **The new example is right when it is inserted.** Before inserting,
+  the add-in counts the `SEQ NumEx` fields ahead of the insertion point
+  (`Body.fields` is in document order, S6 fact 5) and writes that number
+  into the cached value of the field it inserts. The example the user
+  just made never shows a wrong number, on any host. This is the
+  converter's rule — the cache is what some reader sees — applied at
+  insertion time.
+- **A new *Insert reference* is right when it is inserted**, by the same
+  map: bookmark → number, cached into the `REF` it writes.
+- **What goes stale is said, not hidden.** Inserting before existing
+  examples leaves the later numbers and the references to them stale on
+  a host that does not recalculate. The add-in then tries
+  `updateResult()` on every field and reads the results back; if they
+  now match the map, it says nothing. If they do not — Word on the web
+  — it tells the user which examples are stale and how they renumber:
+  "Word desktop: Ctrl+A, F9; LibreOffice: on opening". It never claims
+  numbers it has not checked.
+- **No renumbering by rewriting.** Writing field values is refused on
+  the web (`NotAllowed`, S6 fact 4); replacing whole fields through
+  `insertOoxml` is the call S6 fact 2 found fragile. Neither is used.
+
+**Two rules from S6 for every insertion:**
+
+- **A paragraph after every example.** Word joins adjacent tables
+  (S6 fact 3), so the add-in never leaves an example table touching
+  another, and a test asserts it.
+- **Check, don't trust; reload after an error.** `insertOoxml` can
+  insert and still throw, and an error leaves the page unable to take
+  another insertion until it is reloaded (S6 fact 2). After every
+  insertion the add-in reads the document back; after any error it
+  stops, says what it found, and asks for a reload before doing
+  anything else.
+
 Hosted for development from a local HTTPS server and sideloaded; for use,
-from a static site (GitHub Pages). The manifest points at it.
+from a static site (GitHub Pages). The manifest points at it. Tested in
+Word on the web and, once the add-in works, in Word desktop — where the
+`updateResult()` branch above is the thing to watch.
 
 ### Phase 3 — OnlyOffice MVP (~4 days, only if the S7 gate passed)
 
