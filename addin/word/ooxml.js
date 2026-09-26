@@ -158,6 +158,9 @@ export const TABLE_PR =
  * opts.number: {id, name, cached} for the SEQ field and its bookmark.
  * opts.formats: the host's formats the cells' tag marks stand for.
  * opts.brackets: {left, right} round the number, "(" and ")" by default.
+ * opts.tree: (lines, cellCm) -> the run that draws them (drawing.js's treeRun), for
+ *   a numbered tree's items; the converter has no trees, so without it a
+ *   tree cell is left empty.
  */
 export function exampleTable(ex, plan, opts = {}) {
   const formats = opts.formats || [];
@@ -166,15 +169,16 @@ export function exampleTable(ex, plan, opts = {}) {
   const number = () =>
     (left ? run(left) : "") + sequenceField(opts.number || { id: 1, name: "NumEx0", cached: "1" }) +
     (right ? run(right) : "");
-  const content = (c) => {
+  const content = (c, widthCm) => {
     if (c.kind === "number") return number();
     if (c.kind === "text") return runs(c.text, formats);
+    if (c.kind === "tree" && opts.tree) return opts.tree(c.lines, widthCm);
     return "";
   };
   const t = tableRows(ex, plan);
   const gridCols = t.grid.map((w) => `<w:gridCol w:w="${dxa(w)}"/>`).join("");
   const rows = t.rows.map((row) =>
-    "<w:tr>" + row.map((c) => cell(c.widthCm, content(c.content), c.span, c.style)).join("") + "</w:tr>");
+    "<w:tr>" + row.map((c) => cell(c.widthCm, content(c.content, c.widthCm), c.span, c.style)).join("") + "</w:tr>");
   // The document's indent (core/settings.js), in CT_TblPr's place: after
   // tblW, before the layout.  None at all when there is none, which keeps
   // the markup the converter's, string for string.

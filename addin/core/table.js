@@ -20,6 +20,8 @@
  *   {kind: "empty"}
  *   {kind: "number"}                  the example number, whatever carries it
  *   {kind: "text", text}              a tagged string (see parse.js)
+ *   {kind: "tree", lines}             a tree item's lines, for the host to
+ *                                     draw (core/tree.js's drawTree)
  */
 
 import { NAMES } from "./constants.js";
@@ -89,7 +91,10 @@ export function tableRows(ex, plan) {
         });
       });
     } else {
-      rows.push([...leadCells(true), bodySpan(text(body.text)), ...annotCell(true)]);
+      // A tree takes the row and the merged cell an unglossed item gets;
+      // only what is in the cell differs (LxWideCellTree).
+      const content = body.tree ? { kind: "tree", lines: body.tree } : text(body.text);
+      rows.push([...leadCells(true), bodySpan(content), ...annotCell(true)]);
       headUsed = true;
     }
 

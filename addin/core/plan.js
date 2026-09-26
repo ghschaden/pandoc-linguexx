@@ -50,12 +50,13 @@ export function runsOf(cell, formats = []) {
 /**
  * The parser's items as an example in the shape of ir.Example: one body
  * for a plain example, one item per letter for a paradigm.  One tier is
- * unglossed running text, its words joined as LxJoinWords joins them.
+ * unglossed running text, its words joined as LxJoinWords joins them.  A
+ * tree item has no tiers and is planned as an unglossed one.
  */
 export function toExample(items, index = 0) {
   const body = (it) => {
     const glossed = it.tiers.length > 1;
-    return {
+    const b = {
       judgment: it.judgment,
       text: glossed ? "" : (it.tiers[0] || []).join(" "),
       tiers: glossed ? it.tiers : [],
@@ -63,6 +64,10 @@ export function toExample(items, index = 0) {
       source: "",
       annot: it.annot,
     };
+    // A tree item (tree.js's makeTreeItem) is planned as the unglossed item
+    // whose row it takes, and keeps its lines for the cell to draw.
+    if (it.tree) b.tree = it.tree;
+    return b;
   };
   if (items.length === 1 && !items[0].marker) {
     return { index, customLabel: "", body: body(items[0]), items: [] };

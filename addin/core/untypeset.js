@@ -5,9 +5,12 @@
 
 /**
  * A built example back as the lines it was typed as -- the Writer
- * macro's LxReadTable, ported (trees aside: the add-ins draw none).
+ * macro's LxReadTable, ported.
  *
- * It reads a table as rows of cells, each {style, text}: the paragraph
+ * It reads a table as rows of cells, each {style, text} -- and {tree} for
+ * a cell holding a drawn tree: the lines it was drawn from, which the host
+ * reads off the drawing's alt text (only off a drawing titled as ours,
+ * core/tree.js's TREE_TITLE).  The paragraph
  * style's NAME and the cell's text as a tagged string (parse.js), the
  * example number's shown digits left out -- the number is carried by its
  * field's identity, not read as a word.  Each host reads its own table
@@ -24,6 +27,9 @@ import { NAMES } from "./constants.js";
 import { strip, trimTagged } from "./parse.js";
 
 const has = (row, style) => row.some((c) => c.style === style);
+
+// Basic's Trim, which the macro reads a tree's lines back with: spaces only.
+const trimSpaces = (s) => s.replace(/^ +| +$/g, "");
 
 /**
  * An example, or a table somebody built?  Both the converter and every
@@ -115,6 +121,22 @@ export function readTable(rows) {
     } else if (has(row, NAMES.BAND_PARA)) {
       tier = 0;
       band0 = false;            // a band, not another tier
+    }
+
+    // A drawn tree gives back the lines it was drawn from, which may be
+    // several: the brackets, and a "move a -> b" under them.  The judgment
+    // mark is not put back in front -- it led those lines when they were
+    // read and leads them still -- but the letter is, because that was
+    // taken off before the item was made (LxReadTable, LxRowTree).
+    const tree = row.slice(lead).find((c) => c.tree)?.tree;
+    if (tree) {
+      tree.split("\n").forEach((t, j) => {
+        let l = trimSpaces(t);
+        if (j === 0 && mark) l = `${mark} ${l}`;
+        if (l) out.push(l);
+      });
+      tier += 1;
+      continue;
     }
 
     let line = rowText(row, lead, true);

@@ -36,11 +36,17 @@
   <h1>LinguExx</h1>
   <p class="help">Type an example as lines &mdash; object language, gloss, and a
     quoted translation; <em>a.</em>, <em>b.</em> for sub-examples; a leading
-    <em>*</em> or <em>?</em> for a judgment &mdash; select them, and typeset.</p>
+    <em>*</em> or <em>?</em> for a judgment &mdash; select them, and typeset.
+    A tree is bracket notation, <em>[DP [D the] [N tree]]</em>, with
+    <em>{braces}</em> round a label with spaces, <em>, roof</em> for a
+    triangle, and <em>move t -&gt; wh</em> under it for movement between nodes
+    named <em>[DP,name=wh what]</em>; typeset it as a tree.</p>
   <!-- Both actions first, the notes last: after an insertion near the top
        of a long document the notes run to a paragraph, and the first live
        test found "Insert reference" pushed out of sight below them. -->
   <button id="typeset" class="primary">Typeset selection</button>
+  <button id="tree">Typeset tree</button>
+  <button id="bareTree" title="A tree with no number and no table: for a footnote, a figure, a slide">Tree, no number</button>
   <button id="refs">Insert reference&hellip;</button>
   <button id="untypeset">Untypeset example</button>
   <label><input type="checkbox" id="bare"> bare number</label>

@@ -25,6 +25,7 @@
  */
 
 import { strip, tagRun } from "../core/parse.js";
+import { TREE_TITLE } from "../core/tree.js";
 import { child, findAll, parse } from "./xml.js";
 import { LEIPZIG_CHAR } from "./styles.js";
 
@@ -308,6 +309,30 @@ export function readSelection(ooxml) {
  * back as {bookmark, shown}.
  * Returns {rows, formats, number, fonts, textWidthCm, refusal}.
  */
+/**
+ * A cell's own paragraphs: at any depth (a content control may hold them),
+ * but never those inside a text box -- a drawn tree's labels are
+ * paragraphs too, and read as the cell's they would be its text.
+ */
+function ownParagraphs(el, out = []) {
+  for (const c of el.children) {
+    if (typeof c === "string" || c.name === "w:txbxContent") continue;
+    if (c.name === "w:p") out.push(c);
+    ownParagraphs(c, out);
+  }
+  return out;
+}
+
+/**
+ * The bracket notation a cell's tree was drawn from, or "": the alt text of
+ * a drawing titled as ours, and of no other -- a picture with a
+ * description is not a tree (the macro's LxShapeSource).
+ */
+function treeOf(tc) {
+  const pr = findAll(tc, "wp:docPr").find((d) => d.attrs.title === TREE_TITLE);
+  return pr ? pr.attrs.descr || "" : "";
+}
+
 export function readExampleTable(ooxml) {
   const root = parse(ooxml);
   const doc = partRoot(root, "/word/document.xml") || root;
@@ -338,7 +363,7 @@ export function readExampleTable(ooxml) {
         brk() { text += " "; },
         number(n) { if (!out.number) out.number = n; },
       };
-      for (const p of findAll(tc, "w:p")) {
+      for (const p of ownParagraphs(tc)) {
         if (!style) {
           const ppr = child(p, "w:pPr");
           const ps = ppr && child(ppr, "w:pStyle");
@@ -347,7 +372,8 @@ export function readExampleTable(ooxml) {
         if (text) text += " ";
         read(p, sink);
       }
-      row.push({ style, text });
+      const tree = treeOf(tc);
+      row.push(tree ? { style, text, tree } : { style, text });
     }
     out.rows.push(row);
   }

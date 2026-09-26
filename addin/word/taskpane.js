@@ -26,10 +26,12 @@
 
 import { LAYOUT, NAMES } from "../core/constants.js";
 import { advancesFor } from "../core/measure.js";
-import { parseLines, strip } from "../core/parse.js";
+import { looksLikeMarker, parseLines, strip } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
 import { audit, freshBookmark, isExampleNumber, numberAt, refTarget, staleMessage } from "./numbering.js";
+import { drawTree, parseTreeLines } from "../core/tree.js";
+import { MAX_DRAWING_ID, treeRun } from "./drawing.js";
 import { AFTER_EXAMPLE, exampleTable, flatPackage, sequenceRef } from "./ooxml.js";
 import { readSelection } from "./selection.js";
 import { untypesetPackage } from "./untypeset.js";
@@ -198,7 +200,21 @@ async function renumber(ctx) {
   return staleMessage(stale);
 }
 
-async function typeset() {
+/**
+ * A drawing id nobody else has: wp:docPr ids must be unique in the
+ * document.  Its shapes are numbered from id * 1000 (drawing.js), so it
+ * stays under MAX_DRAWING_ID to keep every id a signed 32-bit integer.
+ */
+const drawingId = () => 1 + Math.floor(Math.random() * (MAX_DRAWING_ID - 1));
+
+/**
+ * The lines selected, as an example -- or, with *trees*, as a numbered
+ * tree or a paradigm of them: the same table, each item's cell drawn
+ * rather than written (the Writer macro's Typeset tree).  The command
+ * decides which, never the brackets: labelled bracketing is how structure
+ * is shown inside an ordinary example too.
+ */
+async function typeset(trees = false) {
   if (broken) return say(RELOAD, "error");
   note([]);
   let name = "";
@@ -226,7 +242,7 @@ async function typeset() {
 
       const read = readSelection(ooxml.value);
       if (read.refusal) throw new Refusal(read.refusal);
-      const parsed = parseLines(read.lines);
+      const parsed = trees ? parseTreeLines(read.lines) : parseLines(read.lines);
       if (parsed.error) throw new Refusal(parsed.error);
 
       const ex = toExample(parsed.items);
@@ -260,13 +276,26 @@ async function typeset() {
       const seq = (fs) => fs.filter((f) => isExampleNumber(f.code)).length;
       const later = seq(every.items) - seq(ahead.items) - (read.number ? 1 : 0);
       needAudit = later > 0 || (read.number && String(read.number.shown).trim() !== String(n));
-      const table = exampleTable(ex, plan, { number: { id, name, cached: String(n) }, formats: read.formats });
+      const halfPoints = Math.round(size * 2);
+      const tree = (lines, cellCm) => {
+        const d = drawTree(lines, { face, pt: size, formats: read.formats });
+        if (d.error) throw new Refusal(d.error);
+        // Said, not silently produced: a tree wider than its cell hangs off
+        // the page, and shortening a label is the user's call (LxWideCellTree).
+        if (d.widthCm > cellCm + 0.005) {
+          notes.push(`A tree is ${d.widthCm.toFixed(1)} cm wide but only ${cellCm.toFixed(1)} cm is left ` +
+            "beside the number, so it will stick out. Shorten a label, or group words with {braces} " +
+            "so they share one node.");
+        }
+        return treeRun(d.shapes, { id: drawingId(), source: d.source, formats: read.formats, face, halfPoints });
+      };
+      const table = exampleTable(ex, plan, { number: { id, name, cached: String(n) }, formats: read.formats, tree });
       const have = new Set(styles.items.map((s) => s.nameLocal));
       const withStyles = STYLE_IDS.some((s) => !have.has(s));
 
       inserting = true;
       sel.insertOoxml(flatPackage(table + AFTER_EXAMPLE,
-        { withStyles, defaults: { face, halfPoints: Math.round(size * 2) } }), "Replace");
+        { withStyles, defaults: { face, halfPoints } }), "Replace");
       await ctx.sync();
     });
   } catch (e) {
@@ -327,6 +356,72 @@ async function typeset() {
 }
 
 class Refusal extends Error {}
+
+/**
+ * A tree with no number, no table and no example styles, drawn where the
+ * brackets were: for a footnote, a figure, a slide -- anywhere it should
+ * not spend an example number (the Writer macro's Typeset tree without a
+ * number, LxBareTreeCommand, whose refusals these are).
+ */
+async function bareTree() {
+  if (broken) return say(RELOAD, "error");
+  note([]);
+  const notes = [];
+  let inserting = false;
+  try {
+    await Word.run(async (ctx) => {
+      const sel = ctx.document.getSelection();
+      const ooxml = sel.getOoxml();
+      const typed = sel.paragraphs.getFirst().font;
+      typed.load("name,size");
+      await ctx.sync();
+
+      const read = readSelection(ooxml.value);
+      if (read.refusal) throw new Refusal(read.refusal);
+      // Drawing it anyway would destroy the field and every reference to it.
+      if (read.number) {
+        throw new Refusal("The selection carries an example number, and a tree without a number has " +
+          "nowhere to put it.\n\nDrawing it would break every cross-reference to that example.  Use " +
+          "Typeset tree, or delete the number first and lose the references deliberately.");
+      }
+      if (!read.lines.length) throw new Refusal("Select the bracket notation of the tree first.");
+      const face = typed.name || LAYOUT.font_name;
+      const size = typed.size || LAYOUT.font_pt;
+      const d = drawTree(read.lines, { face, pt: size, formats: read.formats });
+      if (d.error) {
+        if (looksLikeMarker(read.lines[0])) {
+          throw new Refusal("That looks like a paradigm.  A tree without a number cannot carry a letter, " +
+            "because the letters live in the table only the numbered command builds.\n\nUse Typeset tree.");
+        }
+        throw new Refusal(d.error);
+      }
+      if (!d.known) {
+        notes.push(`The labels are estimated from Times New Roman's metrics, and this text is in ${face}, ` +
+          "which has not been measured.");
+      }
+      const width = read.textWidthCm ?? LAYOUT.text_width_cm;
+      if (d.widthCm > width) {
+        notes.push(`The tree is ${d.widthCm.toFixed(1)} cm wide but the text block is only ${width.toFixed(1)} cm, ` +
+          "so it will stick out.\n\nShorten a label, or group words with {braces} so they share one node.");
+      }
+      // No hanging column without a table: a judgment mark becomes the text
+      // it would have been had it been typed there.
+      const halfPoints = Math.round(size * 2);
+      const mark = d.judgment ? `<w:r><w:t xml:space="preserve">${d.judgment}</w:t></w:r>` : "";
+      const run = treeRun(d.shapes, { id: drawingId(), source: d.source, formats: read.formats, face, halfPoints });
+      inserting = true;
+      sel.insertOoxml(flatPackage(`<w:p>${mark}${run}</w:p>`, { defaults: { face, halfPoints } }), "Replace");
+      await ctx.sync();
+    });
+  } catch (e) {
+    if (e instanceof Refusal) return say(e.message, "error");
+    if (!inserting) return say(`Could not read the selection: ${e.message}`, "error");
+    broken = true;
+    return say(`The tree may not have been inserted: ${RELOAD} (Word said: ${e.message})`, "error");
+  }
+  say("Done.", "ok");
+  note(notes);
+}
 
 /**
  * The example the cursor is in, back as the lines it was typed as, its
@@ -425,7 +520,9 @@ Office.onReady(() => {
     say("This version of Word lacks the field API the add-in needs (WordApi 1.5).", "error");
     return;
   }
-  $("typeset").onclick = () => busy("Typesetting…", typeset);
+  $("typeset").onclick = () => busy("Typesetting…", () => typeset(false));
+  $("tree").onclick = () => busy("Drawing the tree…", () => typeset(true));
+  $("bareTree").onclick = () => busy("Drawing the tree…", bareTree);
   $("refs").onclick = () => busy("Reading the document's examples…", listExamples);
   $("untypeset").onclick = () => busy("Untypesetting…", untypeset);
   $("applyLayout").onclick = () => busy("Applying the layout…", applyLayout);
