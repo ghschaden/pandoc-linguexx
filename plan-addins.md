@@ -658,11 +658,27 @@ Word wrote the resolved face into the style on import.
 - The add-in reads back the face Word set the example in, and says so if
   it is not the one asked for.
 
-### Phase 5 — say so (½ day)
+### Phase 5 — say so — DONE (2026-09-26)
 
 README section, `docs/guide-fr.md`, the "What it does not, and says so"
 rows (trees; web limits if S6 finds any), and CLAUDE.md: a third copy of
 the constants, where it is generated, and how its suite is run.
+
+Done: "Writing examples in Word and OnlyOffice" in the README and Partie F
+in the French guide — what the add-ins do, a table of what they do not
+(Word on the web never renumbers; no trees; no layout dialog; a table of
+several examples refused; documents spoiled by an earlier build; Word for
+the desktop untried), and how to install them, with the one install path
+actually tried said to be the one. The `.docx` section no longer says it
+has never been opened in Word, which stopped being true on 2026-09-25, and
+gains a row: Word joins a converted document's consecutive examples into
+one table. CLAUDE.md was kept current phase by phase.
+
+**Still open after the five phases**, each the user's to decide or to try:
+Word for the desktop (the `updateResult()` branch); whether the converter
+should put a paragraph between consecutive `.docx` examples, which would
+end the joined tables; publishing either add-in; and measuring faces
+besides Aptos.
 
 ## Risks, and what would settle each
 

@@ -1,13 +1,14 @@
 # pandoc-linguexx — guide d'utilisation
 
-Ce guide explique comment installer et utiliser les deux outils du projet :
+Ce guide explique comment installer et utiliser les outils du projet :
 
 | outil | à quoi il sert |
 |---|---|
-| **`linguexx2odt`** | convertit un document LaTeX contenant des exemples [linguexx](../../linguexx) en fichier LibreOffice Writer |
+| **`linguexx2odt`** | convertit un document LaTeX contenant des exemples [linguexx](../../linguexx) en fichier LibreOffice Writer (ou Word) |
 | **`LinguExx.bas`** | macro Writer qui met en forme des exemples glosés directement dans Writer, sans passer par LaTeX |
+| **les compléments Word et OnlyOffice** | la même chose que la macro, dans Word et dans OnlyOffice (partie F) |
 
-Les deux sont complémentaires et produisent **le même objet** : un tableau
+Tous sont complémentaires et produisent **le même objet** : un tableau
 sans bordures, un numéro qui est un champ vivant, et les mêmes styles
 nommés. On peut convertir un article depuis LaTeX puis continuer à
 ajouter des exemples à la main dans Writer.
@@ -176,10 +177,15 @@ ou non. Ils diffèrent sur ce point : LibreOffice recalcule, OnlyOffice 9.4
 non. Le champ reste vivant dans les deux cas, ce qui est ce qui permet la
 renumérotation à l'édition.
 
-**Le fichier n'a jamais été ouvert dans Word.** Tout a été mesuré avec
-LibreOffice, validé contre les schémas ECMA-376 transitional, et ouvert
-dans OnlyOffice comme second lecteur indépendant. `WORD-TESTS-TODO.md` dit
-ce qu'il reste à demander à Word lui-même.
+**Le fichier se lit correctement dans Word 365, LibreOffice et OnlyOffice
+9.4.** Word ne propose pas de le réparer, et insérer un exemple y renumérote
+les suivants, renvois compris (`WORD-TESTS-TODO.md` donne les tests). Il
+est aussi validé contre les schémas ECMA-376 transitional. OnlyOffice met
+un tableau en page d'après la largeur de ses cellules, là où Word et
+LibreOffice suivent la grille de colonnes ; jusqu'au 26 septembre 2026, les
+cellules d'un exemple en bandes ou d'un paradigme ne concordaient pas avec
+la grille — invisible ailleurs, des lettres en lamelles dans OnlyOffice.
+C'est corrigé, et un test y veille.
 
 Le `.odt` reste le format de référence : c'est celui dont relèvent la macro
 Writer, le document de référence et ce manuel.
@@ -224,6 +230,7 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignorés — ils décrivent ce qu'un lecteur d'écran dit d'un PDF, ce qui n'a pas d'équivalent ODT |
 | syntaxe gb4e `exe`/`xlist`, mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
+| exemples consécutifs, `.docx` seulement | chacun est un tableau dans le fichier, mais Word réunit les tableaux qui se touchent : une suite d'exemples y devient un seul tableau. L'aspect est juste ; déplacer ou supprimer un exemple se fait à l'intérieur de ce tableau, et le complément Word refuse d'en *défaire* un (partie F) |
 
 Lisez les avertissements : ils désignent précisément les endroits à
 reprendre à la main.
@@ -596,6 +603,79 @@ sous-exemples sélectionné à partir du milieu.
 
 Le fichier LaTeX doit être en **UTF-8**. C'est la seule chose que le
 convertisseur suppose du codage.
+
+---
+
+# Partie F — les compléments Word et OnlyOffice
+
+Deux compléments font dans Word et dans OnlyOffice ce que la macro fait dans
+Writer. On sélectionne les lignes d'un exemple, et elles deviennent un
+exemple numéroté à numéro vivant — le même tableau que le convertisseur,
+les mêmes styles, la même séquence `NumEx`.
+
+## F.1 Ce qu'ils font
+
+- **Mettre en forme la sélection** (*Typeset selection*). Les lignes se
+  tapent comme pour la macro : la langue objet, les gloses, une traduction
+  entre guillemets en dernier ; `a.`, `b.` pour les sous-exemples ; un `*`
+  ou un `?` en tête pour un jugement ; `{accolades}` pour garder des mots
+  dans une colonne ; `\exannot{…}` pour une étiquette dans sa colonne.
+- **Insérer un renvoi** (*Insert reference…*) : la liste des exemples du
+  document s'affiche ; on en choisit un, et un renvoi vivant est inséré au
+  curseur, `(3)` — ou `3` avec *bare number*.
+- **Défaire un exemple** (*Untypeset example*) : l'exemple où se trouve le
+  curseur redevient ses lignes, avec son numéro — le même champ, celui que
+  visent les renvois — en tête de la première. On corrige, on sélectionne,
+  on remet en forme : même exemple, même numéro, renvois intacts.
+- La mise en forme appliquée à la main passe (petites capitales, italique,
+  gras, soulignement, exposants et indices, styles de caractère), et elle
+  est mesurée telle qu'elle est dessinée.
+- **L'exemple prend la police du document, et les colonnes sont mesurées
+  pour elle.** Les polices à métrique Times et Aptos (la police par défaut
+  de Word) ont des métriques mesurées ; pour une autre police, l'estimation
+  part de Times, et le volet le signale.
+
+## F.2 Ce qu'ils ne font pas, et le disent
+
+| | Word | OnlyOffice |
+|---|---|---|
+| renumérotation après une insertion | Word pour le bureau : Ctrl+A, F9. **Word sur le web ne renumérote jamais** et n'y autorise pas un complément : le nouvel exemple est bien numéroté, et le volet dit quels numéros et renvois sont périmés | immédiate — et tous les autres champs du document sont rafraîchis avec |
+| arbres | pas dessinés ; la notation à crochets reste du texte — utilisez la macro | pareil |
+| la boîte « Example layout » | aucune : les longueurs sont celles du convertisseur, l'espace autour d'un exemple est dans les styles `LxExampleSpace*` | pareil |
+| plusieurs exemples dans un tableau | *Untypeset* refuse (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
+| un document où une version antérieure du complément a écrit | son style `LxExampleCell` peut être en Times New Roman : Styles ▸ LxExampleCell ▸ Modifier ▸ la police du document | — |
+| où il a tourné | Word sur le web. **Word pour le bureau n'a pas été essayé** | OnlyOffice Desktop 9.4 |
+
+Word sur le web est lent — chaque question d'un complément est un aller-retour
+réseau — et un clic peut prendre quelques secondes ; le volet désactive ses
+boutons pendant que Word travaille.
+
+## F.3 Installation
+
+Aucun des deux n'est publié.
+
+**Word.** Le complément doit être servi en HTTPS ; pour l'instant, par un
+serveur sur votre propre machine :
+
+```
+python3 tools/serve_addin.py      # https://localhost:3000, certificat créé une fois
+```
+
+Ouvrez une fois <https://localhost:3000/word/taskpane.html> et acceptez le
+certificat, puis dans Word : Accueil ▸ Compléments ▸ Plus de compléments ▸
+Mes compléments ▸ *Charger mon complément*, et choisissez
+`addin/word/manifest.xml`. Un bouton **LinguExx ▸ Examples** apparaît dans
+l'onglet Accueil. Le serveur doit tourner tant qu'on se sert du complément.
+
+**OnlyOffice.** `make onlyoffice` construit l'extension dans
+`dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/`. Copiez ce dossier
+dans le dossier des extensions utilisateur d'OnlyOffice Desktop et
+redémarrez ; **LinguExx** apparaît dans l'onglet Modules complémentaires.
+Pour la version Flatpak, ce dossier est
+`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`
+— le seul endroit où cela a été essayé. `dist/linguexx-onlyoffice.plugin`
+est le même dossier compressé, pour le gestionnaire d'extensions
+d'OnlyOffice.
 
 ---
 

@@ -207,11 +207,15 @@ document reads right whether or not your reader recalculates fields on
 open. They differ about that: LibreOffice recalculates, OnlyOffice 9.4 does
 not. The field stays live either way, which is what makes editing renumber.
 
-**It has never been opened in Word.** Everything is measured through
-LibreOffice, validated against the ECMA-376 transitional schemas
-(`make schemas`, then `tools/validate_docx.py`), and opened in OnlyOffice as
-a second independent reader. `WORD-TESTS-TODO.md` says what is left to ask
-of Word itself, and how to build the file to ask it with.
+**It reads correctly in Word 365, LibreOffice and OnlyOffice 9.4.** Word
+does not offer to repair it, and inserting an example there renumbers the
+rest, references included (`WORD-TESTS-TODO.md` has the tests and how to
+repeat them). It is also validated against the ECMA-376 transitional
+schemas (`make schemas`, then `tools/validate_docx.py`). OnlyOffice lays a
+table out from its cells' widths where Word and LibreOffice use the column
+grid, and until 2026-09-26 a banded or paradigm example's cell widths
+disagreed with its grid — invisible in the other two, letters in slivers in
+OnlyOffice. They agree now, and a test holds them to it.
 
 The `.odt` target remains the reference one: it is what the Writer macro,
 the reference document and the French manual are about.
@@ -251,6 +255,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
 | an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
 | math inside examples | handed to pandoc; may not survive |
+| consecutive examples, `.docx` only | each is its own table in the file, but Word joins tables that touch, so in Word a run of examples is one table: it looks right, and moving or deleting one example means working inside that table. The Word add-in's *Untypeset* refuses such a table |
 | anything else unknown | handed to pandoc, as `opendocument` or `openxml` |
 
 ### Why `\GlossTransSide` is normalised rather than reproduced
@@ -415,6 +420,74 @@ or paste the source in by hand — it ships with the package, so
 
 See [`docs/macro.md`](docs/macro.md) for the details and the trade-offs.
 
+## Writing examples in Word and OnlyOffice
+
+Two add-ins do in Word and in OnlyOffice what the Writer macro does in
+Writer. Select the lines of an example and they become a numbered example
+with a live number — the same table the converter writes, the same named
+styles, the same `NumEx` sequence — so a converted document, a macro
+document and an add-in document hold the same kind of object. Both are one
+JavaScript core under two thin layers: the core parses as the macro parses
+and lays out as the converter lays out, and tests hold it to both exactly
+(`plan-addins.md` says how).
+
+- **Typeset selection.** Lines typed as for the macro: the object line,
+  the gloss lines, a quoted translation last; `a.`, `b.` for sub-examples;
+  a leading `*` or `?` for a judgment; `{braces}` to keep words in one
+  column; `\exannot{…}` for a label in its column.
+- **Insert reference…** lists the document's examples; pick one and a live
+  cross-reference goes in at the cursor, `(3)` — or `3` with *bare
+  number*.
+- **Untypeset example** turns the example the cursor is in back into its
+  lines, with its number — the same field every reference points at — at
+  the head of the first. Edit, select, typeset again: same example, same
+  number, references intact.
+- Formatting typed by hand comes through (small caps, italic, bold,
+  underline, raised and lowered text, character styles) and is measured as
+  drawn.
+- **The example is set in the document's face and measured for it.**
+  Times-metric faces and Aptos, Word's default, have measured metrics;
+  another face is estimated from Times's, and the pane says so.
+
+### What they do not, and say so
+
+| | Word | OnlyOffice |
+|---|---|---|
+| renumbering after an insertion | Word for the desktop: Ctrl+A, F9. **Word on the web never renumbers fields** and will not let an add-in do it: the new example is numbered right, and the pane says which numbers and references are stale | at once — and every other field in the document is refreshed with them |
+| trees | not drawn; bracket notation stays text — use the Writer macro | the same |
+| the layout dialog | none: the lengths are the converter's, and the space around an example is the `LxExampleSpace*` styles | the same |
+| several examples in one table | *Untypeset* refuses it (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
+| a document an earlier add-in build wrote into | its `LxExampleCell` may carry Times New Roman: Styles ▸ LxExampleCell ▸ Modify ▸ the document's face | — |
+| where it has run | Word on the web. **Word for the desktop has not been tried** | OnlyOffice Desktop 9.4 |
+
+Word on the web is slow — every question an add-in asks is a round trip —
+and a click can take a few seconds; the pane disables its buttons while
+Word works.
+
+### Installing them
+
+Neither is published. **Word:** the add-in has to be served over HTTPS,
+and for now that is a server on your own machine:
+
+```
+python3 tools/serve_addin.py      # https://localhost:3000, certificate made once
+```
+
+Open <https://localhost:3000/word/taskpane.html> once and accept the
+certificate, then in Word: Home ▸ Add-ins ▸ More Add-ins ▸ My Add-ins ▸
+*Upload My Add-in*, and choose `addin/word/manifest.xml`. A **LinguExx ▸
+Examples** button appears on the Home tab. The server has to run while the
+add-in is used; `--manifest-only --base URL` writes a manifest for serving
+`addin/` from anywhere else.
+
+**OnlyOffice:** `make onlyoffice` builds the plugin into
+`dist/onlyoffice/{D71895BD-806D-4964-ACA4-0A531FE92454}/`. Copy that folder
+into OnlyOffice Desktop's user plugin folder and restart; **LinguExx**
+appears on the Plugins tab. For the Flatpak build that folder is
+`~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`
+— the one place this has been tried. `dist/linguexx-onlyoffice.plugin` is
+the same folder zipped, for OnlyOffice's plugin manager.
+
 ## Checking the renumbering
 
 Open the output in Writer, put the cursor before an example, insert a new
@@ -428,6 +501,8 @@ cross-reference shifts.
 make check                  # lint and the suite: what CI runs
 make test                   # the suite alone
 make lint                   # ruff over src/, tests/ and tools/
+make js-test                # the add-ins' suite (Node >= 18, nothing to install)
+make onlyoffice-test        # the OnlyOffice plugin's editor half, in Document Builder
 LINGUEXX_UPDATE_GOLDEN=1 pytest tests/test_extract.py   # re-snapshot
 python3 spikes/s1_passthrough.py   # re-run if the pandoc version changes
 ```
@@ -482,8 +557,19 @@ src/linguexx2odt/
     LinguExx.bas
 tools/
   sync_macro.py      regenerate/check the constants shared with the macro
+                     and the add-ins
   build_oxt.py       package the macro as a LibreOffice extension
   run_macro_test.py  drive the macro in a real LibreOffice and measure it
+  addin_oracle.py    the converter's plans and .docx markup, which the
+                     add-in core is held to
+  serve_addin.py     serve the Word add-in on localhost over HTTPS
+  build_onlyoffice.py         build the OnlyOffice plugin
+  run_onlyoffice_test.mjs     run it headless in Document Builder
+  measure_face.py    measure a face (Aptos) into measure.py
+addin/
+  core/           parse, plan, table, untypeset: shared by both add-ins
+  word/           the Word add-in: OOXML, the task pane, the manifest
+  onlyoffice/     the OnlyOffice plugin: builder-API commands, the panel
 docs/
   macro.md        the Writer macro
   guide-fr.md     guide complet en français
