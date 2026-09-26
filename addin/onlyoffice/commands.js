@@ -103,6 +103,97 @@ export function insertExample() {
   var job = Asc.scope.job;
   var doc = Api.GetDocument();
 
+  // A tree (onlyoffice/job.js's treePieces), drawn into *par*: shapes made
+  // and grouped, then their geometry written through JSON, because grouping
+  // throws away the positions shapes were given (T1).  The group is rebuilt
+  // from that JSON and put inline; the scaffold goes.  Also through JSON: a
+  // label's box never wraps and has no insets -- SetPaddings does not reach
+  // the saved file, and Word, reading it, wrapped "tree" to "tre" (T2) --
+  // and the drawing's title and alt text, which Untypeset reads back.
+  function drawInto(par, dr) {
+    var none = function () { return Api.CreateStroke(0, Api.CreateNoFill()); };
+    var ink = function () { return Api.CreateSolidFill(Api.CreateRGBColor(0, 0, 0)); };
+    var pieces = dr.pieces;
+    var shapes = pieces.map(function (p) {
+      var w = Math.max(1, p.w), h = Math.max(1, p.h);
+      if (p.kind === "head") return Api.CreateShape("triangle", w, h, ink(), none());
+      if (p.kind === "line") return Api.CreateShape("line", w, h, Api.CreateNoFill(), Api.CreateStroke(dr.stroke, ink()));
+      var box = Api.CreateShape("rect", w, h, Api.CreateNoFill(), none());
+      box.SetVerticalTextAlign("center");
+      var lp = box.GetDocContent().GetElement(0);
+      lp.SetJc("center");
+      lp.SetSpacingBefore(0);
+      lp.SetSpacingAfter(0);
+      lp.SetSpacingLine(240, "auto");
+      for (var i = 0; i < p.runs.length; i++) {
+        var run = Api.CreateRun();         // never AddText: it inherits formats
+        run.AddText(p.runs[i].text);
+        lp.AddElement(run);
+        // black, said: a shape's style gives its text white (T1)
+        run.SetColor(0, 0, 0);
+        if (dr.face) run.SetFontFamily(dr.face);
+        if (dr.halfPoints) run.SetFontSize(dr.halfPoints);
+        var f = p.runs[i].fmt || {};
+        var style = f.rStyle ? doc.GetStyle(f.rStyle) : null;
+        if (style) run.SetStyle(style);
+        if (f.bold) run.SetBold(true);
+        if (f.italic) run.SetItalic(true);
+        if (f.smallCaps && !style) run.SetSmallCaps(true);
+        if (f.underline) run.SetUnderline(true);
+        if (f.vertAlign) run.SetVertAlign(f.vertAlign);
+      }
+      return box;
+    });
+    var grp = Api.CreateGroup(shapes);
+    par.AddDrawing(grp);
+    grp.SetWrappingStyle("inline");
+    var j = JSON.parse(grp.ToJSON());
+    for (var k = 0; k < pieces.length; k++) {
+      var sp = j.graphic.spTree[k];
+      var x = sp.spPr.xfrm;
+      x.off = { x: pieces[k].x, y: pieces[k].y };
+      x.ext = { cx: Math.max(1, pieces[k].w), cy: Math.max(1, pieces[k].h) };
+      x.flipH = !!pieces[k].flipH;
+      sp.extX = x.ext.cx;
+      sp.extY = x.ext.cy;
+      if (pieces[k].kind === "label" && sp.bodyPr) {
+        sp.bodyPr.wrap = "none";
+        sp.bodyPr.lIns = 0; sp.bodyPr.tIns = 0; sp.bodyPr.rIns = 0; sp.bodyPr.bIns = 0;
+      }
+    }
+    var gx = j.graphic.spPr.xfrm;
+    gx.ext = { cx: dr.width, cy: dr.height };
+    gx.chOffX = 0; gx.chOffY = 0; gx.chExtX = dr.width; gx.chExtY = dr.height;
+    j.extent = { cx: dr.width, cy: dr.height };
+    j.docPr.descr = dr.source;
+    j.docPr.title = dr.title;
+    var tree = Api.FromJSON(JSON.stringify(j));
+    tree.SetWrappingStyle("inline");
+    par.AddDrawing(tree);
+    grp.Delete();
+    return tree;
+  }
+
+  // A tree with no number: no styles, no table -- a document that never
+  // asked for an example gets none of their styles (LxEmitBareTree).  One
+  // paragraph in place of the selected ones: the judgment mark as text,
+  // then the drawing.
+  if (job.bare) {
+    var sel = doc.GetRangeBySelect();
+    var lines = sel ? sel.GetAllParagraphs() : [];
+    if (!lines || !lines.length) return { error: "Select the bracket notation of the tree first." };
+    var bp = Api.CreateParagraph();
+    doc.AddElement(lines[0].GetPosInParent(), bp);
+    if (job.judgment) {
+      var jr = Api.CreateRun();
+      jr.AddText(job.judgment);
+      bp.AddElement(jr);
+    }
+    drawInto(bp, job.drawing);
+    for (var dl = 0; dl < lines.length; dl++) lines[dl].Delete();
+    return { bare: true };
+  }
+
   // Styles first: a paragraph can only take a style that exists.  The job
   // lists parents before children, as the converter's fragment does.
   for (var s = 0; s < job.styles.length; s++) {
@@ -202,6 +293,7 @@ export function insertExample() {
       par.SetStyle(doc.GetStyle(cell.style));
       if (cell.content.kind === "text") put(par, cell.content.runs);
       else if (cell.content.kind === "number") numberAt = par;
+      else if (cell.content.kind === "tree") drawInto(par, cell.content.drawing);
     }
   }
 
@@ -316,7 +408,16 @@ export function readExampleTable() {
         if (runs.length) runs.push({ text: " " });
         runsOf(p, runs);
       }
-      cells.push({ style: style, runs: runs });
+      // A drawn tree gives back the lines it was drawn from, off its alt
+      // text -- only a drawing titled as ours: a picture with a description
+      // is not a tree (the macro's LxShapeSource).
+      var tree = "";
+      var drawings = content.GetAllDrawingObjects ? content.GetAllDrawingObjects() : [];
+      for (var g = 0; g < drawings.length && !tree; g++) {
+        var pr = JSON.parse(drawings[g].ToJSON()).docPr || {};
+        if (pr.title === "LinguExx tree") tree = pr.descr || "";
+      }
+      cells.push(tree ? { style: style, runs: runs, tree: tree } : { style: style, runs: runs });
     }
     rows.push(cells);
   }

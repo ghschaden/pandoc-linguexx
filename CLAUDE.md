@@ -203,6 +203,21 @@ deliberate and worth keeping:
   `AddElement`) — the plugin's cells leaked small caps and a character
   style onto the next word until they were. A test that types its input
   with `AddText` manufactures the same leak.
+- **Trees in the add-ins are the macro's tree code, ported** (`core/tree.js`)
+  and held to it by `tests/fixtures/trees.json`: `laid_out` from Basic
+  `TreeLayoutQuiet`, which lays a tree out with label widths HANDED IN, so
+  the golden is the macro's arithmetic and not a machine's fonts;
+  `items_parsed` from `ParseLinesQuiet(lines, True)`. Same regeneration and
+  reading rules as the other goldens. The macro's eleven tree constants
+  and `TREE_TITLE` are compared by `test_addin_core.py`.
+- **A drawing's alt text is its source.** Both hosts store the typed lines
+  as `docPr descr` under the title `LinguExx tree`, and Untypeset reads a
+  tree back only from a drawing with that title. In an attribute a newline
+  is `&#10;` (`drawing.escAttr`); `ooxml.esc` is for element text only.
+- **Word refuses drawing ids of 2^31 or more** with a bare "unknown"
+  (measured). `MAX_DRAWING_ID` bounds them. **OnlyOffice's `SetPaddings`
+  does not reach the saved file**: a label's no-wrap and zero insets are
+  written through the JSON, or Word wraps a label ("tre").
 - **A style the macro does not know is a broken round trip, not a cosmetic
   gap.** It reads converted tables back cell by cell, so a cell it cannot
   identify becomes content: `LxAnnot` unknown meant an `\exannot` label

@@ -620,6 +620,17 @@ les mêmes styles, la même séquence `NumEx`.
   entre guillemets en dernier ; `a.`, `b.` pour les sous-exemples ; un `*`
   ou un `?` en tête pour un jugement ; `{accolades}` pour garder des mots
   dans une colonne ; `\exannot{…}` pour une étiquette dans sa colonne.
+- **Dessiner un arbre** (*Typeset tree*) : des arbres syntaxiques à partir
+  de la notation à crochets, comme dans la macro — `[DP [D le] [NP [N
+  arbre]]]`, `{accolades}` autour d'une étiquette qui contient des espaces,
+  `, roof` pour un triangle, et `move t -> wh` sous l'arbre pour une flèche
+  de mouvement entre des nœuds nommés `[DP,name=wh quoi]`. Un arbre ou un
+  paradigme d'arbres (`a.`, `b.`) va dans le tableau d'exemple, sous un
+  seul numéro ; *Tree, no number* en dessine un seul, là où étaient les
+  crochets. C'est la commande qui décide, jamais les crochets : *Typeset
+  selection* ne dessine rien. Le dessin garde sa notation en texte de
+  remplacement, et *Défaire un exemple* rend donc un arbre sous forme des
+  lignes tapées.
 - **Insérer un renvoi** (*Insert reference…*) : la liste des exemples du
   document s'affiche ; on en choisit un, et un renvoi vivant est inséré au
   curseur, `(3)` — ou `3` avec *bare number*.
@@ -639,16 +650,16 @@ les mêmes styles, la même séquence `NumEx`.
   Writer, Word et OnlyOffice. Les retraits valent pour les exemples créés
   ensuite ; l'espacement remet en forme tous les exemples d'un coup.
 - **L'exemple prend la police du document, et les colonnes sont mesurées
-  pour elle.** Les polices à métrique Times et Aptos (la police par défaut
-  de Word) ont des métriques mesurées ; pour une autre police, l'estimation
-  part de Times, et le volet le signale.
+  pour elle.** Les polices à métrique Times, Aptos (la police par défaut
+  de Word), Calibri, Arial, Cambria et Georgia ont des métriques mesurées ;
+  pour une autre police, l'estimation part de Times, et le volet le signale.
 
 ## F.2 Ce qu'ils ne font pas, et le disent
 
 | | Word | OnlyOffice |
 |---|---|---|
 | renumérotation après une insertion | Word pour le bureau : Ctrl+A, F9. **Word sur le web ne renumérote jamais** et n'y autorise pas un complément : le nouvel exemple est bien numéroté, et le volet dit quels numéros et renvois sont périmés | immédiate — et tous les autres champs du document sont rafraîchis avec |
-| arbres | pas dessinés ; la notation à crochets reste du texte — utilisez la macro | pareil |
+| arbres | la largeur d'une étiquette est estimée d'après les métriques de la police, là où la macro la mesure en la composant : dans une police non mesurée, une longue étiquette peut serrer sa voisine (le volet signale une police non mesurée) | pareil ; triangles et flèches sont faits de traits droits séparés, l'API d'OnlyOffice ne créant que des formes prédéfinies |
 | plusieurs exemples dans un tableau — un fichier converti avant le 26 septembre 2026 | *Untypeset* refuse ; reconvertissez le fichier (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
 | un document où une version antérieure du complément a écrit | son style `LxExampleCell` peut être en Times New Roman : Styles ▸ LxExampleCell ▸ Modifier ▸ la police du document | — |
 | un espacement réglé, puis rendu égal | — | OnlyOffice ne sait pas rendre un style à l'héritage une fois qu'il a sa propre valeur : les deux côtés sont justes, mais ne suivent plus une modification ultérieure de `LxExampleSpace` |

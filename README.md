@@ -241,7 +241,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\ex.` inside `itemize`, `enumerate`, `footnote`, `exe`/`xlist` | left as LaTeX, untouched |
 | `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped |
 | `\exsource{…}` | rendered inline at the end, not flush right |
-| `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro to draw |
+| `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
 | `\refrange` | left as LaTeX |
 | `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references |
 | `\altn`, `\altg` | left as LaTeX |
@@ -435,6 +435,15 @@ and lays out as the converter lays out, and tests hold it to both exactly
   the gloss lines, a quoted translation last; `a.`, `b.` for sub-examples;
   a leading `*` or `?` for a judgment; `{braces}` to keep words in one
   column; `\exannot{…}` for a label in its column.
+- **Typeset tree** draws syntax trees from bracket notation, as the
+  macro does: `[DP [D the] [NP [N tree]]]`, `{braces}` round a label with
+  spaces, `, roof` for a triangle, and `move t -> wh` under the tree for a
+  movement arrow between nodes named `[DP,name=wh what]`. One tree or a
+  paradigm of them (`a.`, `b.`) goes into the example table under one
+  number; **Tree, no number** draws one where the brackets were. The
+  command decides, never the brackets: *Typeset selection* draws nothing.
+  The drawing keeps its bracket notation as alt text, so *Untypeset
+  example* gives a tree back as the lines it was typed as.
 - **Insert reference…** lists the document's examples; pick one and a live
   cross-reference goes in at the cursor, `(3)` — or `3` with *bare
   number*.
@@ -453,15 +462,16 @@ and lays out as the converter lays out, and tests hold it to both exactly
   its layout between Writer, Word and OnlyOffice. The indents apply to
   examples built afterwards; the spacing restyles every example at once.
 - **The example is set in the document's face and measured for it.**
-  Times-metric faces and Aptos, Word's default, have measured metrics;
-  another face is estimated from Times's, and the pane says so.
+  Times-metric faces, Aptos (Word's default), Calibri, Arial, Cambria and
+  Georgia have measured metrics; another face is estimated from Times's,
+  and the pane says so.
 
 ### What they do not, and say so
 
 | | Word | OnlyOffice |
 |---|---|---|
 | renumbering after an insertion | Word for the desktop: Ctrl+A, F9. **Word on the web never renumbers fields** and will not let an add-in do it: the new example is numbered right, and the pane says which numbers and references are stale | at once — and every other field in the document is refreshed with them |
-| trees | not drawn; bracket notation stays text — use the Writer macro | the same |
+| trees | a label's width is estimated from the face's metrics, where the macro measures it by setting it: in a face nobody measured, a long label may crowd its neighbour (the pane says when the face is unmeasured) | the same; roofs and arrows are drawn as separate straight lines, since OnlyOffice's API makes preset shapes only |
 | several examples in one table — a file converted before 2026-09-26 | *Untypeset* refuses it; reconvert the file (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
 | a document an earlier add-in build wrote into | its `LxExampleCell` may carry Times New Roman: Styles ▸ LxExampleCell ▸ Modify ▸ the document's face | — |
 | a spacing set, then set equal again | — | OnlyOffice cannot return a style to inheriting once it has its own value: both sides look right, and no longer follow a later edit of `LxExampleSpace` |

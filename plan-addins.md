@@ -723,6 +723,141 @@ settings are floors.
   space around it. In Word the spacing change took, where changing a
   style's font had not; the pane reads it back and would say otherwise.
 
+### Trees — drawing spikes (2026-09-26)
+
+The user asked for trees next (they were on the out-of-scope list). Before
+any port of the macro's tree code, two spikes asked whether each host can
+hold a tree at all: `[DP [D the] [N tree]]` as one inline group of label
+text boxes and lines, its bracketed source as alt text.
+
+- **T1, OnlyOffice (Document Builder 9.4.0, then Desktop;
+  `spikes/t1_onlyoffice_tree.js`).** `Api.CreateShape("rect"|"line", …)`
+  per label and edge, `Api.CreateGroup`. Grouping discards the positions
+  the shapes were given, so they are written through JSON:
+  `graphic.spTree[i].spPr.xfrm` (`off`, `ext`, `flipH` for an edge going
+  left), the group's own `xfrm` (`ext`, `chOff`, `chExt`) and `extent`,
+  the source in `docPr.descr`, then `Api.FromJSON`. The group comes back
+  anchored; `SetWrappingStyle("inline")` after `FromJSON` puts it in the
+  line. A shape's text is white by default: the first Desktop run showed
+  the lines and no labels, fixed by `SetColor(0, 0, 0)` on the label runs.
+- **T2, Word on the web (driven over the DevTools protocol in a throwaway
+  Chromium profile, the user signed in).** T1's `.docx` drawing paragraph
+  went through `insertOoxml` without error, and `body.getOoxml()` read
+  back one `wpg:wgp`, 9 `wps:wsp`, 5 text boxes, `wp:inline`, and the alt
+  text intact -- so untypeset can read a tree back from its alt text in
+  both hosts. Drawn correctly, except the last leaf read **"tre"**: the
+  label boxes were sized in OnlyOffice's default face, Word set them in
+  the document's Aptos, wider, and the box wrapped (`wrap="square"`, the
+  default, with 0.25 cm insets). `wrap="none" lIns="0" rIns="0"` on each
+  label's `wps:bodyPr` drew "tree" whole and still centred -- measured on
+  a second insertion in the same session.
+- **So the tree plan is:** labels sized from the measured face
+  (`advancesFor`, as the tables are) *and* set not to wrap, so an
+  estimate that is short spills rather than hides a letter. Next: port
+  `LxTreeParse`, `LxSplitMoves`, `LxTreeLayout` and the arrows into the
+  core, held to the macro by a golden as the parse was, then one drawing
+  layer per host.
+
+### Trees — the core (2026-09-26)
+
+`core/tree.js` is the macro's tree code, ported: `readTree` (the reader,
+`move` lines, judgment, alt text), `layoutTree` (the layout and the arrow
+lanes, in the macro's 1/100 mm), `treeShapes` (what `LxTEmitNode` and
+`LxTEmitArrows` draw, as boxes, lines, roofs, arrows and heads), and
+`parseTreeLines`, the tree command's parse of a paradigm of trees
+(`parseLines` now takes the item maker, which is the macro's `LxTreeOnly`).
+
+- **Held to the macro exactly.** The tree cases moved out of
+  `run_macro_test.py` into `tests/fixtures/trees.json`, which both suites
+  read. The macro records two goldens there: `laid_out`, from a new
+  `TreeLayoutQuiet` -- the macro's own parse and layout, with each
+  label's width *handed in* (the converter's Times estimate, in whole
+  1/100 mm) instead of measured by a probe shape, so the positions are
+  the macro's arithmetic and not the fonts of the machine that ran it --
+  and `items_parsed`, from `ParseLinesQuiet` with a new optional tree
+  flag. `tests/test_addin_core.py` compares all eleven tree constants and
+  the drawing's title between the Basic and `tree.js`.
+- **Mutation-tested.** Fourteen deliberate breaks of the port. Three
+  survived at first and each named a missing fixture: a parent wider than
+  its children, a 42nd `move` line, a tab after `move`. With those added,
+  all but one fail; the survivor is the macro's "start the tree at x = 0"
+  shift, which is provably dead (a node only moves right, to its tier's
+  free edge, and some node always ends at 0) and is kept as the Basic has
+  it.
+- **A macro bug the golden found, fixed in both.** `move<TAB>a -> b` is a
+  move line, but the names were cut out with Basic's `Trim`, which takes
+  spaces only, so the macro looked for a node named "<TAB>a" and refused.
+  `LxResolveMoves` now trims with `LxTrimTagged` (every space `LxIsSpace`
+  knows), and so does the core; `MOVES/tab_after_move` draws, and fails
+  the old core.
+- **What the golden cannot pin:** the shapes. They depend on a label's
+  height, which the macro measures with a probe; the core's geometry is
+  tested for the properties the macro suite checks on real drawings
+  (every branch joins two boxes, no two boxes on a tier closer than the
+  gap, arrows under the tree landing on the target's underside).
+
+### Trees — Word (2026-09-26; live in Word on the web, driven over CDP)
+
+`word/drawing.js` writes `treeShapes` as one inline `wpg:wgp` (label text
+boxes, `prstGeom line` branches, `custGeom` roofs, arrows and filled
+heads), titled `LinguExx tree` with the typed lines as alt text. The pane
+has **Typeset tree** (the example table, a drawing in each tree item's
+wide cell -- `table.js` content `{kind: "tree"}`) and **Tree, no number**
+(`LxBareTreeCommand`: drawn in place, a judgment mark as text before it,
+refused for a paradigm or a selection carrying a number). **Untypeset**
+reads a cell's tree back from its alt text -- only off a drawing with our
+title -- and gives the lines back with the letter in front, as
+`LxReadTable` does.
+
+- **Labels are measured, not rendered:** `drawTree` sizes each label with
+  the face's advances (small caps included) and gives every box a height
+  of `LABEL_LINE_EM` = 1.3 em, the tallest single line among the measured
+  faces (Aptos's OS/2 win metrics, 1.285; read off the font files). Boxes
+  never wrap and have no insets (T2).
+- **Word refuses a drawing id of 2^31 or more**, with nothing but
+  "GeneralException unknown", whatever the schema's `unsignedInt` says.
+  Measured: one tree with shape ids up to 3000001009 refused, the same up
+  to 1999999009 inserted. The pane had drawn ids up to 4e6 and numbered
+  shapes from id × 1000; `MAX_DRAWING_ID` = 2e6 now bounds it, and a test.
+- **Alt text keeps its lines:** a newline in `descr` must be written as
+  `&#10;` (a raw one becomes a space in any XML parser); Word gives it back
+  as `&#xA;`, and keeps `title`.
+- **Live:** a two-tree paradigm with a movement arrow, a judgment and a
+  translation typeset as one table under one number; untypeset gave back
+  the four typed lines with the number field in front; typeset again kept
+  the number (2). A bare tree drew in place; a paradigm without a number
+  was refused in the macro's words.
+- **Not done here:** Word desktop, untested as for everything else.
+
+### Trees — OnlyOffice (2026-09-26; Document Builder 9.4.0, headless)
+
+`job.treePieces` turns `treeShapes` into what the builder API can make --
+it has preset shapes only: a line per branch, a roof as its three sides,
+an arrow as its three runs, the preset triangle (apex up, filled) for a
+head, a rectangle per label. `commands.insertExample` draws them (its
+`drawInto`) into a tree item's cell, or -- `job.bare` -- into one
+paragraph in place of the selection, with no styles and no table.
+`readExampleTable` reads a cell's tree off its drawing's alt text,
+`title` checked; `untypesetJob` passes it to the core.
+
+- **Probed:** a group rebuilt with `Api.FromJSON` goes into a table cell;
+  `docPr.title` and `docPr.descr` (newline included) survive the JSON and
+  the saved file, and `ApiDocumentContent.GetAllDrawingObjects` +
+  `ToJSON` read them back from the cell. OnlyOffice picks the drawing ids
+  itself.
+- **`SetPaddings(0, 0, 0, 0)` does not reach the saved file:** the
+  `wps:bodyPr` came out with no insets, which Word reads as 0.25 cm --
+  half of T2's "tre". Written through the JSON (`bodyPr.wrap = "none"`,
+  `lIns`..`bIns` = 0) both are saved; the test checks every label box.
+- **Headless** (`make onlyoffice-test`, "trees"): a two-tree paradigm with
+  an arrow, a judgment and a translation typeset as (1), untypeset to its
+  four lines with the number in front, typeset again as (1) under the same
+  bookmark; a bare tree drawn with its mark as text before it, outside any
+  table; a bare paradigm refused. Mutations -- labels left wrapping, the
+  title left off -- each fail it. Rendered by LibreOffice, the file draws
+  both trees, the arrow and the roof as they should be.
+- **Not yet:** a live run in OnlyOffice Desktop.
+
 ## Risks, and what would settle each
 
 - **Word on the web drops or freezes fields** — S6. Mitigation above:
@@ -763,8 +898,8 @@ settings are floors.
 
 ## Out of scope — do not implement without asking
 
-- **Trees and movement arrows.** Office.js draws shapes poorly and the
-  macro's tree code is a quarter of it. Revisit after Phase 4.
+- ~~**Trees and movement arrows.**~~ Asked for, 2026-09-26: see "Trees —
+  drawing spikes" above.
 - ~~**The layout dialog.**~~ Asked for and built, 2026-09-26: see "Example
   layout" below.
 - **VBA.** Windows/Mac desktop only, has no text-width API, and would be

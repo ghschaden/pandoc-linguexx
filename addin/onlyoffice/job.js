@@ -21,9 +21,10 @@
 
 import { LAYOUT, NAMES } from "../core/constants.js";
 import { advancesFor } from "../core/measure.js";
-import { parseLines, strip, tagIndex, tagRun } from "../core/parse.js";
+import { looksLikeMarker, parseLines, strip, tagIndex, tagRun } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { tableRows } from "../core/table.js";
+import { TREE, TREE_TITLE, drawTree, parseTreeLines } from "../core/tree.js";
 import { isExampleTable, readTable } from "../core/untypeset.js";
 import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
 import { freshBookmark } from "../word/numbering.js";
@@ -152,11 +153,111 @@ export function runsOf(tagged, formats) {
   return out;
 }
 
+/** 1/100 mm, the unit core/tree.js lays out in, as EMUs, whole. */
+const emu = (hmm) => Math.round(hmm * 360);
+
+/**
+ * A drawn tree (core/tree.js's treeShapes) as the pieces the builder API
+ * can make: it has preset shapes only, so where Word gets a path this gets
+ * straight lines -- a roof is its three sides, an arrow its three runs --
+ * and an arrowhead is the preset triangle, apex up, which is exactly the
+ * macro's head.  Each piece is {kind, x, y, w, h} in EMUs from the tree's
+ * top left: "line" (flipH when it runs down to the left, the preset line
+ * being top-left to bottom-right), "head", or "label" with its runs.
+ * Labels last, so they are drawn over the lines.
+ */
+export function treePieces(shapes, formats = []) {
+  const pieces = [];
+  const seg = ([x0, y0], [x1, y1]) => pieces.push({
+    kind: "line", x: emu(Math.min(x0, x1)), y: emu(Math.min(y0, y1)),
+    w: emu(Math.abs(x1 - x0)), h: emu(Math.abs(y1 - y0)),
+    flipH: x1 !== x0 && y1 !== y0 && (x1 < x0) !== (y1 < y0), // a straight run has no slant to flip
+  });
+  for (const [x0, y0, x1, y1] of shapes.lines) seg([x0, y0], [x1, y1]);
+  for (const [apex, left, right] of shapes.roofs) {
+    seg(apex, left);
+    seg(apex, right);
+    seg(left, right);
+  }
+  for (const pts of shapes.arrows) for (let i = 1; i < pts.length; i++) seg(pts[i - 1], pts[i]);
+  for (const [[, top], [left, base], [right]] of shapes.heads) {
+    pieces.push({ kind: "head", x: emu(left), y: emu(top), w: emu(right - left), h: emu(base - top) });
+  }
+  for (const l of shapes.labels) {
+    pieces.push({ kind: "label", x: emu(l.x), y: emu(l.y), w: emu(l.w), h: emu(l.h), runs: runsOf(l.text, formats) });
+  }
+  return { pieces, width: emu(shapes.width), height: emu(shapes.height) };
+}
+
+/**
+ * One tree's lines as the drawing commands.insertExample makes: {drawing,
+ * widthCm} or {error}.  Labels are set in the face and size given, black
+ * (a shape's text is white by its style, T1), and the drawing carries the
+ * lines as alt text under our title.
+ */
+function drawingJob(lines, face, size, formats) {
+  const d = drawTree(lines, { face, pt: size, formats });
+  if (d.error) return { error: d.error };
+  return {
+    widthCm: d.widthCm,
+    judgment: d.judgment,
+    known: d.known,
+    drawing: {
+      ...treePieces(d.shapes, formats),
+      source: d.source, title: TREE_TITLE, face, halfPoints: Math.round(size * 2),
+      stroke: emu(TREE.BRANCH_WIDTH),
+    },
+  };
+}
+
+/**
+ * A tree with no number, no table and no example styles, drawn where the
+ * brackets were -- the macro's LxBareTreeCommand, whose refusals these
+ * are.  {job, notes} or {refusal}.
+ */
+export function prepareBareJob(read) {
+  const sel = linesFromRead(read);
+  if (sel.refusal) return { refusal: sel.refusal };
+  // Drawing it anyway would destroy the field and every reference to it.
+  if ((read.numbers || []).length) {
+    return { refusal: "The selection carries an example number, and a tree without a number has " +
+      "nowhere to put it.\n\nDrawing it would break every cross-reference to that example.  Use " +
+      "Typeset tree, or delete the number first and lose the references deliberately." };
+  }
+  const lines = sel.lines.filter((l) => strip(l).trim());
+  if (!lines.length) return { refusal: "Select the bracket notation of the tree first." };
+  const face = read.font || LAYOUT.font_name;
+  const size = read.sizeHalfPt ? read.sizeHalfPt / 2 : LAYOUT.font_pt;
+  const d = drawingJob(lines, face, size, sel.formats);
+  if (d.error) {
+    if (looksLikeMarker(lines[0])) {
+      return { refusal: "That looks like a paradigm.  A tree without a number cannot carry a letter, " +
+        "because the letters live in the table only the numbered command builds.\n\nUse Typeset tree." };
+    }
+    return { refusal: d.error };
+  }
+  const notes = [];
+  if (!d.known) {
+    notes.push(`The labels are estimated from Times New Roman's metrics, and this document's face is ${face}, ` +
+      "which has not been measured.");
+  }
+  const width = read.widthTwips ? read.widthTwips / TWIPS_PER_CM : LAYOUT.text_width_cm;
+  if (d.widthCm > width) {
+    notes.push(`The tree is ${d.widthCm.toFixed(1)} cm wide but the text block is only ${width.toFixed(1)} cm, ` +
+      "so it will stick out.\n\nShorten a label, or group words with {braces} so they share one node.");
+  }
+  // No hanging column without a table: a judgment mark becomes the text it
+  // would have been had it been typed there.
+  return { job: { bare: true, judgment: d.judgment, drawing: d.drawing }, notes };
+}
+
 /**
  * The job for one selection: {job, notes} or {refusal}.  *now* seeds the
- * bookmark name (numbering.freshBookmark), so tests can fix it.
+ * bookmark name (numbering.freshBookmark), so tests can fix it.  With
+ * *trees* the lines are a numbered tree or a paradigm of them -- the
+ * command decides, never the brackets.
  */
-export function prepareJob(read, now = Date.now()) {
+export function prepareJob(read, now = Date.now(), { trees = false } = {}) {
   const sel = linesFromRead(read);
   if (sel.refusal) return { refusal: sel.refusal };
 
@@ -178,7 +279,7 @@ export function prepareJob(read, now = Date.now()) {
     sel.lines[at] = dropNumber(sel.lines[at]);
     takeOver = numbers[0];
   }
-  const parsed = parseLines(sel.lines);
+  const parsed = trees ? parseTreeLines(sel.lines) : parseLines(sel.lines);
   if (parsed.error) return { refusal: parsed.error };
 
   const notes = [];
@@ -202,13 +303,25 @@ export function prepareJob(read, now = Date.now()) {
   notes.push(...warnings);
 
   const t = tableRows(ex, plan);
+  const content = (c) => {
+    if (c.content.kind === "text") return { kind: "text", runs: runsOf(c.content.text, sel.formats) };
+    if (c.content.kind !== "tree") return { kind: c.content.kind };
+    const d = drawingJob(c.content.lines, face, size, sel.formats);
+    if (d.error) throw new Error(d.error); // parseTreeLines read it already
+    // Said, not silently produced: a tree wider than its cell hangs off
+    // the page, and shortening a label is the user's call (LxWideCellTree).
+    if (d.widthCm > c.widthCm + 0.005) {
+      notes.push(`A tree is ${d.widthCm.toFixed(1)} cm wide but only ${c.widthCm.toFixed(1)} cm is left ` +
+        "beside the number, so it will stick out. Shorten a label, or group words with {braces} " +
+        "so they share one node.");
+    }
+    return { kind: "tree", drawing: d.drawing };
+  };
   const rows = t.rows.map((row) => row.map((c) => ({
     span: c.span,
     widthTwips: dxa(c.widthCm),
     style: c.style,
-    content: c.content.kind === "text"
-      ? { kind: "text", runs: runsOf(c.content.text, sel.formats) }
-      : { kind: c.content.kind },
+    content: content(c),
   })));
   return {
     job: {
@@ -253,7 +366,8 @@ export function untypesetJob(read) {
       const t = String(r.text).replace(/\r\n|\r|\n/g, " ");
       if (t) text += tagRun(t, index(fmt));
     }
-    return { style: c.style, text };
+    // a drawn tree's lines, read off its alt text (commands.readExampleTable)
+    return c.tree ? { style: c.style, text, tree: c.tree } : { style: c.style, text };
   }));
   if (!isExampleTable(rows)) {
     return { refusal: "That table is not an example.\n\nAn example is topped and tailed by the " +

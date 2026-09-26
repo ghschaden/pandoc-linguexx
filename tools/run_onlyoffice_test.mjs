@@ -559,6 +559,130 @@ const idToNameScenario = (id) => scenarioIds[id] || id;
   console.log(`--- scenario: right after B, A read ${log.afterB.A}; B, A, C read ${got.B}, ${got.A}, ${got.C}; ` +
     `the reference to A reads ${refShown}; C's formats ${JSON.stringify(runFmt)}`);
 }
+// -- trees ------------------------------------------------------------------------
+//
+// A paradigm of trees -- a movement arrow, a judgment, a translation --
+// typeset, untypeset from the drawings' alt text, and typeset again under
+// the same number; then a tree with no number, drawn in place.  What Word
+// needs of the saved file is checked in it: T2 found a label box that
+// wrapped ("tre"), and T1 labels that were white.
+
+const treesDocx = join(OUT, "trees.docx");
+const TREE_LINES = ["a. [CP [DP,name=wh what] [C' [C did] [TP [DP you] [VP [V see] [DP,name=t __]]]]]",
+  "move t -> wh", "b. *[CP [C that] [TP [DP him] [VP [V left]]]]", "'that he left'"];
+run(`builder.CreateFile("docx");
+${bundle}
+if (typeof Asc.scope !== "object" || !Asc.scope) Asc.scope = {};
+var doc = Api.GetDocument();
+var log = {};
+function select(at, n) { doc.GetElement(at).GetRange().ExpandTo(doc.GetElement(at + n - 1).GetRange()).Select(); }
+function type(at, lines) {
+  for (var l = 0; l < lines.length; l++) { var p = Api.CreateParagraph(); p.AddText(lines[l]); doc.AddElement(at + l, p); }
+  select(at, lines.length);
+}
+function tablesWithTrees() {
+  var n = 0;
+  for (var i = 0; i < doc.GetElementsCount(); i++) {
+    var el = doc.GetElement(i);
+    if (el.GetClassType() === "table") n += el.GetRow(0) ? 1 : 0;
+  }
+  return n;
+}
+try {
+  doc.GetFinalSection().SetPageSize(11906, 16838);
+  doc.GetFinalSection().SetPageMargins(1134, 1134, 1134, 1134);
+  doc.GetElement(0).AddText("Before the trees.");
+  var tail = Api.CreateParagraph(); tail.AddText("After the trees."); doc.Push(tail);
+  type(1, ${JSON.stringify(TREE_LINES)});
+  var prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 20, { trees: true });
+  if (prep.refusal) throw new Error("tree refused: " + prep.refusal);
+  Asc.scope.job = prep.job;
+  log.res = LinguExx.insertExample();
+  log.bookmark = prep.job.bookmark;
+  log.notes = prep.notes;
+
+  doc.GetBookmarkRange(log.bookmark).GetParagraph(0).Select();
+  var u = LinguExx.untypesetJob(LinguExx.readExampleTable());
+  if (u.refusal) throw new Error("untypeset refused: " + u.refusal);
+  Asc.scope.back = u.back;
+  LinguExx.writeLines();
+  log.untypeset = [];
+  for (var q = 0; q < u.back.lines.length; q++) log.untypeset.push(doc.GetElement(u.back.pos + q).GetText());
+  select(u.back.pos, u.back.lines.length);
+  var again = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 21, { trees: true });
+  if (again.refusal) throw new Error("retypeset refused: " + again.refusal);
+  log.takeOver = again.job.takeOver && again.job.bookmark === log.bookmark;
+  Asc.scope.job = again.job;
+  log.again = LinguExx.insertExample();
+
+  var end = doc.GetElementsCount();
+  type(end, ["*[DP [D the] [NP {big tree, roof}]]"]);
+  var bare = LinguExx.prepareBareJob(LinguExx.readSelection());
+  if (bare.refusal) throw new Error("bare refused: " + bare.refusal);
+  Asc.scope.job = bare.job;
+  log.bare = LinguExx.insertExample();
+  type(doc.GetElementsCount(), ["a. [DP [D the] [N tree]]", "b. [DP [D a] [N cat]]"]);
+  log.bareParadigm = LinguExx.prepareBareJob(LinguExx.readSelection()).refusal || "";
+} catch (e) { log.error = String(e && e.stack || e); }
+var out = Api.CreateParagraph(); out.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, out);
+builder.SaveFile("docx", ${JSON.stringify(treesDocx)});
+builder.CloseFile();
+`, "trees");
+{
+  const xml = unzip(treesDocx, "word/document.xml");
+  const body = findAll(parse(xml), "w:body")[0];
+  const first = body.children.find((c) => typeof c !== "string" && c.name === "w:p");
+  const log = JSON.parse(findAll(first, "w:t").map(textOf).join("").replace(/^LXRESULT/, ""));
+  const fail = (m) => problems.push(`trees: ${m}`);
+  if (log.error) fail(`failed: ${log.error}`);
+  if (!log.res || log.res.number !== "1") fail(`the paradigm is not example (1): ${JSON.stringify(log.res)}`);
+  const back = (log.untypeset || []).map((t) => t.replace(/\r?\n$/, ""));
+  const wantBack = ["(1)\t" + TREE_LINES[0], ...TREE_LINES.slice(1)];
+  if (JSON.stringify(back) !== JSON.stringify(wantBack)) fail(`untypeset gave ${JSON.stringify(back)}`);
+  if (!log.takeOver) fail("typeset again, the number was not taken over");
+  if (!log.again || log.again.number !== "1") fail(`typeset again, the paradigm is not (1): ${JSON.stringify(log.again)}`);
+  if (!log.bare || !log.bare.bare) fail(`the tree with no number was not drawn: ${JSON.stringify(log.bare)}`);
+  if (!/looks like a paradigm/.test(log.bareParadigm || "")) fail(`a paradigm without a number was not refused: ${log.bareParadigm}`);
+
+  const blocks = body.children.filter((c) => typeof c !== "string" && c.name !== "w:sectPr");
+  const tables = blocks.filter((b) => b.name === "w:tbl");
+  if (tables.length !== 1) fail(`${tables.length} tables, not the one paradigm`);
+  const inTable = tables.flatMap((t) => findAll(t, "wp:docPr"));
+  const outside = blocks.filter((b) => b.name === "w:p").flatMap((p) => findAll(p, "wp:docPr"));
+  const descr = (d) => d.attrs.descr;
+  if (JSON.stringify(inTable.map(descr)) !== JSON.stringify([TREE_LINES.slice(0, 2).join("\n").slice(3), TREE_LINES[2].slice(3)])) {
+    fail(`the table's drawings carry ${JSON.stringify(inTable.map(descr))}`);
+  }
+  if (JSON.stringify(outside.map(descr)) !== JSON.stringify(["*[DP [D the] [NP {big tree, roof}]]"])) {
+    fail(`outside the table: ${JSON.stringify(outside.map(descr))}`);
+  }
+  for (const d of [...inTable, ...outside]) if (d.attrs.title !== "LinguExx tree") fail(`a drawing is titled ${d.attrs.title}`);
+  // the bare tree's mark is text before it, in its own paragraph
+  const bareP = blocks.find((b) => b.name === "w:p" && findAll(b, "wp:docPr").length);
+  const bareText = bareP ? bareP.children.filter((c) => typeof c !== "string" && c.name === "w:r")
+    .map((r) => findAll(r, "w:t").filter((t) => !findAll(r, "w:txbxContent").length).map(textOf).join("")).join("") : "";
+  if (bareText !== "*") fail(`the bare tree's paragraph reads ${JSON.stringify(bareText)}, not the judgment mark`);
+  // every label: no wrap, no insets, black, in the document's face
+  let labels = 0;
+  for (const wsp of findAll(body, "wps:wsp")) {
+    if (!findAll(wsp, "wps:txbx").length) continue;
+    labels += 1;
+    const bp = findAll(wsp, "wps:bodyPr")[0].attrs;
+    if (bp.wrap !== "none" || ["lIns", "tIns", "rIns", "bIns"].some((k) => bp[k] !== "0")) {
+      fail(`a label box wraps or has insets: ${JSON.stringify(bp)}`);
+      break;
+    }
+    for (const r of findAll(wsp, "w:r").filter((r) => findAll(r, "w:t").length)) {
+      const pr = child(r, "w:rPr");
+      const color = pr && child(pr, "w:color");
+      if (!color || color.attrs["w:val"].toUpperCase() !== "000000") { fail("a label is not black"); break; }
+    }
+  }
+  const expectLabels = 14 + 9 + 5;
+  if (labels !== expectLabels) fail(`${labels} label boxes, not ${expectLabels}`);
+  console.log(`--- trees: paradigm (${log.res && log.res.number}), untypeset to ${back.length} lines and back as ` +
+    `(${log.again && log.again.number}); ${inTable.length} drawings in the table, ${outside.length} outside; ${labels} labels`);
+}
 if (problems.length) {
   console.log(problems.slice(0, 40).map((p) => `    FAIL: ${p}`).join("\n"));
   if (problems.length > 40) console.log(`    ... and ${problems.length - 40} more`);

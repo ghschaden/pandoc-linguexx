@@ -45,13 +45,20 @@
     Array.prototype.forEach.call(document.querySelectorAll("button"), function (b) { b.disabled = false; });
   }
 
-  function typeset() {
-    if (!busy("Typesetting…")) return;
+  /**
+   * The selected lines as an example, or -- *mode* "tree" -- as a numbered
+   * tree or a paradigm of them, or -- "bare" -- as one tree with no number,
+   * drawn where the brackets were.  The command decides, never the brackets.
+   */
+  function typeset(mode) {
+    if (!busy(mode ? "Drawing the tree…" : "Typesetting…")) return;
     note([]);
     plugin.callCommand(LinguExx.readSelection, false, false, function (read) {
       var prep;
+      read = read || { error: "The editor returned nothing for the selection." };
       try {
-        prep = LinguExx.prepareJob(read || { error: "The editor returned nothing for the selection." });
+        prep = mode === "bare" ? LinguExx.prepareBareJob(read)
+          : LinguExx.prepareJob(read, Date.now(), { trees: mode === "tree" });
       } catch (e) {
         idle();
         return say(String(e.message || e), "error");
@@ -61,7 +68,7 @@
       plugin.callCommand(LinguExx.insertExample, false, true, function (res) {
         idle();
         if (!res || res.error) return say((res && res.error) || "The example was not inserted.", "error");
-        say("Done: example (" + res.number + ").", "ok");
+        say(res.bare ? "Done." : "Done: example (" + res.number + ").", "ok");
         note(prep.notes);
       });
     });
@@ -155,7 +162,9 @@
   }
 
   plugin.init = function () {
-    $("typeset").onclick = typeset;
+    $("typeset").onclick = function () { typeset(""); };
+    $("tree").onclick = function () { typeset("tree"); };
+    $("bareTree").onclick = function () { typeset("bare"); };
     $("refs").onclick = listExamples;
     $("untypeset").onclick = untypeset;
     $("applyLayout").onclick = applyLayout;
