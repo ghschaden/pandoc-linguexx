@@ -27,6 +27,7 @@ not a Python re-implementation of it.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import socket
@@ -50,6 +51,12 @@ import pdfwords  # noqa: E402
 from linguexx2odt import postprocess, writermacro  # noqa: E402
 
 SOURCE = writermacro.path()
+
+#: The typed-line cases, shared with the JavaScript core (addin/core), which
+#: reads the same file: a case added for one implementation is a case for
+#: both.  Each case's "why" says what bug it was added for.
+FIXTURE_FILE = ROOT / "tests" / "fixtures" / "typed-examples.json"
+FIXTURES = json.loads(FIXTURE_FILE.read_text(encoding="utf-8"))
 
 CASEMAP_NONE = 0                             # com.sun.star.style.CaseMap
 SMALLCAPS = 4
@@ -182,34 +189,7 @@ def render(profile: Path, odt: Path) -> Path:
     return odt.with_suffix(".pdf")
 
 
-CASES = {
-    "plain": [
-        "Esto es un ejemplo glosado",
-        "this is a example glossed",
-        "'This is a glossed example.'",
-    ],
-    "judged": [
-        "*Das kleine Kind schlafen",
-        "the little child sleep.INF",
-        "'The little child sleeps.'",
-    ],
-    "braces": [
-        "Ich {habe geschlafen}",
-        "I {have slept}",
-        "'I slept.'",
-    ],
-    "three_tiers": [
-        "Ich habe geschlafen",
-        "ich hab-e schlaf-en",
-        "1SG have-1SG sleep-PTCP",
-        "'I slept.'",
-    ],
-    "long": [
-        "Este es un ejemplo mucho mas largo que no cabe en una sola linea de texto",
-        "this is a example much more long that not fits in a single line of text",
-        "'This is a much longer example that does not fit on one line.'",
-    ],
-}
+CASES = {k: c["lines"] for k, c in FIXTURES["CASES"].items()}
 
 
 PAIR = [
@@ -283,58 +263,13 @@ def check_pair(ctx, out: Path, profile: Path) -> int:
 
 # Sub-example paradigms: one number, one shared column grid, one marker
 # column.  (n_markers, glossed) is what each must come out as.
-SUB_CASES = {
-    "sub_plain": (["a. Sentences like this are fine.",
-                   "b. Sentences like this are not."], 2, False),
-    "sub_glossed": (["a. Esto es un ejemplo", "this is a example",
-                     "'This is an example.'", "b. Otro ejemplo aqui",
-                     "another example here", "'Another example here.'"], 2, True),
-    "sub_judged": (["a. *Das kleine Kind schlafen", "the little child sleep.INF",
-                    "b. Das kleine Kind schlaeft", "the little child sleeps"], 2, True),
-    "sub_mixed": (["a. Esto es un ejemplo", "this is a example",
-                   "b. This one is not glossed at all."], 2, True),
-    "sub_roman": (["i. Otro ejemplo aqui", "another example here",
-                   "ii. Tercer ejemplo aqui", "third example here"], 2, True),
-    "sub_marker_alone": (["a.", "Esto es un ejemplo", "this is a example",
-                          "b.", "Otro ejemplo aqui", "another example here"], 2, True),
-    # A judgment mark typed straight after the letter, with no space to
-    # split on.  The whole first word is then "b.?Maybe", which is not a
-    # marker, so the line stopped starting an item: it was folded into the
-    # item before it as another gloss tier and a paradigm of judged
-    # one-liners came out as a single word-by-word grid.
-    "sub_judged_glued": (["a.*This one is bad.",
-                          "b.?Maybe this one is fine."], 2, False),
-    # The same, mixed with the spaced form — the shape tests/subexamples_
-    # judged.odt holds.  Here the first line *was* read as a marker, so the
-    # selection looked like a paradigm and only the glued line went astray.
-    "sub_judged_half_glued": (["a. *This one is bad.",
-                               "b.?Maybe this one is fine.",
-                               "c. ?Probably not though."], 3, False),
-    # Writer's French autocorrect replaces the space before a "?" with a
-    # narrow no-break one, and nothing on screen shows which is which.  It
-    # was not a space to the word splitter, so the marker fused to the text
-    # after it; a glossed item must still line its tiers up.  The unglossed
-    # half of this is check_autocorrect_spaces, which has to read the table
-    # rather than the PDF.
-    "sub_judged_nnbsp": (["a.\u202f*Das Kind schlafen", "the child sleep.INF",
-                          "b.\u202fDas Kind schlaeft", "the child sleeps"], 2, True),
-}
+SUB_CASES = {k: (c["lines"], c["markers"], c["glossed"])
+             for k, c in FIXTURES["SUB_CASES"].items()}
 
 # Selections the macro must refuse rather than mis-render, and near misses
 # it must still accept.
-REFUSE = {
-    "marker_partway": ["Esto es un ejemplo", "this is a example",
-                       "b. Otro ejemplo aqui", "another example here"],
-}
-ACCEPT = {
-    "abbreviation": ["Dr. Meier kam gestern", "Dr. Meier came yesterday",
-                     "'Dr Meier came yesterday.'"],
-    # A marker may be the head of the first word rather than the whole of
-    # it, so that "b.?Maybe" is sub-example b — but only when a judgment
-    # mark follows.  Anything else after the dot is part of the word.
-    "dotted_word": ["Sie hat a.out gestartet", "she has a.out started",
-                    "'She started a.out.'"],
-}
+REFUSE = {k: c["lines"] for k, c in FIXTURES["REFUSE"].items()}
+ACCEPT = {k: c["lines"] for k, c in FIXTURES["ACCEPT"].items()}
 
 MARKER = re.compile(r"\(?[a-zA-Z]{1,4}[.)]$")
 
@@ -669,19 +604,8 @@ def check_layout_settings(ctx, out: Path, profile: Path) -> int:
 # a linguexx user writes it: LaTeX's `quoted' convention.  Getting the quote
 # wrong made the translation a third gloss tier, which put it inside the
 # *first* band instead of at the end of the table, one word per column.
-TRANSLATION_CASES = {
-    "long_backtick": [
-        "Ceci est un exemple superlong juste pour voir ce qui se passe quand on",
-        "This is a example super_longue just for see what that SE happens when on",
-        "`Juste pour voir\u2019",
-    ],
-    "curly_open": [
-        "Esto es un ejemplo", "this is a example", "\u2018This is an example.\u2019",
-    ],
-    "guillemets": [
-        "Esto es un ejemplo", "this is a example", "\u00abVoici un exemple\u00bb",
-    ],
-}
+TRANSLATION_CASES = {k: c["lines"]
+                     for k, c in FIXTURES["TRANSLATION_CASES"].items()}
 
 
 def check_translation_is_last(name: str, odt: Path) -> int:
@@ -721,12 +645,8 @@ def check_translation_is_last(name: str, odt: Path) -> int:
 
 # The commonest example there is: one line, no gloss.  (n content rows,
 # translation expected)
-PLAIN_CASES = {
-    "single_line": (["A simple example."], 1, False),
-    "single_translation": (["Un exemple simple", "'A simple example.'"], 2, True),
-    "single_judged": (["*A bad example."], 1, False),
-    "two_unglossed_translation": (["Un exemple simple", "`A simple example\u2019"], 2, True),
-}
+PLAIN_CASES = {k: (c["lines"], c["rows"], c["translation"])
+               for k, c in FIXTURES["PLAIN_CASES"].items()}
 
 
 def check_plain_example(name: str, odt: Path, n_rows: int, translation: bool) -> int:
@@ -1715,13 +1635,7 @@ def check_small_caps(ctx, out: Path, profile: Path) -> int:
 # grid shared by both, the fifth column of band 2 has to be as wide as the
 # fifth column of band 1, so a long word in one line stretches an unrelated
 # column in the other.
-BANDED = [
-    "Dies ist ein extrem langes Beispiel um zu zeigen, was passiert, "
-    "wenn die Grenze einer Linie erst einmal \u00fcberschritten ist",
-    "This is a extreme long example for to show what happens "
-    "when the border a.gen line first once trespassed is",
-    "`Just a test\u2019",
-]
+BANDED = FIXTURES["BANDED"]["banded"]["lines"]
 
 
 def check_bands(name: str, odt: Path, pdf: Path) -> int:
@@ -2179,52 +2093,8 @@ def check_number_adoption(ctx, out: Path, profile: Path) -> int:
 # (lines in, lines out).  Out is what the example has to come back as,
 # leading number aside — the same text, the braces that made a column,
 # the letter and the judgment mark back at the head of their item.
-UNTYPESET_CASES = {
-    "plain": ([
-        "Esto es un ejemplo glosado",
-        "this is a example glossed",
-        "'This is a glossed example.'",
-    ], None),
-    "judged": ([
-        "*Das kleine Kind schlafen",
-        "the little child sleep.INF",
-        "'The little child sleeps.'",
-    ], None),
-    "braces": ([
-        "Ich {habe geschlafen}",
-        "I {have slept}",
-        "'I slept.'",
-    ], None),
-    "unglossed": (["A simple example."], None),
-    "unglossed_translated": ([
-        "Ein einfaches Beispiel.",
-        "'A simple example.'",
-    ], None),
-    "sub_examples": ([
-        "a. Esto es un ejemplo",
-        "this is a example",
-        "'This is an example.'",
-        "b. Otro ejemplo aqui",
-        "another example here",
-        "'Another example here.'",
-    ], None),
-    "sub_judged": ([
-        "a. *Das kleine Kind schlafen",
-        "the little child sleep.INF",
-        "b. Das kleine Kind schlaeft",
-        "the little child sleeps",
-    ], None),
-    # The one that needs the band mark: without it every band comes back
-    # as another gloss tier, and this example returns six lines instead of
-    # three.
-    "banded": ([
-        "Este es un ejemplo mucho mas largo que no cabe en una sola linea "
-        "de texto de esta pagina y por eso se parte en bandas",
-        "this is a example much more long that not fits in a single line "
-        "of text of this page and for that reason it splits in bands",
-        "'A long one.'",
-    ], None),
-}
+UNTYPESET_CASES = {k: (c["lines"], c["back"])
+                   for k, c in FIXTURES["UNTYPESET_CASES"].items()}
 
 
 def body_lines(doc) -> list[str]:
@@ -3054,6 +2924,7 @@ def main() -> int:
     print(f"installed {SOURCE.name} into a throwaway profile\n")
 
     failures = 0
+    failures += check_parse_golden(ctx)
     for name, lines in CASES.items():
         doc = make_doc(ctx, lines)
         try:
@@ -3143,6 +3014,56 @@ def main() -> int:
     failures += check_extension(out)
     print("\nOK" if not failures else f"\n{failures} FAILURE(S)")
     return 1 if failures else 0
+
+
+def macro_parse(ctx, lines: list[str]) -> dict:
+    """What the macro's own parser makes of *lines*, as plain data."""
+    kind, payload = run(ctx, "ParseLinesQuiet", (tuple(lines),))
+    if kind == "error":
+        return {"error": payload}
+    return {"items": [
+        {"marker": marker, "judgment": judgment, "translation": translation,
+         "annot": annot, "tiers": [list(words) for words in tiers]}
+        for marker, judgment, translation, annot, tiers in payload
+    ]}
+
+
+def check_parse_golden(ctx) -> int:
+    """Every typed-line fixture parses the way the recorded golden says.
+
+    The golden is the macro's own answer, and the JavaScript add-in core is
+    held to it (addin/core, node --test), so this is where the two are
+    tied together: change the macro's grammar and this fails until the
+    golden is regenerated -- and read -- after which the core's test fails
+    until the core follows.  LINGUEXX_UPDATE_GOLDEN=1 rewrites it.
+    """
+    print("--- parse golden")
+    got = {}
+    for group, cases in FIXTURES.items():
+        if group.startswith("_") or group == "parsed":
+            continue
+        for name, case in cases.items():
+            got[f"{group}/{name}"] = macro_parse(ctx, case["lines"])
+
+    if os.environ.get("LINGUEXX_UPDATE_GOLDEN"):
+        FIXTURES["parsed"] = got
+        FIXTURE_FILE.write_text(
+            json.dumps(FIXTURES, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8")
+        print(f"    wrote {len(got)} parses to {FIXTURE_FILE.name} -- read "
+              "the diff before committing it")
+        return 0
+
+    want = FIXTURES.get("parsed", {})
+    bad = 0
+    for key in sorted(set(got) | set(want)):
+        if got.get(key) != want.get(key):
+            print(f"    FAIL: {key}: macro gives {got.get(key)}, golden has "
+                  f"{want.get(key)}")
+            bad += 1
+    if not bad:
+        print(f"    ok — {len(got)} fixtures parse as recorded")
+    return bad
 
 
 def check(name: str, lines: list[str], pdf: Path) -> int:

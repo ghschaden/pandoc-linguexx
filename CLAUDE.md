@@ -10,10 +10,17 @@ There is a second deliverable in the same repository: `LinguExx.bas`, a
 Writer macro that formats glossed examples inside Writer with no LaTeX at
 all. It duplicates the converter's constants on purpose — see below.
 
+A third is being built: a Word add-in and an OnlyOffice plugin over one
+JavaScript core, `addin/`. `plan-addins.md` is its plan and records what
+the spikes measured; Phase 1, the core, is done.
+
 ## Environment
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
   versioned interface), LibreOffice for the rendering half, poppler for
   reading the result back.
+- Node ≥ 18 for `make js-test` and nothing else: the add-in core is plain
+  ES modules with no dependencies and no build step, and `make test` stays
+  Python-only.
 - **Two different path questions, easily conflated.** *pytest* needs no
   `PYTHONPATH`: `pyproject.toml` sets `pythonpath = ["src"]`, so plain
   `pytest` works, and a whole session was prefixed with `PYTHONPATH=src`
@@ -32,8 +39,8 @@ all. It duplicates the converter's constants on purpose — see below.
 
 ## Make
 `make check` is lint plus suite, which is what CI runs. `make test`,
-`make lint`, `make macro`, `make oxt`, `make advances`, `make venv`,
-`make clean`. The Makefile's header says what each is for.
+`make js-test`, `make lint`, `make macro`, `make oxt`, `make advances`,
+`make venv`, `make clean`. The Makefile's header says what each is for.
 
 ## Verification — non-negotiable
 - **Measure the output; do not reason about it.** Every layout claim in
@@ -131,10 +138,32 @@ deliberate and worth keeping:
   three-token command took a `forest` tree with it: `{\small
   \begin{forest}...}` came back as `] [Voice' ...`. Adding a command to
   `inline.DECLARATIONS` or `WRAPPERS` is therefore worth more than it looks.
-- **The macro duplicates the converter's constants, deliberately.** Basic
-  can import nothing. `make macro` (`tools/sync_macro.py`) writes the
-  second copy from the first and `tests/test_macro_sync.py` fails when
-  they drift. Never hand-edit the constants in `LinguExx.bas`.
+- **The constants exist three times, deliberately.** Basic and a browser
+  module can import nothing from here. `make macro` (`tools/sync_macro.py`)
+  writes the generated block of `LinguExx.bas` and all of
+  `addin/core/constants.js` from `styles.py` and `measure.py`, and
+  `tests/test_macro_sync.py` fails when either drifts. Never hand-edit
+  either copy.
+- **The add-in core is held to two oracles, exactly.** Its parse must be
+  the macro's: the typed-line cases live in
+  `tests/fixtures/typed-examples.json`, shared by the macro suite and
+  `node --test`, and the macro's own parse of each (Basic
+  `ParseLinesQuiet`) is recorded there as `parsed` by
+  `LINGUEXX_UPDATE_GOLDEN=1 python3 tools/run_macro_test.py`. Its plan must
+  be the converter's: `tools/addin_oracle.py` writes `plan_table()`'s
+  answers to `typed-examples.plans.json`. Compared with no tolerance — so a
+  change to the macro's grammar or the converter's geometry fails a golden
+  first, and the core after. Both goldens are read before committing.
+- **Python's `sum()` of floats is compensated from 3.12 on**, and the exact
+  comparison depends on it: `measure.js` has `pySum` (CPython's Neumaier
+  loop) wherever the Python calls `sum()`, and plain `+=` wherever the
+  Python writes `+=`. "Tidying" either into the other is a change of
+  result in the last place, which the plan test reports.
+- **A cell's `w:tcW` must equal the grid columns it spans.** Word and
+  LibreOffice lay a fixed table out from `w:tblGrid`; OnlyOffice lays it
+  out from the cells. The converter summed `tcW` from the columns at the
+  word's index until 2026-09-26, invisible everywhere but OnlyOffice, which
+  drew every banded or paradigm example as letters in slivers.
 - **A style the macro does not know is a broken round trip, not a cosmetic
   gap.** It reads converted tables back cell by cell, so a cell it cannot
   identify becomes content: `LxAnnot` unknown meant an `\exannot` label
@@ -147,7 +176,9 @@ deliberate and worth keeping:
   it is run by hand. CI runs it in a job of its own, which must use the
   system `python3`: `import uno` comes from the site-packages LibreOffice
   installs for it, and a `setup-python` interpreter cannot see it.
-  `LX_MACRO_TIMEOUT` raises the wait for a cold headless start.
+  `LX_MACRO_TIMEOUT` raises the wait for a cold headless start. Its
+  typed-line cases are read from `tests/fixtures/typed-examples.json`, not
+  written in the harness.
 
 ## Tracking linguexx
 - **This converter targets a linguexx VERSION**, currently 1.3.2, and the

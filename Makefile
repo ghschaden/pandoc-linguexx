@@ -3,7 +3,8 @@
 #   make test      the suite (pytest); fails if a required tool is missing
 #   make lint      ruff over src/, tests/ and tools/
 #   make check     lint and test, which is what CI runs
-#   make macro     rewrite the macro's constants from the converter's
+#   make js-test   the add-in core's suite (node --test); needs Node >= 18
+#   make macro     rewrite the macro's and the add-in core's constants
 #   make oxt       package the Writer macro as a LibreOffice extension
 #   make advances  check the width table against the font it describes
 #   make schemas   fetch the ECMA-376 schemas a .docx is validated against
@@ -18,7 +19,7 @@
 
 PYTHON ?= python3
 
-.PHONY: all check test lint macro oxt advances schemas venv clean
+.PHONY: all check test js-test lint macro oxt advances schemas venv clean
 
 all: check
 
@@ -41,8 +42,21 @@ lint:
 	  echo "ruff is not installed; skipping (see ruff.toml)"; \
 	fi
 
-# The macro is Basic and can import nothing, so the style names and layout
-# lengths exist twice.  This writes the second copy from the first;
+# The add-in core (addin/core), held to the Writer macro's parse and the
+# converter's plan_table() through the goldens in tests/fixtures/.  Node is
+# needed here and nowhere else: `make test` stays Python-only, and CI runs
+# this as a job of its own.  No npm install -- the core has no dependencies.
+js-test:
+	@if command -v node >/dev/null 2>&1; then \
+	  cd addin && node --test core/test/; \
+	else \
+	  echo "node is not installed; the add-in core's suite needs Node >= 18"; \
+	  exit 1; \
+	fi
+
+# The macro is Basic and the add-in core JavaScript; neither can import
+# anything, so the style names and layout lengths exist three times.  This
+# writes the other copies from styles.py and measure.py;
 # tests/test_macro_sync.py fails when they drift.
 macro:
 	@$(PYTHON) tools/sync_macro.py --write

@@ -1,0 +1,1540 @@
+{
+  "_about": [
+    "Typed-line examples, shared by every implementation that reads them.",
+    "The Writer macro (tools/run_macro_test.py) and the JavaScript core",
+    "(addin/core, node --test) both read this file, so a case added for one",
+    "is a case for both. Each group keeps the shape the macro suite's check",
+    "for it expects; the comment above the group in run_macro_test.py says",
+    "what that check asserts. 'why' records the bug a case was added for.",
+    "The 'parsed' section is the macro's own parse of every case, written by",
+    "LINGUEXX_UPDATE_GOLDEN=1 python3 tools/run_macro_test.py -- read it",
+    "before committing it, like any golden."
+  ],
+  "CASES": {
+    "plain": {
+      "lines": [
+        "Esto es un ejemplo glosado",
+        "this is a example glossed",
+        "'This is a glossed example.'"
+      ]
+    },
+    "judged": {
+      "lines": [
+        "*Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "'The little child sleeps.'"
+      ]
+    },
+    "braces": {
+      "lines": [
+        "Ich {habe geschlafen}",
+        "I {have slept}",
+        "'I slept.'"
+      ]
+    },
+    "three_tiers": {
+      "lines": [
+        "Ich habe geschlafen",
+        "ich hab-e schlaf-en",
+        "1SG have-1SG sleep-PTCP",
+        "'I slept.'"
+      ]
+    },
+    "long": {
+      "lines": [
+        "Este es un ejemplo mucho mas largo que no cabe en una sola linea de texto",
+        "this is a example much more long that not fits in a single line of text",
+        "'This is a much longer example that does not fit on one line.'"
+      ]
+    }
+  },
+  "SUB_CASES": {
+    "sub_plain": {
+      "lines": [
+        "a. Sentences like this are fine.",
+        "b. Sentences like this are not."
+      ],
+      "markers": 2,
+      "glossed": false
+    },
+    "sub_glossed": {
+      "lines": [
+        "a. Esto es un ejemplo",
+        "this is a example",
+        "'This is an example.'",
+        "b. Otro ejemplo aqui",
+        "another example here",
+        "'Another example here.'"
+      ],
+      "markers": 2,
+      "glossed": true
+    },
+    "sub_judged": {
+      "lines": [
+        "a. *Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "b. Das kleine Kind schlaeft",
+        "the little child sleeps"
+      ],
+      "markers": 2,
+      "glossed": true
+    },
+    "sub_mixed": {
+      "lines": [
+        "a. Esto es un ejemplo",
+        "this is a example",
+        "b. This one is not glossed at all."
+      ],
+      "markers": 2,
+      "glossed": true
+    },
+    "sub_roman": {
+      "lines": [
+        "i. Otro ejemplo aqui",
+        "another example here",
+        "ii. Tercer ejemplo aqui",
+        "third example here"
+      ],
+      "markers": 2,
+      "glossed": true
+    },
+    "sub_marker_alone": {
+      "lines": [
+        "a.",
+        "Esto es un ejemplo",
+        "this is a example",
+        "b.",
+        "Otro ejemplo aqui",
+        "another example here"
+      ],
+      "markers": 2,
+      "glossed": true
+    },
+    "sub_judged_glued": {
+      "lines": [
+        "a.*This one is bad.",
+        "b.?Maybe this one is fine."
+      ],
+      "markers": 2,
+      "glossed": false,
+      "why": "A judgment mark typed straight after the letter, with no space to split on. The whole first word is then \"b.?Maybe\", which is not a marker, so the line stopped starting an item: it was folded into the item before it as another gloss tier and a paradigm of judged one-liners came out as a single word-by-word grid."
+    },
+    "sub_judged_half_glued": {
+      "lines": [
+        "a. *This one is bad.",
+        "b.?Maybe this one is fine.",
+        "c. ?Probably not though."
+      ],
+      "markers": 3,
+      "glossed": false,
+      "why": "The same, mixed with the spaced form -- the shape tests/subexamples_judged.odt holds. Here the first line *was* read as a marker, so the selection looked like a paradigm and only the glued line went astray."
+    },
+    "sub_judged_nnbsp": {
+      "lines": [
+        "a. *Das Kind schlafen",
+        "the child sleep.INF",
+        "b. Das Kind schlaeft",
+        "the child sleeps"
+      ],
+      "markers": 2,
+      "glossed": true,
+      "why": "Writer's French autocorrect replaces the space before a \"?\" with a narrow no-break one, and nothing on screen shows which is which. It was not a space to the word splitter, so the marker fused to the text after it; a glossed item must still line its tiers up."
+    }
+  },
+  "PLAIN_CASES": {
+    "single_line": {
+      "lines": [
+        "A simple example."
+      ],
+      "rows": 1,
+      "translation": false
+    },
+    "single_translation": {
+      "lines": [
+        "Un exemple simple",
+        "'A simple example.'"
+      ],
+      "rows": 2,
+      "translation": true
+    },
+    "single_judged": {
+      "lines": [
+        "*A bad example."
+      ],
+      "rows": 1,
+      "translation": false
+    },
+    "two_unglossed_translation": {
+      "lines": [
+        "Un exemple simple",
+        "`A simple example’"
+      ],
+      "rows": 2,
+      "translation": true
+    }
+  },
+  "TRANSLATION_CASES": {
+    "long_backtick": {
+      "lines": [
+        "Ceci est un exemple superlong juste pour voir ce qui se passe quand on",
+        "This is a example super_longue just for see what that SE happens when on",
+        "`Juste pour voir’"
+      ]
+    },
+    "curly_open": {
+      "lines": [
+        "Esto es un ejemplo",
+        "this is a example",
+        "‘This is an example.’"
+      ]
+    },
+    "guillemets": {
+      "lines": [
+        "Esto es un ejemplo",
+        "this is a example",
+        "«Voici un exemple»"
+      ]
+    }
+  },
+  "REFUSE": {
+    "marker_partway": {
+      "lines": [
+        "Esto es un ejemplo",
+        "this is a example",
+        "b. Otro ejemplo aqui",
+        "another example here"
+      ]
+    }
+  },
+  "ACCEPT": {
+    "abbreviation": {
+      "lines": [
+        "Dr. Meier kam gestern",
+        "Dr. Meier came yesterday",
+        "'Dr Meier came yesterday.'"
+      ]
+    },
+    "dotted_word": {
+      "lines": [
+        "Sie hat a.out gestartet",
+        "she has a.out started",
+        "'She started a.out.'"
+      ],
+      "why": "A marker may be the head of the first word rather than the whole of it, so that \"b.?Maybe\" is sub-example b -- but only when a judgment mark follows. Anything else after the dot is part of the word."
+    }
+  },
+  "UNTYPESET_CASES": {
+    "plain": {
+      "lines": [
+        "Esto es un ejemplo glosado",
+        "this is a example glossed",
+        "'This is a glossed example.'"
+      ],
+      "back": null
+    },
+    "judged": {
+      "lines": [
+        "*Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "'The little child sleeps.'"
+      ],
+      "back": null
+    },
+    "braces": {
+      "lines": [
+        "Ich {habe geschlafen}",
+        "I {have slept}",
+        "'I slept.'"
+      ],
+      "back": null
+    },
+    "unglossed": {
+      "lines": [
+        "A simple example."
+      ],
+      "back": null
+    },
+    "unglossed_translated": {
+      "lines": [
+        "Ein einfaches Beispiel.",
+        "'A simple example.'"
+      ],
+      "back": null
+    },
+    "sub_examples": {
+      "lines": [
+        "a. Esto es un ejemplo",
+        "this is a example",
+        "'This is an example.'",
+        "b. Otro ejemplo aqui",
+        "another example here",
+        "'Another example here.'"
+      ],
+      "back": null
+    },
+    "sub_judged": {
+      "lines": [
+        "a. *Das kleine Kind schlafen",
+        "the little child sleep.INF",
+        "b. Das kleine Kind schlaeft",
+        "the little child sleeps"
+      ],
+      "back": null
+    },
+    "banded": {
+      "lines": [
+        "Este es un ejemplo mucho mas largo que no cabe en una sola linea de texto de esta pagina y por eso se parte en bandas",
+        "this is a example much more long that not fits in a single line of text of this page and for that reason it splits in bands",
+        "'A long one.'"
+      ],
+      "back": null,
+      "why": "The one that needs the band mark: without it every band comes back as another gloss tier, and this example returns six lines instead of three."
+    }
+  },
+  "BANDED": {
+    "banded": {
+      "lines": [
+        "Dies ist ein extrem langes Beispiel um zu zeigen, was passiert, wenn die Grenze einer Linie erst einmal überschritten ist",
+        "This is a extreme long example for to show what happens when the border a.gen line first once trespassed is",
+        "`Just a test’"
+      ]
+    }
+  },
+  "PLAN_CASES": {
+    "annot": {
+      "lines": [
+        "que Pierre est fatigué \\exannot{[CP]}",
+        "that Pierre is tired",
+        "'that Pierre is tired'"
+      ],
+      "why": "The \\exannot column: reserved at annot_column_ratio of the text block, the body banded into what is left before it."
+    },
+    "overlong_word": {
+      "lines": [
+        "Donaudampfschifffahrtselektrizitätenhauptbetriebswerkbauunterbeamtengesellschaft Rindfleischetikettierungsüberwachungsaufgabenübertragungsgesetz",
+        "Danube.steamship.company.electrical.main.works.officials.association beef.labelling.supervision.duties.delegation.law"
+      ],
+      "why": "Words wider than max_col_cm are capped at it, and two capped words do not fit a 12 cm block: each band must then hold one word. At 17 cm they share a band."
+    },
+    "paradigm_banded": {
+      "lines": [
+        "a. Este es un ejemplo mucho mas largo que no cabe en una sola linea de texto de esta pagina",
+        "this is a example much more long that not fits in a single line of text of this page",
+        "b. Otro corto",
+        "another short"
+      ],
+      "why": "A banded item beside a short one: the grid is the union of every band's and every item's boundaries, each word spanning what it covers."
+    },
+    "judged_alone": {
+      "lines": [
+        "* Das kleine Kind schlafen",
+        "the little child sleep.INF"
+      ],
+      "why": "A judgment mark standing alone, a space before the first word: it goes to the judgment column and leaves no empty word behind it in the object tier."
+    },
+    "annot_long": {
+      "lines": [
+        "que Pierre est Donaudampfschifffahrtsgesellschaft \\exannot{[CP]}",
+        "that Pierre is steamship.company"
+      ],
+      "why": "An annotated example whose body is squeezed to its available width (at 7 cm a capped word does not fit): the gap left before the annotation column is then exactly \\ExAnnotSep, below min_col_cm, and must still be emitted."
+    }
+  },
+  "parsed": {
+    "CASES/plain": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'This is a glossed example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo",
+              "glosado"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example",
+              "glossed"
+            ]
+          ]
+        }
+      ]
+    },
+    "CASES/judged": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "*",
+          "translation": "'The little child sleeps.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        }
+      ]
+    },
+    "CASES/braces": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'I slept.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Ich",
+              "habe geschlafen"
+            ],
+            [
+              "I",
+              "have slept"
+            ]
+          ]
+        }
+      ]
+    },
+    "CASES/three_tiers": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'I slept.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Ich",
+              "habe",
+              "geschlafen"
+            ],
+            [
+              "ich",
+              "hab-e",
+              "schlaf-en"
+            ],
+            [
+              "1SG",
+              "have-1SG",
+              "sleep-PTCP"
+            ]
+          ]
+        }
+      ]
+    },
+    "CASES/long": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'This is a much longer example that does not fit on one line.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Este",
+              "es",
+              "un",
+              "ejemplo",
+              "mucho",
+              "mas",
+              "largo",
+              "que",
+              "no",
+              "cabe",
+              "en",
+              "una",
+              "sola",
+              "linea",
+              "de",
+              "texto"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example",
+              "much",
+              "more",
+              "long",
+              "that",
+              "not",
+              "fits",
+              "in",
+              "a",
+              "single",
+              "line",
+              "of",
+              "text"
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_plain": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Sentences",
+              "like",
+              "this",
+              "are",
+              "fine."
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Sentences",
+              "like",
+              "this",
+              "are",
+              "not."
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_glossed": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "'This is an example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "'Another example here.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "ejemplo",
+              "aqui"
+            ],
+            [
+              "another",
+              "example",
+              "here"
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_judged": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlaeft"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleeps"
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_mixed": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "This",
+              "one",
+              "is",
+              "not",
+              "glossed",
+              "at",
+              "all."
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_roman": {
+      "items": [
+        {
+          "marker": "i.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "ejemplo",
+              "aqui"
+            ],
+            [
+              "another",
+              "example",
+              "here"
+            ]
+          ]
+        },
+        {
+          "marker": "ii.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Tercer",
+              "ejemplo",
+              "aqui"
+            ],
+            [
+              "third",
+              "example",
+              "here"
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_marker_alone": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "ejemplo",
+              "aqui"
+            ],
+            [
+              "another",
+              "example",
+              "here"
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_judged_glued": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "This",
+              "one",
+              "is",
+              "bad."
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "?",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Maybe",
+              "this",
+              "one",
+              "is",
+              "fine."
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_judged_half_glued": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "This",
+              "one",
+              "is",
+              "bad."
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "?",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Maybe",
+              "this",
+              "one",
+              "is",
+              "fine."
+            ]
+          ]
+        },
+        {
+          "marker": "c.",
+          "judgment": "?",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Probably",
+              "not",
+              "though."
+            ]
+          ]
+        }
+      ]
+    },
+    "SUB_CASES/sub_judged_nnbsp": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "Kind",
+              "schlaeft"
+            ],
+            [
+              "the",
+              "child",
+              "sleeps"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAIN_CASES/single_line": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "A",
+              "simple",
+              "example."
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAIN_CASES/single_translation": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'A simple example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Un",
+              "exemple",
+              "simple"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAIN_CASES/single_judged": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "A",
+              "bad",
+              "example."
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAIN_CASES/two_unglossed_translation": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "`A simple example’",
+          "annot": "",
+          "tiers": [
+            [
+              "Un",
+              "exemple",
+              "simple"
+            ]
+          ]
+        }
+      ]
+    },
+    "TRANSLATION_CASES/long_backtick": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "`Juste pour voir’",
+          "annot": "",
+          "tiers": [
+            [
+              "Ceci",
+              "est",
+              "un",
+              "exemple",
+              "superlong",
+              "juste",
+              "pour",
+              "voir",
+              "ce",
+              "qui",
+              "se",
+              "passe",
+              "quand",
+              "on"
+            ],
+            [
+              "This",
+              "is",
+              "a",
+              "example",
+              "super_longue",
+              "just",
+              "for",
+              "see",
+              "what",
+              "that",
+              "SE",
+              "happens",
+              "when",
+              "on"
+            ]
+          ]
+        }
+      ]
+    },
+    "TRANSLATION_CASES/curly_open": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "‘This is an example.’",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        }
+      ]
+    },
+    "TRANSLATION_CASES/guillemets": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "«Voici un exemple»",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        }
+      ]
+    },
+    "REFUSE/marker_partway": {
+      "error": "A sub-example letter appears part-way through the selection, but the selection does not start with one.\n\nStart at the first sub-example, or leave the letters out and gloss one example at a time."
+    },
+    "ACCEPT/abbreviation": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'Dr Meier came yesterday.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Dr.",
+              "Meier",
+              "kam",
+              "gestern"
+            ],
+            [
+              "Dr.",
+              "Meier",
+              "came",
+              "yesterday"
+            ]
+          ]
+        }
+      ]
+    },
+    "ACCEPT/dotted_word": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'She started a.out.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Sie",
+              "hat",
+              "a.out",
+              "gestartet"
+            ],
+            [
+              "she",
+              "has",
+              "a.out",
+              "started"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/plain": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'This is a glossed example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo",
+              "glosado"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example",
+              "glossed"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/judged": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "*",
+          "translation": "'The little child sleeps.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/braces": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'I slept.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Ich",
+              "habe geschlafen"
+            ],
+            [
+              "I",
+              "have slept"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/unglossed": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "A",
+              "simple",
+              "example."
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/unglossed_translated": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'A simple example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Ein",
+              "einfaches",
+              "Beispiel."
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/sub_examples": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "'This is an example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "'Another example here.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "ejemplo",
+              "aqui"
+            ],
+            [
+              "another",
+              "example",
+              "here"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/sub_judged": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlaeft"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleeps"
+            ]
+          ]
+        }
+      ]
+    },
+    "UNTYPESET_CASES/banded": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'A long one.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Este",
+              "es",
+              "un",
+              "ejemplo",
+              "mucho",
+              "mas",
+              "largo",
+              "que",
+              "no",
+              "cabe",
+              "en",
+              "una",
+              "sola",
+              "linea",
+              "de",
+              "texto",
+              "de",
+              "esta",
+              "pagina",
+              "y",
+              "por",
+              "eso",
+              "se",
+              "parte",
+              "en",
+              "bandas"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example",
+              "much",
+              "more",
+              "long",
+              "that",
+              "not",
+              "fits",
+              "in",
+              "a",
+              "single",
+              "line",
+              "of",
+              "text",
+              "of",
+              "this",
+              "page",
+              "and",
+              "for",
+              "that",
+              "reason",
+              "it",
+              "splits",
+              "in",
+              "bands"
+            ]
+          ]
+        }
+      ]
+    },
+    "BANDED/banded": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "`Just a test’",
+          "annot": "",
+          "tiers": [
+            [
+              "Dies",
+              "ist",
+              "ein",
+              "extrem",
+              "langes",
+              "Beispiel",
+              "um",
+              "zu",
+              "zeigen,",
+              "was",
+              "passiert,",
+              "wenn",
+              "die",
+              "Grenze",
+              "einer",
+              "Linie",
+              "erst",
+              "einmal",
+              "überschritten",
+              "ist"
+            ],
+            [
+              "This",
+              "is",
+              "a",
+              "extreme",
+              "long",
+              "example",
+              "for",
+              "to",
+              "show",
+              "what",
+              "happens",
+              "when",
+              "the",
+              "border",
+              "a.gen",
+              "line",
+              "first",
+              "once",
+              "trespassed",
+              "is"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAN_CASES/annot": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "'that Pierre is tired'",
+          "annot": "[CP]",
+          "tiers": [
+            [
+              "que",
+              "Pierre",
+              "est",
+              "fatigué"
+            ],
+            [
+              "that",
+              "Pierre",
+              "is",
+              "tired"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAN_CASES/overlong_word": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Donaudampfschifffahrtselektrizitätenhauptbetriebswerkbauunterbeamtengesellschaft",
+              "Rindfleischetikettierungsüberwachungsaufgabenübertragungsgesetz"
+            ],
+            [
+              "Danube.steamship.company.electrical.main.works.officials.association",
+              "beef.labelling.supervision.duties.delegation.law"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAN_CASES/paradigm_banded": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Este",
+              "es",
+              "un",
+              "ejemplo",
+              "mucho",
+              "mas",
+              "largo",
+              "que",
+              "no",
+              "cabe",
+              "en",
+              "una",
+              "sola",
+              "linea",
+              "de",
+              "texto",
+              "de",
+              "esta",
+              "pagina"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example",
+              "much",
+              "more",
+              "long",
+              "that",
+              "not",
+              "fits",
+              "in",
+              "a",
+              "single",
+              "line",
+              "of",
+              "text",
+              "of",
+              "this",
+              "page"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "corto"
+            ],
+            [
+              "another",
+              "short"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAN_CASES/judged_alone": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Das",
+              "kleine",
+              "Kind",
+              "schlafen"
+            ],
+            [
+              "the",
+              "little",
+              "child",
+              "sleep.INF"
+            ]
+          ]
+        }
+      ]
+    },
+    "PLAN_CASES/annot_long": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "",
+          "annot": "[CP]",
+          "tiers": [
+            [
+              "que",
+              "Pierre",
+              "est",
+              "Donaudampfschifffahrtsgesellschaft"
+            ],
+            [
+              "that",
+              "Pierre",
+              "is",
+              "steamship.company"
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

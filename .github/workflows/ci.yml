@@ -67,6 +67,23 @@ jobs:
       - name: Run the suite
         run: pytest -q
 
+  # The add-in core: plain ES modules, tested with Node's own runner and no
+  # npm install.  Held to the Writer macro's parse and the converter's
+  # plan_table() through tests/fixtures/, whose Python half (the goldens
+  # being current) is checked by the test job above -- so this needs Node
+  # and nothing else.
+  addin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: node --test
+        run: |
+          node --version
+          cd addin && node --test core/test/
+
   # The Writer macro, driven inside a real LibreOffice: the .bas that ships
   # is installed into a throwaway profile and invoked through the script
   # provider, so what runs is the file, not a re-implementation of it.  Its

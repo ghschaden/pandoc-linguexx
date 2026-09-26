@@ -324,24 +324,72 @@ correct cache. Without that, the plugin would produce numbers that are
 text by another route, which is the one thing this project exists not to
 do, so OnlyOffice stops there.
 
-### Phase 1 — the core (~3 days)
+### Phase 1 — the core — DONE (2026-09-26)
 
-Port the parse, the bands and the plan from `LinguExx.bas` to
-`addin/core/`. **The macro's typed-line cases become shared fixtures**:
-`CASES`, `SUB_CASES` and `UNTYPESET_CASES` move out of
-`tools/run_macro_test.py` into `tests/fixtures/typed-examples.json`, and
-both the macro suite and `node --test addin/core` read them. The two
-implementations then answer the same inputs, and a case added for one is
-a case for both.
+`addin/core/`: `constants.js` (generated), `measure.js`, `parse.js`,
+`plan.js`, and `node --test` suites under `core/test/` — `make js-test`,
+161 tests, and a CI job of its own. No dependencies, no build step.
 
-Differential check against the converter: for each fixture there is an
-equivalent linguexx source. The core's plan must agree with
-`plan_table()` on the band breaks and span patterns. Widths may differ
-only by the difference between measuring and estimating, and here both
-estimate, so they should agree exactly.
+**Two oracles, and the core is held to both exactly.**
 
-New tooling: Node, only for `make js-test`, never for `make test`. CI gets
-a job of its own, like the macro's.
+- **The parse is the Writer macro's.** The typed-line cases moved out of
+  `tools/run_macro_test.py` into `tests/fixtures/typed-examples.json`
+  (every group the harness had, each case keeping the "why" it was added
+  for), and the harness reads them from there. A new Basic entry point,
+  `ParseLinesQuiet`, runs `LxParseItems` on lines and returns the items
+  without building anything; the macro suite records its answer for every
+  fixture as the file's `parsed` section (`LINGUEXX_UPDATE_GOLDEN=1
+  python3 tools/run_macro_test.py`) and fails when the macro stops giving
+  it. `parse.test.js` requires `parse.js` to give the same, case by case.
+- **The plan is the converter's.** `tools/addin_oracle.py` builds the
+  converter's IR from each recorded parse, runs `BaseEmitter.prepare()`
+  and `plan_table()` at 17, 12 and 7 cm, and writes
+  `tests/fixtures/typed-examples.plans.json`; `tests/test_addin_core.py`
+  fails when that golden is stale. `plan.test.js` requires `planTable` to
+  give the same bands, spans, warnings and widths — `deepStrictEqual`, no
+  tolerance. It does, for 38 fixtures at three widths.
+
+What the port taught, each found by that exact comparison or by a
+mutation surviving it:
+
+1. **Python's `sum()` of floats is compensated since 3.12** (Neumaier, as
+   `Python/bltinmodule.c` does it). A plain JavaScript loop came out one
+   unit in the last place away in half the fixtures. `measure.pySum`
+   reproduces it, used exactly where the Python calls `sum()` and nowhere
+   else — the `x += w` loops in `Grid` are plain addition in both. The
+   drift test skips on Python < 3.12, where the golden would not reproduce.
+2. **LibreOffice Basic's `InStr` compares case-blind by default**, so the
+   macro finds `\EXANNOT{..}`; `pullAnnot` matches that.
+3. **Basic resolves a `Const` in source order** — known, and still cost a
+   run: `ParseLinesQuiet` placed beside `GlossSelectionQuiet` returned
+   Empty ("Variable not defined: IT_TIERS", visible only once it trapped
+   its own errors, which it now does).
+4. **The converter reads a cell as LaTeX**, so a typed `'` would be
+   measured as `’` and `--` as an en dash. The oracle escapes LaTeX's
+   specials and then requires the converter's own reader to give the typed
+   text back, failing loudly rather than comparing two different examples.
+5. **Ten deliberate mutations of the core; three first survived**, each
+   a gap in the fixtures: a lone judgment mark (`* Das Kind`), the guard
+   against an empty band, and the annotation gap below `min_col_cm`. The
+   last two are reachable only when a capped word is wider than the space
+   left, hence the 7 cm width and the `PLAN_CASES` fixtures. All ten now
+   fail at least one test.
+
+**The add-in's selection rule is the macro's, not the converter's.**
+`prepareSelection` reserves the judgment column always and sizes the
+number for "(00)", as `LxLayOut` does: an add-in, like the macro, sees one
+example and not the document. It is unit-tested, not held to an oracle —
+the macro measures a real font and the core estimates, so there is no
+exact answer to compare with.
+
+**A converter bug the port exposed, fixed:** `emit_docx` summed a cell's
+`w:tcW` from the columns at the word's *index*, which is its grid column
+only in a one-band, one-body table. Word and LibreOffice lay out from
+`w:tblGrid` and never showed it; OnlyOffice lays out from the cells (S8
+fact 2) and drew a banded example as letters in slivers. Now summed from
+the columns the cell actually covers; `test_every_cell_is_as_wide_as_the_
+columns_it_spans` failed before and passes after, and OnlyOffice and
+LibreOffice then agree on that example to 0.1 pt.
 
 ### Phase 2 — Word MVP (~4 days)
 

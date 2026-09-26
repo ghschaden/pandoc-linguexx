@@ -1,0 +1,10 @@
+{
+  "name": "linguexx-addin",
+  "private": true,
+  "description": "Word add-in and OnlyOffice plugin for linguexx-style examples; see plan-addins.md",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test": "node --test core/test/"
+  }
+}

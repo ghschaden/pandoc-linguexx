@@ -299,6 +299,7 @@ Function GlossSelectionQuiet() As String
 End Function
 
 
+
 ' ------------------------------------------------------------- the work ---
 
 ' An example is a list of *items*.  A plain example is one item with no
@@ -314,6 +315,83 @@ Const IT_NTIERS As Integer = 4     ' 1 means unglossed, 0 means a tree
 Const IT_TREE   As Integer = 5     ' the item's own lines, when it is a tree
 Const IT_ANNOT  As Integer = 6     ' \exannot label pulled off the object line
 Const IT_SIZE   As Integer = 7
+
+
+' The parse alone: lines in, items out, nothing built and nothing asked of a
+' document.  For the harness, which records what this macro makes of every
+' typed-line fixture so that the JavaScript add-in core can be held to the
+' same answers -- the two read one grammar, and this is the reference.
+'
+' The lines get what LxSelectedLines gives a selection: trimmed, blank ones
+' dropped.  No formatting, so no format marks (LxFmtN = 0).  Returns
+' Array("error", message) for a refusal, else Array("items", items), each
+' item Array(marker, judgment, translation, annotation, tiers) with tiers an
+' array of word arrays; one tier means unglossed.
+'
+' Below the IT_* constants on purpose: Basic resolves a Const in source
+' order, and placed beside GlossSelectionQuiet this failed with "Variable
+' not defined: IT_TIERS".  The trap turns any such failure into a message;
+' without it a headless caller gets Empty and nothing to go on.
+Function ParseLinesQuiet(aLines As Variant) As Variant
+    Dim aClean() As String, aItems As Variant, aOut() As Variant
+    Dim aIt As Variant, aTiers As Variant, aWords As Variant
+    Dim aT() As Variant, aW() As String
+    Dim sError As String, sLine As String
+    Dim i As Integer, n As Integer, k As Integer, t As Integer
+
+    On Error Goto Failed
+    LxTreeOnly = False
+    LxFmtN = 0
+    ReDim aClean(LxMaxI(UBound(aLines), 0))
+    n = 0
+    For i = 0 To UBound(aLines)
+        sLine = LxTrimTagged(aLines(i))
+        If Len(sLine) > 0 Then
+            aClean(n) = sLine
+            n = n + 1
+        End If
+    Next i
+    If n = 0 Then
+        ParseLinesQuiet = Array("error", "no lines")
+        Exit Function
+    End If
+    ReDim Preserve aClean(n - 1)
+
+    aItems = LxParseItems(aClean(), n, sError)
+    If Len(sError) > 0 Then
+        ParseLinesQuiet = Array("error", sError)
+        Exit Function
+    End If
+
+    ReDim aOut(UBound(aItems))
+    For k = 0 To UBound(aItems)
+        aIt = aItems(k)
+        aTiers = aIt(IT_TIERS)
+        If aIt(IT_NTIERS) < 1 Then
+            aT = Array()
+        Else
+            ReDim aT(aIt(IT_NTIERS) - 1)
+            For t = 0 To aIt(IT_NTIERS) - 1
+                aWords = aTiers(t)
+                If UBound(aWords) < 0 Then
+                    aT(t) = Array()
+                Else
+                    ReDim aW(UBound(aWords))
+                    For i = 0 To UBound(aWords)
+                        aW(i) = LxStrip(aWords(i))
+                    Next i
+                    aT(t) = aW()
+                End If
+            Next t
+        End If
+        aOut(k) = Array(LxStrip(aIt(IT_MARKER)), aIt(IT_JUDG), _
+                        LxStrip(aIt(IT_TRANS)), LxStrip(aIt(IT_ANNOT)), aT)
+    Next k
+    ParseLinesQuiet = Array("items", aOut())
+    Exit Function
+Failed:
+    ParseLinesQuiet = Array("error", "Basic error: " & Error$ & " (line " & Erl & ")")
+End Function
 
 
 Sub LxBuildExample(oDoc As Object, oRange As Object, aLines As Variant, nLines As Integer)
