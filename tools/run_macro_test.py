@@ -48,7 +48,7 @@ sys.path.insert(0, str(ROOT / "tests"))      # the shared PDF-reading helper
 sys.path.insert(0, str(ROOT / "src"))
 
 import pdfwords  # noqa: E402
-from linguexx2odt import postprocess, writermacro  # noqa: E402
+from linguexx2odt import measure, postprocess, writermacro  # noqa: E402
 
 SOURCE = writermacro.path()
 
@@ -57,6 +57,8 @@ SOURCE = writermacro.path()
 #: both.  Each case's "why" says what bug it was added for.
 FIXTURE_FILE = ROOT / "tests" / "fixtures" / "typed-examples.json"
 FIXTURES = json.loads(FIXTURE_FILE.read_text(encoding="utf-8"))
+TREE_FILE = ROOT / "tests" / "fixtures" / "trees.json"
+TREES = json.loads(TREE_FILE.read_text(encoding="utf-8"))
 
 CASEMAP_NONE = 0                             # com.sun.star.style.CaseMap
 SMALLCAPS = 4
@@ -876,25 +878,11 @@ def check_formatting_round_trip(ctx) -> int:
 
 
 # Bracket notation -> a drawn tree.  (source, labelled nodes, branches)
-TREE_CASES = {
-    "bracketed_leaves": ("[DP [D [the]] [NP [N [tree]]]]", 6, 5),
-    "bare_leaves": ("[DP [D the] [NP [N tree]]]", 6, 5),
-    "deep": ("[CP [C that] [TP [DP [D the] [NP [N cat]]] "
-             "[T' [T -ed] [VP [V sleep]]]]]", 16, 15),
-    "braced_label": ("[S [NP [D the] [N {long noisy constituent}]] [VP [V left]]]",
-                     9, 8),
-    "roof": ("[S [NP {the big tree, roof}] [VP [V slept]]]", 6, 5),
-    "judged": ("*[S [NP him] [VP [V left]]]", 6, 5),
-}
+TREE_CASES = {k: (c["lines"][0], c["nodes"], c["branches"])
+              for k, c in TREES["TREES"].items()}
 
 # Selections it must refuse rather than draw something wrong.
-TREE_REFUSE = {
-    "unclosed": "[DP [D the] [NP [N tree]]",
-    "trailing_text": "[DP [D the]] rubbish",
-    "not_a_tree": "DP D the",
-    "unknown_option": "[S [NP {the tree, align=center}]]",
-    "movement_arrow": "[CP [DP what] [TP [VP saw]]] \\draw(a)--(b)",
-}
+TREE_REFUSE = {k: c["lines"][0] for k, c in TREES["TREE_REFUSE"].items()}
 
 
 def check_trees(ctx) -> int:
@@ -1020,23 +1008,10 @@ def check_tree_geometry(ctx) -> int:
 
 # Movement.  (lines, labelled nodes, branches, arrows) — an arrow is two
 # shapes, the routed polyline and its head.
-MOVE_CASES = {
-    "wh": (["[CP [DP,name=wh what] [C' [C did] [TP [DP John] "
-            "[VP [V see] [DP,name=t __]]]]]", "move t -> wh"], 14, 13, 1),
-    "successive": (["[CP [DP,name=wh who] [C' [C did] [TP [DP,name=s2 __] "
-                    "[VP [V leave] [DP,name=t2 __]]]]]",
-                    "move t2 -> s2", "move s2 -> wh"], 14, 13, 2),
-    "nested": (["[A [B,name=p x] [C [D,name=q y] [E,name=r z]]]",
-                "move r -> q", "move q -> p"], 8, 7, 2),
-}
+MOVE_CASES = {k: (c["lines"], c["nodes"], c["branches"], c["arrows"])
+              for k, c in TREES["MOVES"].items()}
 
-MOVE_REFUSE = {
-    "no_arrow": ["[S [NP,name=a x]]", "move a b"],
-    "unknown_name": ["[S [NP,name=a x]]", "move a -> zzz"],
-    "self_move": ["[S [NP,name=a x]]", "move a -> a"],
-    "moves_only": ["move a -> b"],
-    "tikz": ["[S [NP x]] \\draw[->] (a) to (b);"],
-}
+MOVE_REFUSE = {k: c["lines"] for k, c in TREES["MOVE_REFUSE"].items()}
 
 
 def shapes_of(group) -> dict:
@@ -1130,26 +1105,7 @@ def segments_cross(first, second) -> bool:
 # site in the middle of the tree, a target whose sibling is far deeper,
 # rightward movement, two arrows whose spans overlap, a roof in the way,
 # and a target that dominates its own source.
-CLEARANCE_CASES = {
-    "from_the_right_edge": [
-        "[CP [DP,name=w what] [C' [C did] [TP [DP John] "
-        "[VP [V see] [DP,name=t __]]]]]", "move t -> w"],
-    "landing_in_the_middle": [
-        "[CP [C that] [TP [DP,name=s __] [VP [V left] [DP,name=t __]]]]",
-        "move t -> s"],
-    "target_with_a_deep_sibling": [
-        "[S [A,name=a x] [B [C [D [E [F,name=f deep]]]]]]", "move f -> a"],
-    "rightward": ["[S [A,name=a x] [B [C y] [D,name=d z]]]", "move a -> d"],
-    "overlapping_spans": [
-        "[S [A,name=p 1] [B,name=q 2] [C,name=r 3] [D,name=s 4]]",
-        "move r -> p", "move s -> q"],
-    "under_a_roof": [
-        "[S [NP {the big tree, roof}] [VP [V,name=v left] [DP,name=t __]]]",
-        "move t -> v"],
-    "target_is_an_ancestor": [
-        "[CP,name=top [C that] [TP [VP [V see] [DP,name=t __]]]]",
-        "move t -> top"],
-}
+CLEARANCE_CASES = {k: c["lines"] for k, c in TREES["CLEARANCE"].items()}
 
 
 def check_arrow_clearance(ctx) -> int:
@@ -1788,26 +1744,8 @@ def check_guards(ctx) -> int:
 # A paradigm of trees, built by the numbered-tree command.  Every item is
 # a tree because the command says so — nothing is read out of the brackets.
 # (lines, trees drawn, markers)
-TREE_ITEM_CASES = {
-    "two_trees": (["a. [DP [D the] [NP [N tree]]]",
-                   "b. [DP [D a] [NP [N cat]]]"], 2, 2),
-    "three_trees": (["a. [DP [D the] [NP [N tree]]]",
-                     "b. [DP [D a] [NP [N cat]]]",
-                     "c. [VP [V sang] [AdvP [Adv loudly]]]"], 3, 3),
-    "judged": (["a. *[S [NP him] [VP [V left]]]",
-                "b. [S [NP he] [VP [V left]]]"], 2, 2),
-    "with_translations": (["a. [DP [D the] [NP [N tree]]]", "'the tree'",
-                           "b. [DP [D a] [NP [N cat]]]", "'a cat'"], 2, 2),
-    "with_movement": (
-        ["a. [CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
-         "move t -> w", "b. [CP [DP who] [TP [V left]]]"], 2, 2),
-    "single_tree": (["[DP [D the] [NP [N tree]]]"], 1, 0),
-    # The tree reader splits on the same spaces the word splitter does, so
-    # a no-break one inside the brackets used to fuse a label to its leaf
-    # and produce one node called "NP him" instead of NP over him.
-    "nbsp_in_brackets": (["a.\u00a0*[S [NP\u00a0him] [VP [V left]]]",
-                          "b. [S [NP he] [VP [V left]]]"], 2, 2),
-}
+TREE_ITEM_CASES = {k: (c["lines"], c["groups"], c["markers"])
+                   for k, c in TREES["ITEMS"].items()}
 
 # Typeset example must never draw a tree, whatever brackets are in it.
 # Labelled bracketing is how constituent structure is shown inside an
@@ -1826,12 +1764,7 @@ NOT_TREES = {
 
 # The numbered-tree command promises trees, so anything that is not one is
 # an error naming the item — not a quiet fall back to text.
-TREE_ITEM_REFUSE = {
-    "unclosed": ["a. [DP [D the]", "b. [DP [D a] [NP [N cat]]]"],
-    "not_brackets": ["a. just some words", "b. [DP [D a] [NP [N cat]]]"],
-    "mixed_with_gloss": ["a. [DP [D the] [NP [N tree]]]",
-                         "b. Esto es un ejemplo", "this is a example"],
-}
+TREE_ITEM_REFUSE = {k: c["lines"] for k, c in TREES["ITEM_REFUSE"].items()}
 
 
 def check_tree_items(ctx) -> int:
@@ -2925,6 +2858,7 @@ def main() -> int:
 
     failures = 0
     failures += check_parse_golden(ctx)
+    failures += check_tree_golden(ctx)
     for name, lines in CASES.items():
         doc = make_doc(ctx, lines)
         try:
@@ -3063,6 +2997,97 @@ def check_parse_golden(ctx) -> int:
             bad += 1
     if not bad:
         print(f"    ok — {len(got)} fixtures parse as recorded")
+    return bad
+
+
+#: The face the golden's label widths are estimated in: 12 pt Liberation
+#: Serif, the converter's _ADVANCE.  Any deterministic width would pin the
+#: layout; these are at least the widths a tree in Times would have.
+TREE_EM_CM = 12 / 72 * 2.54
+
+
+def label_width(label: str) -> int:
+    """A label's width in 1/100 mm, the unit the macro lays trees out in --
+    a whole number, as a shape's measured size is."""
+    return round(measure.text_width_cm(label, TREE_EM_CM) * 1000)
+
+
+def macro_tree(ctx, lines: list[str]) -> dict:
+    """What the macro's tree reader and layout make of *lines*, as data.
+
+    Parsed once to learn the labels, then laid out with a width for each
+    handed in (label_width), so the positions recorded are the macro's
+    arithmetic alone."""
+    kind, *rest = run(ctx, "TreeLayoutQuiet", (tuple(lines), (), ()))
+    if kind == "error":
+        return {"error": rest[0]}
+    labels = sorted({node[0] for node in rest[1] if node[0]})
+    kind, *rest = run(ctx, "TreeLayoutQuiet",
+                      (tuple(lines), tuple(labels), tuple(label_width(s) for s in labels)))
+    if kind == "error":
+        return {"error": rest[0]}
+    judgment, nodes, arrows = rest
+    return {
+        "judgment": judgment,
+        "widths": {s: label_width(s) for s in labels},
+        "nodes": [{"label": label, "name": name, "roof": bool(roof), "kid": kid,
+                   "sib": sib, "depth": depth, "w": w, "x": x}
+                  for label, name, roof, kid, sib, depth, w, x in nodes],
+        "arrows": [{"from": a, "to": b, "lane": lane} for a, b, lane in arrows],
+    }
+
+
+def macro_tree_items(ctx, lines: list[str]) -> dict:
+    """What the tree command's parse makes of a selection: macro_parse, with
+    each item's own lines -- the tree it will be drawn from."""
+    kind, payload = run(ctx, "ParseLinesQuiet", (tuple(lines), True))
+    if kind == "error":
+        return {"error": payload}
+    return {"items": [
+        {"marker": marker, "judgment": judgment, "translation": translation,
+         "annot": annot, "tiers": [list(words) for words in tiers], "tree": list(tree)}
+        for marker, judgment, translation, annot, tiers, tree in payload
+    ]}
+
+
+def check_tree_golden(ctx) -> int:
+    """Every tree fixture parses and lays out the way the golden says.
+
+    check_parse_golden's counterpart for trees, and held the same way: the
+    golden is the macro's answer and addin/core/tree.js is tested against
+    it, positions included, to the last bit.  LINGUEXX_UPDATE_GOLDEN=1
+    rewrites it."""
+    print("--- tree golden")
+    goldens = {"laid_out": {}, "items_parsed": {}}
+    for group, cases in TREES.items():
+        if group.startswith("_") or group in goldens:
+            continue
+        for name, case in cases.items():
+            if group.startswith("ITEM"):     # a whole selection, maybe a paradigm
+                goldens["items_parsed"][f"{group}/{name}"] = macro_tree_items(ctx, case["lines"])
+            else:
+                goldens["laid_out"][f"{group}/{name}"] = macro_tree(ctx, case["lines"])
+
+    if os.environ.get("LINGUEXX_UPDATE_GOLDEN"):
+        TREES.update(goldens)
+        TREE_FILE.write_text(json.dumps(TREES, ensure_ascii=False, indent=2) + "\n",
+                             encoding="utf-8")
+        print(f"    wrote {len(goldens['laid_out'])} trees and "
+              f"{len(goldens['items_parsed'])} selections to {TREE_FILE.name} -- "
+              "read the diff before committing it")
+        return 0
+
+    bad = 0
+    for section, got in goldens.items():
+        want = TREES.get(section, {})
+        for key in sorted(set(got) | set(want)):
+            if got.get(key) != want.get(key):
+                print(f"    FAIL: {section} {key}: macro gives {got.get(key)}, "
+                      f"golden has {want.get(key)}")
+                bad += 1
+    if not bad:
+        print(f"    ok — {len(goldens['laid_out'])} trees and "
+              f"{len(goldens['items_parsed'])} selections as recorded")
     return bad
 
 

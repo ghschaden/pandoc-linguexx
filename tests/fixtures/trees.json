@@ -1,0 +1,2564 @@
+{
+  "_about": [
+    "Bracket-notation trees, shared by every implementation that reads them.",
+    "The Writer macro (tools/run_macro_test.py) draws each case and checks the",
+    "drawing; the JavaScript core (addin/core/tree.js, node --test) parses and",
+    "lays each out. 'laid_out' is the macro's own parse and layout of every",
+    "case, from TreeLayoutQuiet with the widths recorded beside each node",
+    "handed in rather than measured -- so the positions are the macro's",
+    "ITEM groups are whole selections for the tree command -- a paradigm of trees -- and 'items_parsed' is the macro's parse of each (ParseLinesQuiet with its tree flag).",
+    "arithmetic and not the fonts of the machine that ran it. Written by",
+    "LINGUEXX_UPDATE_GOLDEN=1 python3 tools/run_macro_test.py; read it before",
+    "committing it, like any golden."
+  ],
+  "TREES": {
+    "bracketed_leaves": {
+      "lines": [
+        "[DP [D [the]] [NP [N [tree]]]]"
+      ],
+      "nodes": 6,
+      "branches": 5
+    },
+    "bare_leaves": {
+      "lines": [
+        "[DP [D the] [NP [N tree]]]"
+      ],
+      "nodes": 6,
+      "branches": 5
+    },
+    "deep": {
+      "lines": [
+        "[CP [C that] [TP [DP [D the] [NP [N cat]]] [T' [T -ed] [VP [V sleep]]]]]"
+      ],
+      "nodes": 16,
+      "branches": 15
+    },
+    "braced_label": {
+      "lines": [
+        "[S [NP [D the] [N {long noisy constituent}]] [VP [V left]]]"
+      ],
+      "nodes": 9,
+      "branches": 8
+    },
+    "roof": {
+      "lines": [
+        "[S [NP {the big tree, roof}] [VP [V slept]]]"
+      ],
+      "nodes": 6,
+      "branches": 5
+    },
+    "judged": {
+      "lines": [
+        "*[S [NP him] [VP [V left]]]"
+      ],
+      "nodes": 6,
+      "branches": 5
+    },
+    "wide_parent": {
+      "lines": [
+        "[{the widest label of all} [A x] [B y]]"
+      ],
+      "nodes": 5,
+      "branches": 4,
+      "why": "A parent wider than its children overhangs them on the left, so the layout must shift the whole tree back to x = 0 (LxTMinLeft); no other case does."
+    }
+  },
+  "TREE_REFUSE": {
+    "unclosed": {
+      "lines": [
+        "[DP [D the] [NP [N tree]]"
+      ]
+    },
+    "trailing_text": {
+      "lines": [
+        "[DP [D the]] rubbish"
+      ]
+    },
+    "not_a_tree": {
+      "lines": [
+        "DP D the"
+      ]
+    },
+    "unknown_option": {
+      "lines": [
+        "[S [NP {the tree, align=center}]]"
+      ]
+    },
+    "movement_arrow": {
+      "lines": [
+        "[CP [DP what] [TP [VP saw]]] \\draw(a)--(b)"
+      ]
+    }
+  },
+  "MOVES": {
+    "wh": {
+      "lines": [
+        "[CP [DP,name=wh what] [C' [C did] [TP [DP John] [VP [V see] [DP,name=t __]]]]]",
+        "move t -> wh"
+      ],
+      "nodes": 14,
+      "branches": 13,
+      "arrows": 1
+    },
+    "successive": {
+      "lines": [
+        "[CP [DP,name=wh who] [C' [C did] [TP [DP,name=s2 __] [VP [V leave] [DP,name=t2 __]]]]]",
+        "move t2 -> s2",
+        "move s2 -> wh"
+      ],
+      "nodes": 14,
+      "branches": 13,
+      "arrows": 2
+    },
+    "nested": {
+      "lines": [
+        "[A [B,name=p x] [C [D,name=q y] [E,name=r z]]]",
+        "move r -> q",
+        "move q -> p"
+      ],
+      "nodes": 8,
+      "branches": 7,
+      "arrows": 2
+    },
+    "tab_after_move": {
+      "lines": [
+        "[S [NP,name=a x] [VP,name=b y]]",
+        "move\ta -> b"
+      ],
+      "nodes": 5,
+      "branches": 4,
+      "arrows": 1,
+      "why": "A tab after 'move' makes it a move line, but the names were cut out with Basic's Trim, which takes spaces only: the macro looked for a node named '<TAB>a' and refused."
+    }
+  },
+  "MOVE_REFUSE": {
+    "no_arrow": {
+      "lines": [
+        "[S [NP,name=a x]]",
+        "move a b"
+      ]
+    },
+    "unknown_name": {
+      "lines": [
+        "[S [NP,name=a x]]",
+        "move a -> zzz"
+      ]
+    },
+    "self_move": {
+      "lines": [
+        "[S [NP,name=a x]]",
+        "move a -> a"
+      ]
+    },
+    "moves_only": {
+      "lines": [
+        "move a -> b"
+      ]
+    },
+    "tikz": {
+      "lines": [
+        "[S [NP x]] \\draw[->] (a) to (b);"
+      ]
+    },
+    "too_many_moves": {
+      "lines": [
+        "[S [NP,name=a x] [VP,name=b y]]",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b",
+        "move a -> b"
+      ],
+      "why": "ARROW_MAX is 40 and the check is made before a line is kept, so the 42nd line is the one refused."
+    }
+  },
+  "CLEARANCE": {
+    "from_the_right_edge": {
+      "lines": [
+        "[CP [DP,name=w what] [C' [C did] [TP [DP John] [VP [V see] [DP,name=t __]]]]]",
+        "move t -> w"
+      ]
+    },
+    "landing_in_the_middle": {
+      "lines": [
+        "[CP [C that] [TP [DP,name=s __] [VP [V left] [DP,name=t __]]]]",
+        "move t -> s"
+      ]
+    },
+    "target_with_a_deep_sibling": {
+      "lines": [
+        "[S [A,name=a x] [B [C [D [E [F,name=f deep]]]]]]",
+        "move f -> a"
+      ]
+    },
+    "rightward": {
+      "lines": [
+        "[S [A,name=a x] [B [C y] [D,name=d z]]]",
+        "move a -> d"
+      ]
+    },
+    "overlapping_spans": {
+      "lines": [
+        "[S [A,name=p 1] [B,name=q 2] [C,name=r 3] [D,name=s 4]]",
+        "move r -> p",
+        "move s -> q"
+      ]
+    },
+    "under_a_roof": {
+      "lines": [
+        "[S [NP {the big tree, roof}] [VP [V,name=v left] [DP,name=t __]]]",
+        "move t -> v"
+      ]
+    },
+    "target_is_an_ancestor": {
+      "lines": [
+        "[CP,name=top [C that] [TP [VP [V see] [DP,name=t __]]]]",
+        "move t -> top"
+      ]
+    }
+  },
+  "ITEMS": {
+    "two_trees": {
+      "lines": [
+        "a. [DP [D the] [NP [N tree]]]",
+        "b. [DP [D a] [NP [N cat]]]"
+      ],
+      "groups": 2,
+      "markers": 2
+    },
+    "three_trees": {
+      "lines": [
+        "a. [DP [D the] [NP [N tree]]]",
+        "b. [DP [D a] [NP [N cat]]]",
+        "c. [VP [V sang] [AdvP [Adv loudly]]]"
+      ],
+      "groups": 3,
+      "markers": 3
+    },
+    "judged": {
+      "lines": [
+        "a. *[S [NP him] [VP [V left]]]",
+        "b. [S [NP he] [VP [V left]]]"
+      ],
+      "groups": 2,
+      "markers": 2
+    },
+    "with_translations": {
+      "lines": [
+        "a. [DP [D the] [NP [N tree]]]",
+        "'the tree'",
+        "b. [DP [D a] [NP [N cat]]]",
+        "'a cat'"
+      ],
+      "groups": 2,
+      "markers": 2
+    },
+    "with_movement": {
+      "lines": [
+        "a. [CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
+        "move t -> w",
+        "b. [CP [DP who] [TP [V left]]]"
+      ],
+      "groups": 2,
+      "markers": 2
+    },
+    "single_tree": {
+      "lines": [
+        "[DP [D the] [NP [N tree]]]"
+      ],
+      "groups": 1,
+      "markers": 0
+    },
+    "nbsp_in_brackets": {
+      "lines": [
+        "a. *[S [NP him] [VP [V left]]]",
+        "b. [S [NP he] [VP [V left]]]"
+      ],
+      "groups": 2,
+      "markers": 2,
+      "why": "The tree reader splits on the same spaces the word splitter does, so a no-break one inside the brackets used to fuse a label to its leaf and produce one node called 'NP him' instead of NP over him."
+    }
+  },
+  "ITEM_REFUSE": {
+    "unclosed": {
+      "lines": [
+        "a. [DP [D the]",
+        "b. [DP [D a] [NP [N cat]]]"
+      ]
+    },
+    "not_brackets": {
+      "lines": [
+        "a. just some words",
+        "b. [DP [D a] [NP [N cat]]]"
+      ]
+    },
+    "mixed_with_gloss": {
+      "lines": [
+        "a. [DP [D the] [NP [N tree]]]",
+        "b. Esto es un ejemplo",
+        "this is a example"
+      ]
+    }
+  },
+  "laid_out": {
+    "TREES/bracketed_leaves": {
+      "judgment": "",
+      "widths": {
+        "D": 306,
+        "DP": 541,
+        "N": 306,
+        "NP": 541,
+        "the": 519,
+        "tree": 636
+      },
+      "nodes": [
+        {
+          "label": "DP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 601,
+          "x": 641.25
+        },
+        {
+          "label": "D",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 289.5
+        },
+        {
+          "label": "the",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 579,
+          "x": 289.5
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 993
+        },
+        {
+          "label": "N",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 993
+        },
+        {
+          "label": "tree",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 696,
+          "x": 993
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/bare_leaves": {
+      "judgment": "",
+      "widths": {
+        "D": 306,
+        "DP": 541,
+        "N": 306,
+        "NP": 541,
+        "the": 519,
+        "tree": 636
+      },
+      "nodes": [
+        {
+          "label": "DP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 601,
+          "x": 641.25
+        },
+        {
+          "label": "D",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 289.5
+        },
+        {
+          "label": "the",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 579,
+          "x": 289.5
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 993
+        },
+        {
+          "label": "N",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 993
+        },
+        {
+          "label": "tree",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 696,
+          "x": 993
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/deep": {
+      "judgment": "",
+      "widths": {
+        "-ed": 543,
+        "C": 282,
+        "CP": 517,
+        "D": 306,
+        "DP": 541,
+        "N": 306,
+        "NP": 541,
+        "T": 259,
+        "T'": 335,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "cat": 495,
+        "sleep": 872,
+        "that": 636,
+        "the": 519
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 1134.375
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 342,
+          "x": 348
+        },
+        {
+          "label": "that",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 696,
+          "x": 348
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 554,
+          "x": 1920.75
+        },
+        {
+          "label": "DP",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": 10,
+          "depth": 2,
+          "w": 601,
+          "x": 1216.5
+        },
+        {
+          "label": "D",
+          "name": "",
+          "roof": false,
+          "kid": 6,
+          "sib": 7,
+          "depth": 3,
+          "w": 366,
+          "x": 864.75
+        },
+        {
+          "label": "the",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 579,
+          "x": 864.75
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 8,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 1568.25
+        },
+        {
+          "label": "N",
+          "name": "",
+          "roof": false,
+          "kid": 9,
+          "sib": -1,
+          "depth": 4,
+          "w": 366,
+          "x": 1568.25
+        },
+        {
+          "label": "cat",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 555,
+          "x": 1568.25
+        },
+        {
+          "label": "T'",
+          "name": "",
+          "roof": false,
+          "kid": 11,
+          "sib": -1,
+          "depth": 2,
+          "w": 395,
+          "x": 2625
+        },
+        {
+          "label": "T",
+          "name": "",
+          "roof": false,
+          "kid": 12,
+          "sib": 13,
+          "depth": 3,
+          "w": 319,
+          "x": 2272.75
+        },
+        {
+          "label": "-ed",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 603,
+          "x": 2272.75
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 14,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 2977.25
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 15,
+          "sib": -1,
+          "depth": 4,
+          "w": 366,
+          "x": 2977.25
+        },
+        {
+          "label": "sleep",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 932,
+          "x": 2977.25
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/braced_label": {
+      "judgment": "",
+      "widths": {
+        "D": 306,
+        "N": 306,
+        "NP": 541,
+        "S": 235,
+        "V": 306,
+        "VP": 541,
+        "left": 565,
+        "long noisy constituent": 3749,
+        "the": 519
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 3318.5
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 6,
+          "depth": 1,
+          "w": 601,
+          "x": 1496.5
+        },
+        {
+          "label": "D",
+          "name": "",
+          "roof": false,
+          "kid": 3,
+          "sib": 4,
+          "depth": 2,
+          "w": 366,
+          "x": 289.5
+        },
+        {
+          "label": "the",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 579,
+          "x": 289.5
+        },
+        {
+          "label": "N",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 2703.5
+        },
+        {
+          "label": "long noisy constituent",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 3809,
+          "x": 2703.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 5140.5
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 8,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 5140.5
+        },
+        {
+          "label": "left",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 625,
+          "x": 5140.5
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/roof": {
+      "judgment": "",
+      "widths": {
+        "NP": 541,
+        "S": 235,
+        "V": 306,
+        "VP": 541,
+        "slept": 801,
+        "the big tree": 1910
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 1679
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 985
+        },
+        {
+          "label": "the big tree",
+          "name": "",
+          "roof": true,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 1970,
+          "x": 985
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 2373
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 2373
+        },
+        {
+          "label": "slept",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 861,
+          "x": 2373
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/judged": {
+      "judgment": "*",
+      "widths": {
+        "NP": 541,
+        "S": 235,
+        "V": 306,
+        "VP": 541,
+        "him": 660,
+        "left": 565
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 770.5
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 360
+        },
+        {
+          "label": "him",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 720,
+          "x": 360
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 1181
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 1181
+        },
+        {
+          "label": "left",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 625,
+          "x": 1181
+        }
+      ],
+      "arrows": []
+    },
+    "TREES/wide_parent": {
+      "judgment": "",
+      "widths": {
+        "A": 306,
+        "B": 282,
+        "the widest label of all": 3653,
+        "x": 213,
+        "y": 213
+      },
+      "nodes": [
+        {
+          "label": "the widest label of all",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 3713,
+          "x": 1856.5
+        },
+        {
+          "label": "A",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 1569.5
+        },
+        {
+          "label": "x",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 1569.5
+        },
+        {
+          "label": "B",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 342,
+          "x": 2143.5
+        },
+        {
+          "label": "y",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 2143.5
+        }
+      ],
+      "arrows": []
+    },
+    "TREE_REFUSE/unclosed": {
+      "error": "A bracket is never closed."
+    },
+    "TREE_REFUSE/trailing_text": {
+      "error": "The tree ends before the selection does; there is still \"rubbish\" after it."
+    },
+    "TREE_REFUSE/not_a_tree": {
+      "error": "A tree has to start with a bracket, like [DP [D the] [NP [N tree]]]."
+    },
+    "TREE_REFUSE/unknown_option": {
+      "error": "This does not know the node option \"align=center\".  Only \"roof\" and \"name=...\" are supported."
+    },
+    "TREE_REFUSE/movement_arrow": {
+      "error": "This does not read LaTeX (anything with a backslash).\n\nFor movement, name the two nodes and put a move line under the tree:\n    [CP [DP,name=wh what] [TP [V saw] [DP,name=t __]]]\n    move t -> wh"
+    },
+    "MOVES/wh": {
+      "judgment": "",
+      "widths": {
+        "C": 282,
+        "C'": 359,
+        "CP": 517,
+        "DP": 541,
+        "John": 803,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "did": 542,
+        "see": 543,
+        "what": 825
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 1216.6875
+        },
+        {
+          "label": "DP",
+          "name": "wh",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 442.5
+        },
+        {
+          "label": "what",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 885,
+          "x": 442.5
+        },
+        {
+          "label": "C'",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 419,
+          "x": 1990.875
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 342,
+          "x": 1276
+        },
+        {
+          "label": "did",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 602,
+          "x": 1276
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 554,
+          "x": 2705.75
+        },
+        {
+          "label": "DP",
+          "name": "",
+          "roof": false,
+          "kid": 8,
+          "sib": 9,
+          "depth": 3,
+          "w": 601,
+          "x": 2097.5
+        },
+        {
+          "label": "John",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 863,
+          "x": 2097.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 10,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 3314
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 11,
+          "sib": 12,
+          "depth": 4,
+          "w": 366,
+          "x": 2932
+        },
+        {
+          "label": "see",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 603,
+          "x": 2932
+        },
+        {
+          "label": "DP",
+          "name": "t",
+          "roof": false,
+          "kid": 13,
+          "sib": -1,
+          "depth": 4,
+          "w": 601,
+          "x": 3696
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 485,
+          "x": 3696
+        }
+      ],
+      "arrows": [
+        {
+          "from": 12,
+          "to": 1,
+          "lane": 0
+        }
+      ]
+    },
+    "MOVES/successive": {
+      "judgment": "",
+      "widths": {
+        "C": 282,
+        "C'": 359,
+        "CP": 517,
+        "DP": 541,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "did": 542,
+        "leave": 896,
+        "who": 732
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 1134.34375
+        },
+        {
+          "label": "DP",
+          "name": "wh",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 396
+        },
+        {
+          "label": "who",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 792,
+          "x": 396
+        },
+        {
+          "label": "C'",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 419,
+          "x": 1872.6875
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 342,
+          "x": 1183
+        },
+        {
+          "label": "did",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 602,
+          "x": 1183
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 554,
+          "x": 2562.375
+        },
+        {
+          "label": "DP",
+          "name": "s2",
+          "roof": false,
+          "kid": 8,
+          "sib": 9,
+          "depth": 3,
+          "w": 601,
+          "x": 2004.5
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 485,
+          "x": 2004.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 10,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 3120.25
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 11,
+          "sib": 12,
+          "depth": 4,
+          "w": 366,
+          "x": 2650
+        },
+        {
+          "label": "leave",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 956,
+          "x": 2650
+        },
+        {
+          "label": "DP",
+          "name": "t2",
+          "roof": false,
+          "kid": 13,
+          "sib": -1,
+          "depth": 4,
+          "w": 601,
+          "x": 3590.5
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 485,
+          "x": 3590.5
+        }
+      ],
+      "arrows": [
+        {
+          "from": 12,
+          "to": 7,
+          "lane": 0
+        },
+        {
+          "from": 7,
+          "to": 1,
+          "lane": 1
+        }
+      ]
+    },
+    "MOVES/nested": {
+      "judgment": "",
+      "widths": {
+        "A": 306,
+        "B": 282,
+        "C": 282,
+        "D": 306,
+        "E": 259,
+        "x": 213,
+        "y": 213,
+        "z": 189
+      },
+      "nodes": [
+        {
+          "label": "A",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 366,
+          "x": 581.375
+        },
+        {
+          "label": "B",
+          "name": "p",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 342,
+          "x": 171
+        },
+        {
+          "label": "x",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 171
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 342,
+          "x": 991.75
+        },
+        {
+          "label": "D",
+          "name": "q",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 366,
+          "x": 710.5
+        },
+        {
+          "label": "y",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 273,
+          "x": 710.5
+        },
+        {
+          "label": "E",
+          "name": "r",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 319,
+          "x": 1273
+        },
+        {
+          "label": "z",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 249,
+          "x": 1273
+        }
+      ],
+      "arrows": [
+        {
+          "from": 6,
+          "to": 4,
+          "lane": 1
+        },
+        {
+          "from": 4,
+          "to": 1,
+          "lane": 0
+        }
+      ]
+    },
+    "MOVES/tab_after_move": {
+      "judgment": "",
+      "widths": {
+        "NP": 541,
+        "S": 235,
+        "VP": 541,
+        "x": 213,
+        "y": 213
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 711
+        },
+        {
+          "label": "NP",
+          "name": "a",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 300.5
+        },
+        {
+          "label": "x",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 300.5
+        },
+        {
+          "label": "VP",
+          "name": "b",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 1121.5
+        },
+        {
+          "label": "y",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 1121.5
+        }
+      ],
+      "arrows": [
+        {
+          "from": 1,
+          "to": 3,
+          "lane": 0
+        }
+      ]
+    },
+    "MOVE_REFUSE/no_arrow": {
+      "error": "A movement line reads \"move <from> -> <to>\"; this one has no arrow:\n\n    move a b"
+    },
+    "MOVE_REFUSE/unknown_name": {
+      "error": "No node is named \"zzz\".\n\nName one by adding \", name=zzz\" inside its brackets, as in [DP,name=zzz what]."
+    },
+    "MOVE_REFUSE/self_move": {
+      "error": "A movement line points \"a\" at itself."
+    },
+    "MOVE_REFUSE/moves_only": {
+      "error": "There are movement lines but no tree above them."
+    },
+    "MOVE_REFUSE/tikz": {
+      "error": "This does not read LaTeX (anything with a backslash).\n\nFor movement, name the two nodes and put a move line under the tree:\n    [CP [DP,name=wh what] [TP [V saw] [DP,name=t __]]]\n    move t -> wh"
+    },
+    "MOVE_REFUSE/too_many_moves": {
+      "error": "That is more movement arrows than this can draw."
+    },
+    "CLEARANCE/from_the_right_edge": {
+      "judgment": "",
+      "widths": {
+        "C": 282,
+        "C'": 359,
+        "CP": 517,
+        "DP": 541,
+        "John": 803,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "did": 542,
+        "see": 543,
+        "what": 825
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 1216.6875
+        },
+        {
+          "label": "DP",
+          "name": "w",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 442.5
+        },
+        {
+          "label": "what",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 885,
+          "x": 442.5
+        },
+        {
+          "label": "C'",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 419,
+          "x": 1990.875
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 342,
+          "x": 1276
+        },
+        {
+          "label": "did",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 602,
+          "x": 1276
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 554,
+          "x": 2705.75
+        },
+        {
+          "label": "DP",
+          "name": "",
+          "roof": false,
+          "kid": 8,
+          "sib": 9,
+          "depth": 3,
+          "w": 601,
+          "x": 2097.5
+        },
+        {
+          "label": "John",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 863,
+          "x": 2097.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 10,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 3314
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 11,
+          "sib": 12,
+          "depth": 4,
+          "w": 366,
+          "x": 2932
+        },
+        {
+          "label": "see",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 603,
+          "x": 2932
+        },
+        {
+          "label": "DP",
+          "name": "t",
+          "roof": false,
+          "kid": 13,
+          "sib": -1,
+          "depth": 4,
+          "w": 601,
+          "x": 3696
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 5,
+          "w": 485,
+          "x": 3696
+        }
+      ],
+      "arrows": [
+        {
+          "from": 12,
+          "to": 1,
+          "lane": 0
+        }
+      ]
+    },
+    "CLEARANCE/landing_in_the_middle": {
+      "judgment": "",
+      "widths": {
+        "C": 282,
+        "CP": 517,
+        "DP": 541,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "left": 565,
+        "that": 636
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 1040.5
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 342,
+          "x": 348
+        },
+        {
+          "label": "that",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 696,
+          "x": 348
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 554,
+          "x": 1733
+        },
+        {
+          "label": "DP",
+          "name": "s",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 601,
+          "x": 1216.5
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 485,
+          "x": 1216.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 601,
+          "x": 2249.5
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 8,
+          "sib": 9,
+          "depth": 3,
+          "w": 366,
+          "x": 1862
+        },
+        {
+          "label": "left",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 625,
+          "x": 1862
+        },
+        {
+          "label": "DP",
+          "name": "t",
+          "roof": false,
+          "kid": 10,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 2637
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 485,
+          "x": 2637
+        }
+      ],
+      "arrows": [
+        {
+          "from": 9,
+          "to": 4,
+          "lane": 0
+        }
+      ]
+    },
+    "CLEARANCE/target_with_a_deep_sibling": {
+      "judgment": "",
+      "widths": {
+        "A": 306,
+        "B": 282,
+        "C": 282,
+        "D": 306,
+        "E": 259,
+        "F": 235,
+        "S": 235,
+        "deep": 803,
+        "x": 213
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 470
+        },
+        {
+          "label": "A",
+          "name": "a",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 183
+        },
+        {
+          "label": "x",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 183
+        },
+        {
+          "label": "B",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 342,
+          "x": 757
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 342,
+          "x": 757
+        },
+        {
+          "label": "D",
+          "name": "",
+          "roof": false,
+          "kid": 6,
+          "sib": -1,
+          "depth": 3,
+          "w": 366,
+          "x": 757
+        },
+        {
+          "label": "E",
+          "name": "",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 4,
+          "w": 319,
+          "x": 757
+        },
+        {
+          "label": "F",
+          "name": "f",
+          "roof": false,
+          "kid": 8,
+          "sib": -1,
+          "depth": 5,
+          "w": 295,
+          "x": 757
+        },
+        {
+          "label": "deep",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 6,
+          "w": 863,
+          "x": 757
+        }
+      ],
+      "arrows": [
+        {
+          "from": 7,
+          "to": 1,
+          "lane": 0
+        }
+      ]
+    },
+    "CLEARANCE/rightward": {
+      "judgment": "",
+      "widths": {
+        "A": 306,
+        "B": 282,
+        "C": 282,
+        "D": 306,
+        "S": 235,
+        "x": 213,
+        "y": 213,
+        "z": 189
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 590.25
+        },
+        {
+          "label": "A",
+          "name": "a",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 183
+        },
+        {
+          "label": "x",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 183
+        },
+        {
+          "label": "B",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 342,
+          "x": 997.5
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 342,
+          "x": 710.5
+        },
+        {
+          "label": "y",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 273,
+          "x": 710.5
+        },
+        {
+          "label": "D",
+          "name": "d",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 366,
+          "x": 1284.5
+        },
+        {
+          "label": "z",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 249,
+          "x": 1284.5
+        }
+      ],
+      "arrows": [
+        {
+          "from": 1,
+          "to": 6,
+          "lane": 0
+        }
+      ]
+    },
+    "CLEARANCE/overlapping_spans": {
+      "judgment": "",
+      "widths": {
+        "1": 213,
+        "2": 213,
+        "3": 213,
+        "4": 213,
+        "A": 306,
+        "B": 282,
+        "C": 282,
+        "D": 306,
+        "S": 235
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 1038
+        },
+        {
+          "label": "A",
+          "name": "p",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 366,
+          "x": 183
+        },
+        {
+          "label": "1",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 183
+        },
+        {
+          "label": "B",
+          "name": "q",
+          "roof": false,
+          "kid": 4,
+          "sib": 5,
+          "depth": 1,
+          "w": 342,
+          "x": 757
+        },
+        {
+          "label": "2",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 757
+        },
+        {
+          "label": "C",
+          "name": "r",
+          "roof": false,
+          "kid": 6,
+          "sib": 7,
+          "depth": 1,
+          "w": 342,
+          "x": 1319
+        },
+        {
+          "label": "3",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 1319
+        },
+        {
+          "label": "D",
+          "name": "s",
+          "roof": false,
+          "kid": 8,
+          "sib": -1,
+          "depth": 1,
+          "w": 366,
+          "x": 1893
+        },
+        {
+          "label": "4",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 273,
+          "x": 1893
+        }
+      ],
+      "arrows": [
+        {
+          "from": 5,
+          "to": 1,
+          "lane": 0
+        },
+        {
+          "from": 7,
+          "to": 3,
+          "lane": 1
+        }
+      ]
+    },
+    "CLEARANCE/under_a_roof": {
+      "judgment": "",
+      "widths": {
+        "DP": 541,
+        "NP": 541,
+        "S": 235,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "left": 565,
+        "the big tree": 1910
+      },
+      "nodes": [
+        {
+          "label": "S",
+          "name": "",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 295,
+          "x": 1872.75
+        },
+        {
+          "label": "NP",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 601,
+          "x": 985
+        },
+        {
+          "label": "the big tree",
+          "name": "",
+          "roof": true,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 1970,
+          "x": 985
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 601,
+          "x": 2760.5
+        },
+        {
+          "label": "V",
+          "name": "v",
+          "roof": false,
+          "kid": 5,
+          "sib": 6,
+          "depth": 2,
+          "w": 366,
+          "x": 2373
+        },
+        {
+          "label": "left",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 625,
+          "x": 2373
+        },
+        {
+          "label": "DP",
+          "name": "t",
+          "roof": false,
+          "kid": 7,
+          "sib": -1,
+          "depth": 2,
+          "w": 601,
+          "x": 3148
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 3,
+          "w": 485,
+          "x": 3148
+        }
+      ],
+      "arrows": [
+        {
+          "from": 6,
+          "to": 4,
+          "lane": 0
+        }
+      ]
+    },
+    "CLEARANCE/target_is_an_ancestor": {
+      "judgment": "",
+      "widths": {
+        "C": 282,
+        "CP": 517,
+        "DP": 541,
+        "TP": 494,
+        "V": 306,
+        "VP": 541,
+        "__": 425,
+        "see": 543,
+        "that": 636
+      },
+      "nodes": [
+        {
+          "label": "CP",
+          "name": "top",
+          "roof": false,
+          "kid": 1,
+          "sib": -1,
+          "depth": 0,
+          "w": 577,
+          "x": 782.25
+        },
+        {
+          "label": "C",
+          "name": "",
+          "roof": false,
+          "kid": 2,
+          "sib": 3,
+          "depth": 1,
+          "w": 342,
+          "x": 348
+        },
+        {
+          "label": "that",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 2,
+          "w": 696,
+          "x": 348
+        },
+        {
+          "label": "TP",
+          "name": "",
+          "roof": false,
+          "kid": 4,
+          "sib": -1,
+          "depth": 1,
+          "w": 554,
+          "x": 1216.5
+        },
+        {
+          "label": "VP",
+          "name": "",
+          "roof": false,
+          "kid": 5,
+          "sib": -1,
+          "depth": 2,
+          "w": 601,
+          "x": 1216.5
+        },
+        {
+          "label": "V",
+          "name": "",
+          "roof": false,
+          "kid": 6,
+          "sib": 7,
+          "depth": 3,
+          "w": 366,
+          "x": 834.5
+        },
+        {
+          "label": "see",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 603,
+          "x": 834.5
+        },
+        {
+          "label": "DP",
+          "name": "t",
+          "roof": false,
+          "kid": 8,
+          "sib": -1,
+          "depth": 3,
+          "w": 601,
+          "x": 1598.5
+        },
+        {
+          "label": "__",
+          "name": "",
+          "roof": false,
+          "kid": -1,
+          "sib": -1,
+          "depth": 4,
+          "w": 485,
+          "x": 1598.5
+        }
+      ],
+      "arrows": [
+        {
+          "from": 7,
+          "to": 0,
+          "lane": 0
+        }
+      ]
+    }
+  },
+  "items_parsed": {
+    "ITEMS/two_trees": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D the] [NP [N tree]]]"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D a] [NP [N cat]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/three_trees": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D the] [NP [N tree]]]"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D a] [NP [N cat]]]"
+          ]
+        },
+        {
+          "marker": "c.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[VP [V sang] [AdvP [Adv loudly]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/judged": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "*[S [NP him] [VP [V left]]]"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[S [NP he] [VP [V left]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/with_translations": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "'the tree'",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D the] [NP [N tree]]]"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "'a cat'",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D a] [NP [N cat]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/with_movement": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",
+            "move t -> w"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[CP [DP who] [TP [V left]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/single_tree": {
+      "items": [
+        {
+          "marker": "",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[DP [D the] [NP [N tree]]]"
+          ]
+        }
+      ]
+    },
+    "ITEMS/nbsp_in_brackets": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "*",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "*[S [NP him] [VP [V left]]]"
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [],
+          "tree": [
+            "[S [NP he] [VP [V left]]]"
+          ]
+        }
+      ]
+    },
+    "ITEM_REFUSE/unclosed": {
+      "error": "Sub-example a. is not a tree.\n\nA bracket is never closed.\n\nEvery item of a numbered tree is a tree.  To put a tree beside a glossed example, make them two examples."
+    },
+    "ITEM_REFUSE/not_brackets": {
+      "error": "Sub-example a. is not a tree.\n\nA tree has to start with a bracket, like [DP [D the] [NP [N tree]]].\n\nEvery item of a numbered tree is a tree.  To put a tree beside a glossed example, make them two examples."
+    },
+    "ITEM_REFUSE/mixed_with_gloss": {
+      "error": "Sub-example b. is not a tree.\n\nA tree has to start with a bracket, like [DP [D the] [NP [N tree]]].\n\nEvery item of a numbered tree is a tree.  To put a tree beside a glossed example, make them two examples."
+    }
+  }
+}

@@ -137,3 +137,48 @@ def test_the_layout_settings_are_the_macros() -> None:
     macro_max = float(re.search(r"Const OPT_MAX_CM\s+As Double = ([\d.]+)", bas).group(1))
     core_max = float(re.search(r"OPT_MAX_CM = ([\d.]+)", js).group(1))
     assert core_max == macro_max
+
+
+def test_the_tree_constants_are_the_macros() -> None:
+    """The core draws trees with the macro's lengths and limits, restated
+    in addin/core/tree.js because a browser module can import nothing from
+    Basic.  The tree golden pins only the pad and the gap; the tier spacing,
+    the arrow lanes and the limits would drift unseen, so every one is read
+    out of both and compared -- and the drawing's title, which is what tells
+    one of our trees from a picture when a document goes between them."""
+    from linguexx2odt import writermacro
+
+    bas = writermacro.source()
+    js = (CORE / "tree.js").read_text(encoding="utf-8")
+    names = ("TREE_MAX", "TREE_DEPTH", "NODE_PAD_CM", "NODE_GAP_CM", "TIER_FACTOR",
+             "BRANCH_WIDTH", "ARROW_MAX", "GUTTER_GAP_CM", "LANE_STEP_CM",
+             "HEAD_LEN_CM", "HEAD_HALF_CM")
+    core_names = set(re.findall(r"^  ([A-Z_]+): ", js, re.M))
+    assert core_names == set(names), f"tree.js's TREE has {sorted(core_names)}"
+    for name in names:
+        macro = re.search(rf"^Const {name}\s+As (?:Integer|Double) = ([\d.]+)", bas, re.M)
+        core = re.search(rf"^  {name}: ([\d.]+),", js, re.M)
+        assert macro and core, name
+        assert float(core.group(1)) == float(macro.group(1)), \
+            f"{name}: core {core.group(1)}, macro {macro.group(1)}"
+    macro_title = re.search(r'Const TREE_TITLE As String = "([^"]+)"', bas).group(1)
+    assert f'TREE_TITLE = "{macro_title}"' in js
+
+
+def test_every_tree_fixture_has_the_macros_layout() -> None:
+    """test_every_fixture_has_the_macros_parse, for trees.json."""
+    data = json.loads((ROOT / "tests" / "fixtures" / "trees.json").read_text(encoding="utf-8"))
+    cases = {f"{group}/{name}"
+             for group, cases in data.items()
+             if not group.startswith(("_", "ITEM"))
+             and group not in ("laid_out", "items_parsed")
+             for name in cases}
+    selections = {f"{group}/{name}" for group, cases in data.items()
+                  if group.startswith("ITEM") for name in cases}
+    assert selections == set(data["items_parsed"]), (
+        f"tree selections without a recorded macro parse: "
+        f"{sorted(selections - set(data['items_parsed']))}")
+    assert cases == set(data["laid_out"]), (
+        f"tree fixtures without a recorded macro layout: "
+        f"{sorted(cases - set(data['laid_out']))}; layouts of no fixture: "
+        f"{sorted(set(data['laid_out']) - cases)}")

@@ -186,6 +186,12 @@ Dim LxArN               As Integer
 Dim LxMoveSrc(ARROW_MAX) As String        ' the "move a -> b" lines, unparsed
 Dim LxMoveN             As Integer
 
+' Widths handed in rather than measured, for TreeLayoutQuiet alone: label
+' (without its marks) to width in 1/100 mm.  Empty when a tree is drawn,
+' which is always, outside the harness.
+Dim LxTGivenLabel As Variant
+Dim LxTGivenW     As Variant
+
 
 ' Every message goes through LxSay, so a caller that must not be blocked by
 ' a modal dialog (a test harness, a batch run over many examples) can turn
@@ -328,11 +334,15 @@ Const IT_SIZE   As Integer = 7
 ' item Array(marker, judgment, translation, annotation, tiers) with tiers an
 ' array of word arrays; one tier means unglossed.
 '
+' With *bTrees* True the lines are parsed as the tree command parses them
+' (LxTreeOnly), and each item carries a sixth element: its own lines, the
+' tree it will be drawn from.
+'
 ' Below the IT_* constants on purpose: Basic resolves a Const in source
 ' order, and placed beside GlossSelectionQuiet this failed with "Variable
 ' not defined: IT_TIERS".  The trap turns any such failure into a message;
 ' without it a headless caller gets Empty and nothing to go on.
-Function ParseLinesQuiet(aLines As Variant) As Variant
+Function ParseLinesQuiet(aLines As Variant, Optional bTrees As Variant) As Variant
     Dim aClean() As String, aItems As Variant, aOut() As Variant
     Dim aIt As Variant, aTiers As Variant, aWords As Variant
     Dim aT() As Variant, aW() As String
@@ -341,6 +351,7 @@ Function ParseLinesQuiet(aLines As Variant) As Variant
 
     On Error Goto Failed
     LxTreeOnly = False
+    If Not IsMissing(bTrees) Then LxTreeOnly = bTrees
     LxFmtN = 0
     ReDim aClean(LxMaxI(UBound(aLines), 0))
     n = 0
@@ -352,6 +363,7 @@ Function ParseLinesQuiet(aLines As Variant) As Variant
         End If
     Next i
     If n = 0 Then
+        LxTreeOnly = False
         ParseLinesQuiet = Array("error", "no lines")
         Exit Function
     End If
@@ -359,6 +371,7 @@ Function ParseLinesQuiet(aLines As Variant) As Variant
 
     aItems = LxParseItems(aClean(), n, sError)
     If Len(sError) > 0 Then
+        LxTreeOnly = False
         ParseLinesQuiet = Array("error", sError)
         Exit Function
     End If
@@ -384,12 +397,25 @@ Function ParseLinesQuiet(aLines As Variant) As Variant
                 End If
             Next t
         End If
-        aOut(k) = Array(LxStrip(aIt(IT_MARKER)), aIt(IT_JUDG), _
-                        LxStrip(aIt(IT_TRANS)), LxStrip(aIt(IT_ANNOT)), aT)
+        If LxTreeOnly Then
+            aWords = aIt(IT_TREE)
+            ReDim aW(LxMaxI(UBound(aWords), 0))
+            For i = 0 To UBound(aWords)
+                aW(i) = LxStrip(aWords(i))
+            Next i
+            If UBound(aWords) < 0 Then aTiers = Array() Else aTiers = aW()
+            aOut(k) = Array(LxStrip(aIt(IT_MARKER)), aIt(IT_JUDG), _
+                            LxStrip(aIt(IT_TRANS)), LxStrip(aIt(IT_ANNOT)), aT, aTiers)
+        Else
+            aOut(k) = Array(LxStrip(aIt(IT_MARKER)), aIt(IT_JUDG), _
+                            LxStrip(aIt(IT_TRANS)), LxStrip(aIt(IT_ANNOT)), aT)
+        End If
     Next k
+    LxTreeOnly = False
     ParseLinesQuiet = Array("items", aOut())
     Exit Function
 Failed:
+    LxTreeOnly = False
     ParseLinesQuiet = Array("error", "Basic error: " & Error$ & " (line " & Erl & ")")
 End Function
 
@@ -3830,6 +3856,86 @@ Function TreeSelectionBareQuiet() As String
 End Function
 
 
+' The tree reader and the layout alone, for the harness, which records
+' what this macro makes of every tree fixture so that the JavaScript
+' add-in core can be held to it -- ParseLinesQuiet's counterpart.
+'
+' *aLines* are one tree's lines as a selection gives them.  Nothing is
+' drawn and no document is touched: with *aLabels* empty the answer is the
+' parse alone; with a width for every label (1/100 mm, the unit the shapes
+' use) it is laid out with those widths in place of measured ones, so the
+' positions depend on this code and not on the fonts of the machine that
+' ran it.  Returns Array("error", message), or Array("tree", judgment,
+' nodes, arrows), each node Array(label, name, roof, kid, sib, depth,
+' width, x) and each arrow Array(from, to, lane); width, x and lane are -1
+' for the parse alone.
+Function TreeLayoutQuiet(aLines As Variant, aLabels As Variant, aWidths As Variant) As Variant
+    Dim aNodes() As Variant, aArrows() As Variant
+    Dim sSrc As String, sMark As String
+    Dim nRoot As Integer, i As Integer
+    Dim bLaid As Boolean
+
+    On Error Goto Failed
+    LxFmtN = 0
+    sSrc = LxSplitMoves(aLines)
+    If Len(LxTErr) > 0 Then
+        TreeLayoutQuiet = Array("error", LxTErr)
+        Exit Function
+    End If
+    sSrc = LxPullJudgment(sSrc, sMark)
+    nRoot = LxTreeParse(sSrc)
+    If nRoot < 0 Then
+        TreeLayoutQuiet = Array("error", LxTErr)
+        Exit Function
+    End If
+    If Not LxResolveMoves() Then
+        TreeLayoutQuiet = Array("error", LxTErr)
+        Exit Function
+    End If
+
+    bLaid = (UBound(aLabels) >= 0)
+    If bLaid Then
+        LxTGivenLabel = aLabels
+        LxTGivenW = aWidths
+        If Not LxTreeLayout(Nothing, nRoot, NODE_PAD_CM * 1000, NODE_GAP_CM * 1000) Then
+            LxTGivenLabel = Empty
+            TreeLayoutQuiet = Array("error", LxTErr)
+            Exit Function
+        End If
+        LxTGivenLabel = Empty
+        Call LxArrowLanes()
+    End If
+
+    ReDim aNodes(LxNdN - 1)
+    For i = 0 To LxNdN - 1
+        If bLaid Then
+            aNodes(i) = Array(LxStrip(LxNdLabel(i)), LxNdName(i), LxNdRoof(i), _
+                              LxNdKid(i), LxNdSib(i), LxNdDepth(i), LxNdW(i), LxNdX(i))
+        Else
+            aNodes(i) = Array(LxStrip(LxNdLabel(i)), LxNdName(i), LxNdRoof(i), _
+                              LxNdKid(i), LxNdSib(i), LxNdDepth(i), -1, -1)
+        End If
+    Next i
+    If LxArN = 0 Then
+        aArrows = Array()
+    Else
+        ReDim aArrows(LxArN - 1)
+        For i = 0 To LxArN - 1
+            If bLaid Then
+                aArrows(i) = Array(LxArFrom(i), LxArTo(i), LxArLane(i))
+            Else
+                aArrows(i) = Array(LxArFrom(i), LxArTo(i), -1)
+            End If
+        Next i
+    End If
+    TreeLayoutQuiet = Array("tree", sMark, aNodes(), aArrows())
+    Exit Function
+Failed:
+    LxTGivenLabel = Empty
+    TreeLayoutQuiet = Array("error", "Basic error: " & Error$ & " (line " & Erl & ")")
+End Function
+
+
 ' --------------------------------------------------------------- parsing ---
 
 Function LxTreeParse(s As String) As Integer
@@ -4138,7 +4244,10 @@ Function LxResolveMoves() As Boolean
     LxResolveMoves = False
 
     For i = 0 To LxMoveN - 1
-        s = Trim(Mid(Trim(LxMoveSrc(i)), 5))       ' drop the leading "move"
+        ' LxTrimTagged, not Trim: Trim takes spaces only, so "move<TAB>t -> wh"
+        ' -- a move line by LxIsMoveLine -- looked for a node named "<TAB>t".
+        ' The line was stripped of its marks, so this trims whitespace alone.
+        s = LxTrimTagged(Mid(LxTrimTagged(LxMoveSrc(i)), 5))   ' drop the leading "move"
         p = InStr(s, "->")
         If p = 0 Then
             LxTErr = "A movement line reads ""move <from> -> <to>""; this " & _
@@ -4146,8 +4255,8 @@ Function LxResolveMoves() As Boolean
                      Trim(LxMoveSrc(i))
             Exit Function
         End If
-        sFrom = Trim(Left(s, p - 1))
-        sTo = Trim(Mid(s, p + 2))
+        sFrom = LxTrimTagged(Left(s, p - 1))
+        sTo = LxTrimTagged(Mid(s, p + 2))
 
         LxArFrom(LxArN) = LxNodeNamed(sFrom)
         LxArTo(LxArN) = LxNodeNamed(sTo)
@@ -4393,9 +4502,18 @@ End Function
 ' label's own italics or small caps, which no width model has to know
 ' about because the shape renders them.
 Function LxTMeasure(oProbe As Object, sLabel As String) As Double
+    Dim i As Integer
     If Len(LxStrip(sLabel)) = 0 Then
         LxTMeasure = 0
         Exit Function
+    End If
+    If Not IsEmpty(LxTGivenLabel) Then
+        For i = 0 To UBound(LxTGivenLabel)
+            If LxTGivenLabel(i) = LxStrip(sLabel) Then
+                LxTMeasure = LxTGivenW(i)
+                Exit Function
+            End If
+        Next i
     End If
     Call LxPut(oProbe, sLabel)
     LxTMeasure = oProbe.getSize().Width

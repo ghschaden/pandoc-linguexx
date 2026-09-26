@@ -95,7 +95,7 @@ export function trimTagged(s) {
   return i >= n ? "" : t + s.slice(i, n);
 }
 
-function lastTag(s) {
+export function lastTag(s) {
   for (let i = s.length - 1; i >= 0; i--) if (tagIndex(s[i]) >= 0) return s[i];
   return "";
 }
@@ -160,7 +160,7 @@ export function isTranslation(s) {
 }
 
 /** Drop marks dangling at the end of a word -- LxTrimTags. */
-function trimTags(s) {
+export function trimTags(s) {
   let n = s.length;
   while (n > 0 && tagIndex(s[n - 1]) >= 0) n--;
   return s.slice(0, n);
@@ -283,12 +283,20 @@ export function makeItem(marker, body) {
  *
  * *lines* get what LxSelectedLines gives a selection first: trimmed, and
  * blank ones dropped.
+ *
+ * *make* builds one item from its marker and lines: makeItem here, or
+ * tree.js's makeTreeItem for the tree command, which is the macro's
+ * LxTreeOnly -- the command decides, never the brackets.  An item that
+ * comes back as {error} stops the parse, as LxTErr stops LxParseItems.
  */
-export function parseLines(rawLines) {
+export function parseLines(rawLines, make = makeItem) {
   const lines = rawLines.map(trimTagged).filter((l) => l.length > 0);
   if (lines.length === 0) return { error: "no lines" };
 
-  if (!lines.some(looksLikeMarker)) return { items: [makeItem("", lines)] };
+  if (!lines.some(looksLikeMarker)) {
+    const item = make("", lines);
+    return item.error ? { error: item.error } : { items: [item] };
+  }
 
   if (!looksLikeMarker(lines[0])) {
     return {
@@ -305,7 +313,11 @@ export function parseLines(rawLines) {
   let marker = "";
   for (const raw of lines) {
     if (looksLikeMarker(raw)) {
-      if (body.length > 0) items.push(makeItem(marker, body));
+      if (body.length > 0) {
+        const item = make(marker, body);
+        if (item.error) return { error: item.error };
+        items.push(item);
+      }
       const line = trimTagged(raw);
       marker = markerOf(line);
       const rest = carryTag(marker, trimTagged(line.slice(marker.length)));
@@ -314,7 +326,11 @@ export function parseLines(rawLines) {
       body.push(raw);
     }
   }
-  if (body.length > 0) items.push(makeItem(marker, body));
+  if (body.length > 0) {
+    const item = make(marker, body);
+    if (item.error) return { error: item.error };
+    items.push(item);
+  }
 
   if (items.length === 0) {
     return { error: "Every selected line is a sub-example letter with nothing after it." };
