@@ -108,9 +108,9 @@ Document Builder one, element for element.
 8. **`AddElement` can put two tables edge to edge** — seen in the
    desktop editor, where NEW and A were drawn as one block, and in its
    file as `tbl, tbl` with no `w:p` between. OnlyOffice keeps them
-   apart; Word joins adjacent tables into one on open. So the plugin
-   always inserts a paragraph after an example it places, and a test
-   asserts that no two example tables are siblings.
+   apart; Word joins adjacent tables into one (measured in S6, fact 3).
+   So the plugin always inserts a paragraph after an example it places,
+   and a test asserts that no two example tables are siblings.
 
 **S7 gate: passed**, headless and in the desktop editor. The OnlyOffice
 half proceeds.
@@ -174,6 +174,64 @@ rewrite the grid from its own layout on save.
 
 **S8 gate: passed**, headless and in the desktop editor — by the JSON
 route, whose stability is the risk in fact 5.
+
+## Verified facts — S6, Word on the web (2026-09-26)
+
+Run by the user in Word on the web through Script Lab, with the snippet
+`spikes/s6_word_snippet.py` generates: the converter's own `--to docx`
+markup for `tests/e2e/word-sample.tex` — five example tables, the
+cross-reference paragraph, `styles.xml` — packed as a flat OPC package
+for `Body.insertOoxml`. Each step reports tables, fields (code and
+displayed result), bookmarks and `Lx` styles back through the API.
+**Word desktop is not yet tested**, and it is what the gate names.
+
+1. **Fields, bookmarks and styles survive `insertOoxml`.** All nine
+   fields arrived as fields with their cached values (SEQ 1–5; REF 1,
+   2, 5, 1), all five bookmarks, and all six `Lx*` paragraph styles.
+   Word laid the examples out correctly: glosses under their words, the
+   judged sub-example aligned, `[CP]` in its own column. The prose
+   paragraph took Word's default face, since the converter's face is on
+   the document defaults and those are not carried — for an add-in,
+   which must not restyle the user's body text, that is right.
+2. **`insertOoxml` into a blank document inserted everything and then
+   threw** `GeneralException: Can't find the inserted content. Please
+   refresh the page for the result.` After that, **every** further
+   `insertOoxml` failed — at Start, at End, before the first paragraph,
+   with or without a styles part, even a single paragraph holding one
+   field — with `unknown`, `InvalidArgument`, and once a JavaScript
+   crash inside Word (`Cannot read properties of null (reading 'Tcb')`).
+   **After reloading the page, the same insertions worked without
+   error.** So an insertion error leaves the page out of step with the
+   document; the add-in must treat any error as "reload before
+   anything else", and check the document rather than trust the call.
+3. **Word joins adjacent tables.** The five example tables, which the
+   converter writes with nothing between them, came back as **one table
+   of 22 rows**. A table followed by a paragraph stayed separate (NEW,
+   inserted with a paragraph after it: `tables: 2, rows 3,22`). The
+   layout survives, since each row keeps its own widths, but in Word
+   they are one object. **This is a finding about the converter too:**
+   every `--to docx` document with consecutive examples is one table in
+   Word. Not yet decided whether that matters enough to change
+   `emit_docx`.
+4. **Word on the web does not recalculate fields, and will not let an
+   add-in do it.** A `SEQ` inserted in front kept its placeholder "0";
+   a copied example kept its "1"; `Field.updateResult()` on every field
+   ran **without error and changed nothing**. Writing the numbers by
+   hand — `Field.result.insertText(n, "Replace")` — is refused with
+   `NotAllowed: The action isn't supported by Word in a browser`.
+5. **The numbering can be computed in the add-in.** `Body.fields` comes
+   back in document order, and `Field.result.getBookmarks(true, true)`
+   finds the whole-field bookmark round each `SEQ`; the map it gave
+   (S6New→1, S6Seq→2, NumEx0…4→3…7) is exactly the right renumbering.
+   Only writing it is refused (fact 4).
+
+**S6 on the web: the gate's narrower case.** Examples go in intact, but
+on the web their numbers are frozen at what was inserted. The web
+promise is therefore "examples and live fields, renumbered by
+LibreOffice on open, or by Word desktop on Ctrl+A, F9" (the latter as
+plan-docx.md fact 15 found for the converter's files). Untested and the
+last web route: replacing each whole field through `insertOoxml` at its
+bookmark's range, which is the call fact 2 shows to be fragile.
 
 ## The shape
 
