@@ -164,11 +164,18 @@ class Injector:
         self.fmt = getattr(emitter, "RAW_FORMAT", "opendocument")
         self.placeholders_replaced = 0
         self.refs_rewritten = 0
+        # the example blocks this pass made, by identity: a separator goes
+        # between two of THESE, never between an example and raw markup the
+        # document itself carried
+        self._examples: set[int] = set()
 
     def run(self, doc: dict) -> dict:
         doc = dict(doc)
         blocks = _free_trapped_placeholders(doc.get("blocks", []), self.warn)
-        doc["blocks"] = [self._node(b) for b in blocks]
+        # the body is a block list like any other: through _node, so that
+        # _separate sees it -- mapping it item by item here skipped exactly
+        # the list consecutive examples almost always sit in
+        doc["blocks"] = self._node(blocks)
         return doc
 
     def _node(self, node):
@@ -176,7 +183,7 @@ class Injector:
         the only things rewritten; everything else is copied through with
         its children transformed."""
         if isinstance(node, list):
-            return [self._node(x) for x in node]
+            return self._separate([self._node(x) for x in node])
         if not isinstance(node, dict):
             return node
 
@@ -184,7 +191,9 @@ class Injector:
         if idx is not None:
             if idx in self.blocks:
                 self.placeholders_replaced += 1
-                return {"t": "RawBlock", "c": [self.fmt, self.blocks[idx]]}
+                block = {"t": "RawBlock", "c": [self.fmt, self.blocks[idx]]}
+                self._examples.add(id(block))
+                return block
             self.warn(f"placeholder {idx} survived into the AST with no example to put back")
 
         replaced = self._reference(node)
@@ -195,6 +204,28 @@ class Injector:
             node = dict(node)
             node["c"] = self._node(node["c"])
         return node
+
+    def _separate(self, items: list) -> list:
+        """Put the emitter's separator between two examples that touch.
+
+        Word joins adjacent tables, so a run of examples written one after
+        another became a single table there; the emitter says what keeps
+        them apart (BaseEmitter.between_examples), this only says where.
+        """
+        sep = self.emitter.between_examples() if self.emitter else ""
+        if not sep:
+            return items
+        out: list = []
+        for item in items:
+            if out and self._is_example(out[-1]) and self._is_example(item):
+                out.append({"t": "RawBlock", "c": [self.fmt, sep]})
+            out.append(item)
+        return out
+
+    def _is_example(self, node) -> bool:
+        return (isinstance(node, dict) and node.get("t") == "RawBlock"
+                and node.get("c", [None])[0] == self.fmt
+                and id(node) in self._examples)
 
     # -- references --------------------------------------------------------
     def _reference(self, node: dict):

@@ -230,7 +230,7 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignorés — ils décrivent ce qu'un lecteur d'écran dit d'un PDF, ce qui n'a pas d'équivalent ODT |
 | syntaxe gb4e `exe`/`xlist`, mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
-| exemples consécutifs, `.docx` seulement | chacun est un tableau dans le fichier, mais Word réunit les tableaux qui se touchent : une suite d'exemples y devient un seul tableau. L'aspect est juste ; déplacer ou supprimer un exemple se fait à l'intérieur de ce tableau, et le complément Word refuse d'en *défaire* un (partie F) |
+| exemples consécutifs, `.docx` seulement | séparés par un paragraphe de 1 pt dans son propre style, `LxExampleGap` : Word réunit les tableaux qui se touchent, et sans lui une suite d'exemples y devenait un seul tableau. Chaque pas entre exemples consécutifs est de 1 pt plus haut que dans le `.odt`, rien d'autre ne bouge (mesuré). Un fichier converti avant le 26 septembre 2026 garde ses tableaux accolés : reconvertissez-le |
 
 Lisez les avertissements : ils désignent précisément les endroits à
 reprendre à la main.
@@ -642,7 +642,7 @@ les mêmes styles, la même séquence `NumEx`.
 | renumérotation après une insertion | Word pour le bureau : Ctrl+A, F9. **Word sur le web ne renumérote jamais** et n'y autorise pas un complément : le nouvel exemple est bien numéroté, et le volet dit quels numéros et renvois sont périmés | immédiate — et tous les autres champs du document sont rafraîchis avec |
 | arbres | pas dessinés ; la notation à crochets reste du texte — utilisez la macro | pareil |
 | la boîte « Example layout » | aucune : les longueurs sont celles du convertisseur, l'espace autour d'un exemple est dans les styles `LxExampleSpace*` | pareil |
-| plusieurs exemples dans un tableau | *Untypeset* refuse (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
+| plusieurs exemples dans un tableau — un fichier converti avant le 26 septembre 2026 | *Untypeset* refuse ; reconvertissez le fichier (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
 | un document où une version antérieure du complément a écrit | son style `LxExampleCell` peut être en Times New Roman : Styles ▸ LxExampleCell ▸ Modifier ▸ la police du document | — |
 | où il a tourné | Word sur le web. **Word pour le bureau n'a pas été essayé** | OnlyOffice Desktop 9.4 |
 

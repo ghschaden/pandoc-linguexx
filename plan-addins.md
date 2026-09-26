@@ -684,8 +684,10 @@ one table. CLAUDE.md was kept current phase by phase.
 
 **Still open after the five phases**, each the user's to decide or to try:
 Word for the desktop (the `updateResult()` branch); whether the converter
-should put a paragraph between consecutive `.docx` examples, which would
-end the joined tables; and publishing either add-in. (Measuring the common
+should put a paragraph between consecutive `.docx` examples -- decided and
+done the same day: a 1 pt `LxExampleGap` paragraph, measured to move each
+step between consecutive examples by 1.0 pt and nothing else; and
+publishing either add-in, which the user has asked to wait. (Measuring the common
 Office faces besides Aptos was done the same day.)
 
 ## Risks, and what would settle each

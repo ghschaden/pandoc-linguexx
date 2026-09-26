@@ -53,6 +53,15 @@ from .styles import (
     TRANSLATION_PARA,
 )
 
+#: The paragraph between two examples that follow each other.  Word joins
+#: tables that touch -- a converted document's consecutive examples came
+#: back as one table of 22 rows (plan-addins.md, S6 fact 3) -- and a
+#: paragraph between them is what keeps them apart.  It is 1 pt high, at a
+#: 1 pt size, so it keeps them apart and adds nothing a reader sees: the
+#: space around an example is still the LxExampleSpace rows'.  .docx only:
+#: ODF has no such joining, and the Writer macro never meets it.
+GAP_PARA = "LxExampleGap"
+
 #: The character style a Leipzig gloss is set in.  Its ODF counterpart is
 #: created by the inline renderer; here it needs declaring like the rest.
 LEIPZIG_CHAR = "LxLeipzig"
@@ -134,6 +143,9 @@ def styles_fragment(layout: Layout) -> str:
               '<w:sz w:val="2"/>'),
         _para(SPACE_ABOVE_PARA, SPACE_PARA),
         _para(SPACE_BELOW_PARA, SPACE_PARA),
+        _para(GAP_PARA, None,
+              '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>',
+              '<w:sz w:val="2"/><w:szCs w:val="2"/>'),
         f'<w:style w:type="character" w:customStyle="1" '
         f'w:styleId="{LEIPZIG_CHAR}">'
         f'<w:name w:val="{LEIPZIG_CHAR}"/>'

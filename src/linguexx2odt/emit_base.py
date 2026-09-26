@@ -82,6 +82,15 @@ class BaseEmitter:
         raise NotImplementedError(
             f"{type(self).__name__} does not know how to emit an example")
 
+    def between_examples(self) -> str:
+        """Markup to put between two examples that follow each other, or "".
+
+        Nothing, for a format that keeps touching tables apart.  The inject
+        pass asks, and puts the answer only between two examples with
+        nothing else between them.
+        """
+        return ""
+
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:   # pragma: no cover - abstract
         r"""A cross-reference to example *index*, as raw markup.

@@ -40,9 +40,9 @@ export function untypesetPackage(tableOoxml, id = 1) {
   if (examples > 1) {
     return {
       refusal: `This table holds ${examples} examples: Word joins tables that touch, and ` +
-        "these were written one after another with nothing between them. Untypesetting " +
-        "one of them is not something this version can do; putting an empty paragraph " +
-        "between examples in the source document keeps them apart.",
+        "these were written one after another with nothing between them -- as " +
+        "linguexx2odt did before 2026-09-26. Untypesetting one of them is not something " +
+        "this version can do; converting the document again keeps its examples apart.",
     };
   }
   const got = readTable(t.rows);

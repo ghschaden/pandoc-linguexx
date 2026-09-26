@@ -474,3 +474,48 @@ def test_the_space_around_an_example_is_a_styled_row(tmp_path: Path) -> None:
     rows = re.findall(r"<w:tr>(.*?)</w:tr>", xml, re.S)
     assert "LxExampleSpaceAbove" in rows[0], "the first row is not the spacer"
     assert "LxExampleSpaceBelow" in rows[-1], "the last row is not the spacer"
+
+
+CONSECUTIVE = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\ex. A first example.
+
+\ex. A second example.
+
+\exg. il mio libro\\
+the my book\\
+
+Prose between.
+
+\ex. A fourth example.
+\end{document}
+"""
+
+
+@pandoc
+def test_consecutive_examples_are_kept_apart_for_word(tmp_path: Path) -> None:
+    """Word joins tables that touch.  A converted document's consecutive
+    examples came back from Word as ONE table of 22 rows (plan-addins.md,
+    S6 fact 3): it looked right, but moving or deleting one example meant
+    working inside all of them, and the Word add-in cannot untypeset one.
+    So a 1 pt LxExampleGap paragraph goes between two examples that touch
+    -- and only there: not before prose, not after the last.
+    """
+    docx = build(tmp_path, CONSECUTIVE, "c")
+    xml = document_xml(docx)
+    body = xml.split("<w:body>", 1)[1]
+    top = re.findall(r"<w:tbl>.*?</w:tbl>|<w:p\b.*?</w:p>|<w:p/>", body, re.S)
+    kinds = ["tbl" if t.startswith("<w:tbl>") else
+             "gap" if "LxExampleGap" in t else "p" for t in top]
+    for a, b in zip(kinds, kinds[1:]):
+        assert (a, b) != ("tbl", "tbl"), f"two example tables touch: {kinds}"
+    assert kinds.count("gap") == 2, kinds
+    # the gaps sit between the three consecutive examples, nowhere else
+    first = kinds.index("tbl")
+    assert kinds[first:first + 5] == ["tbl", "gap", "tbl", "gap", "tbl"], kinds
+
+    styles = zipfile.ZipFile(docx).read("word/styles.xml").decode("utf-8")
+    gap = re.search(r'<w:style [^>]*w:styleId="LxExampleGap".*?</w:style>', styles, re.S)
+    assert gap, "LxExampleGap is used but not defined"
+    assert 'w:line="20" w:lineRule="exact"' in gap.group(0)

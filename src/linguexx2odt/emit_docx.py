@@ -55,7 +55,7 @@ from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA,
 )
-from .styles_docx import LEIPZIG_CHAR
+from .styles_docx import GAP_PARA, LEIPZIG_CHAR
 from .ir import Body, Example
 
 #: twentieths of a point per centimetre, which is what OOXML measures in
@@ -170,6 +170,10 @@ class DocxEmitter(BaseEmitter):
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:
         return sequence_ref(index, letter, self.brackets, bare=bare)
+
+    def between_examples(self) -> str:
+        """A 1 pt paragraph: Word joins tables that touch (see GAP_PARA)."""
+        return f'<w:p><w:pPr><w:pStyle w:val="{GAP_PARA}"/></w:pPr></w:p>'
 
     def example(self, ex: Example) -> str:
         return self._table(ex)

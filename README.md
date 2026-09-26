@@ -255,7 +255,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
 | an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
 | math inside examples | handed to pandoc; may not survive |
-| consecutive examples, `.docx` only | each is its own table in the file, but Word joins tables that touch, so in Word a run of examples is one table: it looks right, and moving or deleting one example means working inside that table. The Word add-in's *Untypeset* refuses such a table |
+| consecutive examples, `.docx` only | kept apart by a 1 pt paragraph in its own style, `LxExampleGap`: Word joins tables that touch, and without it a run of examples was one table in Word. Each step between consecutive examples is 1 pt taller than in the `.odt`, and nothing else moves (measured). A file converted before 2026-09-26 still has them touching; reconvert it |
 | anything else unknown | handed to pandoc, as `opendocument` or `openxml` |
 
 ### Why `\GlossTransSide` is normalised rather than reproduced
@@ -456,7 +456,7 @@ and lays out as the converter lays out, and tests hold it to both exactly
 | renumbering after an insertion | Word for the desktop: Ctrl+A, F9. **Word on the web never renumbers fields** and will not let an add-in do it: the new example is numbered right, and the pane says which numbers and references are stale | at once — and every other field in the document is refreshed with them |
 | trees | not drawn; bracket notation stays text — use the Writer macro | the same |
 | the layout dialog | none: the lengths are the converter's, and the space around an example is the `LxExampleSpace*` styles | the same |
-| several examples in one table | *Untypeset* refuses it (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
+| several examples in one table — a file converted before 2026-09-26 | *Untypeset* refuses it; reconvert the file (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
 | a document an earlier add-in build wrote into | its `LxExampleCell` may carry Times New Roman: Styles ▸ LxExampleCell ▸ Modify ▸ the document's face | — |
 | where it has run | Word on the web. **Word for the desktop has not been tried** | OnlyOffice Desktop 9.4 |
 

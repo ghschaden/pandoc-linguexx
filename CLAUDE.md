@@ -116,6 +116,13 @@ deliberate and worth keeping:
   element per column; OOXML emits nothing for them, so a row is complete
   when its *spans* total the grid. A row with the right number of cells
   and the wrong spans is a table Word renders as a mess.
+- **Word joins tables that touch**, so two `.docx` examples with nothing
+  between them are one table in Word. The emitter says what keeps them
+  apart (`between_examples()`: a 1 pt `LxExampleGap` paragraph for
+  `.docx`, nothing for `.odt`), and the inject pass puts it only between
+  two example blocks it made itself. `test_consecutive_examples_are_kept_
+  apart_for_word` holds both halves; it failed once because the body list
+  bypassed the pass that inserts it.
 - **A `w:pStyle` naming an undefined style is not an error.** The reference
   survives and the paragraph renders with the default — so styles must be
   injected (`postprocess_docx`), and a missing injection looks like nothing
