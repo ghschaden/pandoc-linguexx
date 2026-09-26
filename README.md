@@ -409,7 +409,10 @@ The two spacings *are* the `LxExampleSpace*` styles, so changing them
 restyles every example at once; the indents apply to examples built
 afterwards.
 
-Install it as a LibreOffice extension:
+Install it as a LibreOffice extension: download `linguexx-0.1.0.oxt`
+from the
+[latest release](https://github.com/ghschaden/pandoc-linguexx/releases/latest)
+and add it in *Tools ▸ Extension Manager*, or build it from a checkout:
 
 ```
 python3 tools/build_oxt.py && unopkg add dist/linguexx-0.1.0.oxt
@@ -483,8 +486,9 @@ Word works.
 
 ### Installing them
 
-Neither is published. **Word:** the add-in has to be served over HTTPS,
-and for now that is a server on your own machine:
+The OnlyOffice plugin is released; the Word add-in is not yet.
+**Word:** the add-in has to be served over HTTPS, and for now that is a
+server on your own machine:
 
 ```
 python3 tools/serve_addin.py      # https://localhost:3000, certificate made once
@@ -497,8 +501,9 @@ Examples** button appears on the Home tab. The server has to run while the
 add-in is used; `--manifest-only --base URL` writes a manifest for serving
 `addin/` from anywhere else.
 
-**OnlyOffice:** `make onlyoffice` builds the plugin as
-`dist/linguexx-onlyoffice.plugin`. In OnlyOffice Desktop, open *Plugins ▸
+**OnlyOffice:** download `linguexx-onlyoffice.plugin` from the
+[latest release](https://github.com/ghschaden/pandoc-linguexx/releases/latest),
+or build it from a checkout with `make onlyoffice` (it lands in `dist/`). In OnlyOffice Desktop, open *Plugins ▸
 Plugin Manager* and install that file; **LinguExx** appears on the Plugins
 tab. Installing a newer build the same way replaces the old one (tried
 with OnlyOffice Desktop 9.4, the Flatpak).

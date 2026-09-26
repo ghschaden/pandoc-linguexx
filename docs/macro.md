@@ -32,6 +32,10 @@ for the extension alone, with per-platform install instructions.
 
 ### As an extension (recommended)
 
+Download `linguexx-0.1.0.oxt` from the
+[latest release](https://github.com/ghschaden/pandoc-linguexx/releases/latest)
+and add it in *Tools ▸ Extension Manager*, or build it from a checkout:
+
 ```
 python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt

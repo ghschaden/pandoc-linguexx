@@ -19,7 +19,9 @@ LibreOffice (`linguexx2odt`) est documenté séparément dans
 - **LibreOffice 4.1 ou plus récent** — c'est le minimum que déclare
   l'extension. Développée et vérifiée sous LibreOffice 26.2 ; toute
   version moderne convient. Fonctionne sous Windows, macOS et Linux.
-- Le fichier de l'extension : **`linguexx-0.1.0.oxt`**.
+- Le fichier de l'extension : **`linguexx-0.1.0.oxt`**, à télécharger sur
+  la [dernière version publiée](https://github.com/ghschaden/pandoc-linguexx/releases/latest)
+  (ou à fabriquer soi-même, § 11).
 
 Il n'y a rien d'autre à installer : ni Python, ni pandoc, ni LaTeX.
 

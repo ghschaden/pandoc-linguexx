@@ -275,6 +275,11 @@ serait trop étroite et le texte y reviendrait à la ligne.
 
 ### Méthode recommandée : l'extension
 
+Téléchargez `linguexx-0.1.0.oxt` sur la
+[dernière version publiée](https://github.com/ghschaden/pandoc-linguexx/releases/latest)
+et ajoutez-la par *Outils ▸ Gestionnaire des extensions* ; ou bien,
+depuis une copie du dépôt :
+
 ```
 python3 tools/build_oxt.py
 unopkg add dist/linguexx-0.1.0.oxt
@@ -671,7 +676,7 @@ boutons pendant que Word travaille.
 
 ## F.3 Installation
 
-Aucun des deux n'est publié.
+Le module OnlyOffice est publié ; le complément Word ne l'est pas encore.
 
 **Word.** Le complément doit être servi en HTTPS ; pour l'instant, par un
 serveur sur votre propre machine :
@@ -686,8 +691,11 @@ Mes compléments ▸ *Charger mon complément*, et choisissez
 `addin/word/manifest.xml`. Un bouton **LinguExx ▸ Examples** apparaît dans
 l'onglet Accueil. Le serveur doit tourner tant qu'on se sert du complément.
 
-**OnlyOffice.** `make onlyoffice` construit l'extension sous la forme
-`dist/linguexx-onlyoffice.plugin`. Dans OnlyOffice Desktop, ouvrez le
+**OnlyOffice.** Téléchargez `linguexx-onlyoffice.plugin` sur la
+[dernière version publiée](https://github.com/ghschaden/pandoc-linguexx/releases/latest),
+ou construisez-le depuis une copie du
+dépôt avec `make onlyoffice` (il arrive dans `dist/`). Dans OnlyOffice
+Desktop, ouvrez le
 gestionnaire de modules (*Plugin Manager*, dans l'onglet des modules
 complémentaires) et installez ce fichier ; **LinguExx** apparaît dans l'onglet Modules complémentaires.
 Installer une version plus récente de la même façon remplace l'ancienne
