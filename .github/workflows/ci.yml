@@ -10,14 +10,23 @@ on:
 env:
   PANDOC_VER: "3.6.1"
 
+# Every job names its Ubuntu rather than taking ubuntu-latest, which GitHub
+# moves to Ubuntu 26 on 2026-10-19: the suite and the macro job install
+# LibreOffice from the distribution and measure what it renders, so a new
+# release is a new LibreOffice, and that should be a commit of its own,
+# not a Monday's surprise.  24.04 is what every run so far had.
+#
+# The actions are at the first major version that runs on Node 24 (checked
+# in each action's action.yml); Node 20 is deprecated on the runners.
+
 jobs:
   # Lint first and on a bare runner: ruff needs neither pandoc nor
   # LibreOffice, and a lint that waits for an apt-get and a headless office
   # suite is a lint that reports after the reader has moved on.
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install ruff
         run: pipx install ruff
       - name: ruff check
@@ -26,11 +35,11 @@ jobs:
           ruff check .
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -73,10 +82,10 @@ jobs:
   # being current) is checked by the test job above -- so this needs Node
   # and nothing else.
   addin:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       # The OnlyOffice bundle is built first: a test holds it to the modules.
@@ -97,18 +106,18 @@ jobs:
   # Version"), which nothing in the test reads; the documents it makes are
   # thrown away.  Cached, being 68 MB.
   onlyoffice:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       DOCBUILDER_VER: "9.4.0"
       DOCBUILDER_SHA256: "15c02892fea158b76ad343f4d580763c30cbd151a98f0595478d7b6f8599437a"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - name: Cache Document Builder
         id: docbuilder
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/documentbuilder
           key: documentbuilder-${{ env.DOCBUILDER_VER }}-${{ env.DOCBUILDER_SHA256 }}
@@ -143,9 +152,9 @@ jobs:
   # the converter will not run, and a check that skips in CI is the silent
   # green this workflow exists to prevent.
   macro:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install LibreOffice, the UNO bridge and poppler
         run: |
