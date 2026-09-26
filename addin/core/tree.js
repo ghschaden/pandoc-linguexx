@@ -514,6 +514,12 @@ export function treeShapes(tree, lineH) {
   const ys = [...out.labels.map((l) => l.y + l.h), ...out.arrows.flat().map((p) => p[1])];
   out.width = Math.max(0, ...xs);
   out.height = Math.max(0, ...ys);
+  // Room under the lowest arrow, as much as the gutter leaves above it.
+  // Without it the arrow's run under the tree is the drawing's bottom edge,
+  // which in a table is the next row's top: OnlyOffice Desktop painted the
+  // row below over it and the arrow lost its bottom (seen live, 2026-09-26).
+  // The Writer macro's group ends at the lane; Writer does not clip it.
+  if (out.arrows.length) out.height += TREE.GUTTER_GAP_CM * 1000;
   return out;
 }
 

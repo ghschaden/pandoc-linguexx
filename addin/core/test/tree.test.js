@@ -118,7 +118,9 @@ test("an arrow runs below the tree and lands on the underside of its target", ()
   assert.equal(x0, tree.nodes[tree.arrows[0].from].x);
   assert.equal(x3, tree.nodes[tree.arrows[0].to].x);
   assert.equal(y3 - TREE.HEAD_LEN_CM * 1000, s.heads[0][0][1], "the line ends where the head begins");
-  assert.ok(s.height >= lane);
+  // the run under the tree is not the drawing's bottom edge: in a table
+  // that edge is the next row's top, which OnlyOffice painted over it
+  assert.ok(s.height >= lane + TREE.GUTTER_GAP_CM * 1000, `${s.height} leaves no room under the lane at ${lane}`);
 });
 
 test("the tree starts at x = 0 and its width is its rightmost box", () => {
