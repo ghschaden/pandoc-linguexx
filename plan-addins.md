@@ -115,6 +115,66 @@ Document Builder one, element for element.
 **S7 gate: passed**, headless and in the desktop editor. The OnlyOffice
 half proceeds.
 
+## Verified facts — S8 (2026-09-26, Document Builder 9.4.0)
+
+The target is the converter's own table for "il mio libro" in
+`tests/e2e/word-sample.tex`: 6 columns of 624/189/391/472/582/7380
+twips, fixed layout, zero cell margins, no borders, spacer rows spanning
+6, a translation spanning 4, a named paragraph style on every cell. The
+same table was built through the builder API and both files rendered by
+OnlyOffice (Document Builder → PDF) and by LibreOffice; positions are
+read with `pdftotext -bbox`, in twips from the example number.
+**Confirmed in OnlyOffice Desktop 9.4.0**: `spikes/s8_onlyoffice_table.js`
+run as a macro — into the S7 document, as it happened, where the example
+continued the numbering as (5) and its reference read (5) — and saved.
+The editor's file keeps the corrected grid (624/189/391/472/582/7380),
+the merged widths, `none` borders and fixed layout; LibreOffice renders
+it at 813/1203/1676, the converter's positions. The editor does not
+rewrite the grid from its own layout on save.
+
+1. **The API sets everything but the grid.** `SetWidth("twips")`,
+   `SetTableLayout("fixed")`, `SetTableCellMargin*(0)`, per-cell
+   `SetWidth`, and `MergeCells` all land in the XML as asked — but
+   `w:tblGrid` stays at six default 2 cm columns (1134 each), and a
+   merged cell keeps its first cell's `tcW` (624 where 9638 is meant).
+2. **OnlyOffice lays out from the cells, LibreOffice from the grid.** So
+   that table renders perfectly in OnlyOffice (813/1204/1676, as the
+   converter's) and at 3212/4819/6425 in LibreOffice — six equal
+   columns. A file the plugin writes is read by other people's software,
+   and Word is expected to follow the grid of a fixed table as
+   LibreOffice does — expected, not tested here. **This
+   is the finding of S8: "looks right in OnlyOffice" proves nothing about
+   the file.**
+3. **The grid can be written through JSON.** `ApiTable.ToJSON()` carries
+   `tblGrid` explicitly; setting it (and each cell's `tcW` to the sum of
+   its span) and rebuilding with `Api.FromJSON()` + `ReplaceByElement`
+   gives the converter's grid, and both renderers then agree with the
+   converter's table to the twip (LibreOffice 813/1203/1676, as it
+   renders the converter's own file). One merged width comes back 8825
+   for 8826, a rounding in the JSON path.
+4. **`FromJSON` loses paragraph styles and adds "Table Grid".** So the
+   order is: structure and merges → grid through JSON → then styles,
+   text, the S7 number field and its bookmark. And
+   `SetTableBorderAll("none", 0, 0, 0, 0, 0)` after the rebuild, or the
+   table is drawn with single black lines in both renderers. Built in
+   that order, one table carries the grid, spans, styles, a `SEQ` field
+   with a whole-field bookmark and a working `REF`.
+5. **Risk carried forward:** the JSON is an internal format (keys like
+   `reviewInfo`, `bPresentation`) that OnlyOffice does not document as
+   stable. The plugin patches two keys of it and nothing more, and a
+   test must pin the grid in the saved file so that a change in 9.x
+   fails loudly.
+6. **Style IDs are numeric.** `CreateStyle("LxExampleCell")` writes
+   `w:styleId="697"` with `w:name="LxExampleCell"`. The name is what
+   Word's Styles pane and a round trip go by, but the converter writes
+   ID = name: in a document the converter made, the plugin must find the
+   existing style by name (`GetStyle`) rather than create a second one.
+   Not yet tested. The IDs are not even stable in form: Document Builder
+   wrote `697`, the desktop editor `1_363`.
+
+**S8 gate: passed**, headless and in the desktop editor — by the JSON
+route, whose stability is the risk in fact 5.
+
 ## The shape
 
 The markup rule from `plan-docx.md` holds a third time: **the arithmetic
