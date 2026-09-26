@@ -3,7 +3,7 @@
 #   make test      the suite (pytest); fails if a required tool is missing
 #   make lint      ruff over src/, tests/ and tools/
 #   make check     lint and test, which is what CI runs
-#   make js-test   the add-ins' suite (node --test); needs Node >= 18
+#   make js-test   the add-ins' suite (node --test); needs Node >= 22
 #   make onlyoffice       build the OnlyOffice plugin into dist/
 #   make onlyoffice-test  run its editor half in Document Builder
 #   make macro     rewrite the macro's and the add-in core's constants
@@ -48,11 +48,14 @@ lint:
 # converter's plan_table() through the goldens in tests/fixtures/.  Node is
 # needed here and nowhere else: `make test` stays Python-only, and CI runs
 # this as a job of its own.  No npm install -- the core has no dependencies.
+# The test files are named by glob, not by directory: Node 22, which CI
+# runs, loads a directory argument as a module and fails before any test,
+# where Node 26 expands it -- the first CI run found that out.
 js-test: onlyoffice
 	@if command -v node >/dev/null 2>&1; then \
-	  cd addin && node --test core/test/ word/test/ onlyoffice/test/; \
+	  cd addin && node --test "core/test/*.test.js" "word/test/*.test.js" "onlyoffice/test/*.test.js"; \
 	else \
-	  echo "node is not installed; the add-in core's suite needs Node >= 18"; \
+	  echo "node is not installed; the add-ins' suite needs Node >= 22"; \
 	  exit 1; \
 	fi
 

@@ -501,7 +501,7 @@ cross-reference shifts.
 make check                  # lint and the suite: what CI runs
 make test                   # the suite alone
 make lint                   # ruff over src/, tests/ and tools/
-make js-test                # the add-ins' suite (Node >= 18, nothing to install)
+make js-test                # the add-ins' suite (Node >= 22, nothing to install)
 make onlyoffice-test        # the OnlyOffice plugin's editor half, in Document Builder
 LINGUEXX_UPDATE_GOLDEN=1 pytest tests/test_extract.py   # re-snapshot
 python3 spikes/s1_passthrough.py   # re-run if the pandoc version changes

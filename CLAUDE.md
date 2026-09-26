@@ -28,7 +28,7 @@ and a check that ever renders to PDF must skip that band.
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
   versioned interface), LibreOffice for the rendering half, poppler for
   reading the result back.
-- Node ≥ 18 for `make js-test` and nothing else: the add-in core is plain
+- Node ≥ 22 for `make js-test` and nothing else: the add-in core is plain
   ES modules with no dependencies and no build step, and `make test` stays
   Python-only.
 - **Two different path questions, easily conflated.** *pytest* needs no

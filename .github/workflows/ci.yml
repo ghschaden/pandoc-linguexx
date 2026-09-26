@@ -84,7 +84,7 @@ jobs:
         run: |
           node --version
           python3 tools/build_onlyoffice.py
-          cd addin && node --test core/test/ word/test/ onlyoffice/test/
+          cd addin && node --test "core/test/*.test.js" "word/test/*.test.js" "onlyoffice/test/*.test.js"
 
   # The OnlyOffice plugin's editor half, in Document Builder: the builder API
   # a plugin's callCommand runs in the editor, headless.  Every fixture is
