@@ -111,7 +111,11 @@ test("a face is measured with its own metrics, or said to be unmeasured", async 
   assert.equal(advancesFor("Times New Roman").advances, ADVANCE);
   assert.equal(advancesFor("Liberation Serif").known, true);
   assert.equal(advancesFor("Aptos").advances, FACE_ADVANCE.aptos);
-  assert.deepEqual([advancesFor("Arial").advances === ADVANCE, advancesFor("Arial").known], [true, false]);
+  for (const face of ["Calibri", "Arial", "Cambria", "Georgia"]) {
+    assert.equal(advancesFor(face).advances, FACE_ADVANCE[face.toLowerCase()], face);
+  }
+  // a face nobody measured: Times metrics, and said so
+  assert.deepEqual([advancesFor("Comic Sans MS").advances === ADVANCE, advancesFor("Comic Sans MS").known], [true, false]);
   // Aptos is wider than Times, which is why it is measured at all
   const lines = ["Ich habe geschlafen", "I have slept"];
   assert.ok(corePlan(lines, 17, "Aptos").columns.every((c, i) => c >= corePlan(lines, 17).columns[i]));

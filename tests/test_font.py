@@ -177,3 +177,17 @@ def test_a_measured_face_needs_no_font_file(monkeypatch) -> None:
         assert sum(aptos[c] for c in word) > 1.1 * sum(_ADVANCE[c] for c in word)
     finally:
         measure.advances_for.cache_clear()
+
+
+def test_the_common_office_faces_are_measured() -> None:
+    """Calibri is the face of most existing Word documents, and Arial,
+    Cambria and Georgia are common: each is carried, and each is wider than
+    Times -- which is what estimating them as Times got wrong."""
+    from linguexx2odt import measure
+
+    word = "ausserordentlich"
+    times = sum(_ADVANCE[c] for c in word)
+    for face in ("Calibri", "Arial", "Cambria", "Georgia"):
+        table = advances_for(face)
+        assert table is measure._FACE_ADVANCE[face.lower()], face
+        assert sum(table[c] for c in word) > times, face

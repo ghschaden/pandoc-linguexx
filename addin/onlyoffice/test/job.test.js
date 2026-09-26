@@ -85,8 +85,8 @@ test("the job is core/table.js's rows in twips, runs split by format", () => {
 
 test("a face the estimate does not describe is noted", () => {
   const { notes } = prepareJob(read([{ inTable: false, runs: [run("Ich habe")] }, { inTable: false, runs: [run("I have")] }],
-    { font: "Arial" }));
-  assert.ok(notes.some((n) => /Times New Roman.*Arial/.test(n)));
+    { font: "Comic Sans MS" }));
+  assert.ok(notes.some((n) => /Times New Roman.*Comic Sans MS/.test(n)));
 });
 
 test("runsOf keeps a cell's formats apart", () => {

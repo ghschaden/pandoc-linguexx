@@ -27,9 +27,24 @@ advances.  Times is the built-in table; a face measured here is carried
 beside it, so it is estimated from its own metrics on a machine that has
 never installed it.  Only the numbers are committed, never the font.
 
-Aptos, Word's default body face since 2023, came from Microsoft's own
-download (Download Center id 106087, "Microsoft Aptos Fonts.zip", 4.40,
-Aptos.ttf version 2.01) -- the face a Word user's examples are set in.
+What is committed, and where it came from (measured 2026-09-26):
+
+    aptos    Word's default since 2023.  Microsoft's own download: Download
+             Center id 106087, "Microsoft Aptos Fonts.zip" 4.40, Aptos.ttf 2.01.
+    calibri  Word's default before that, and so the face of most existing
+             Word documents.  Calibri 5.62.  Its free metric twin Carlito
+             1.104 measures IDENTICALLY -- all 215 shared characters -- so
+             the table can be reproduced without Microsoft's font.
+    arial    Arial 2.82.  Liberation Sans reproduces it except "·" (0.055 em).
+    cambria  Cambria 5.96.  No twin: Caladea 1.001, the version in the Google
+             Fonts repository, differs from it in 128 of 201 characters
+             ("1" by 0.19 em), so it is not the metric match it is sold as.
+    georgia  Georgia 2.05.  Gelasio 1.008 reproduces it except "¸" and "µ".
+
+The Microsoft files are the ones installed on the machine the measuring was
+done on; the twins were fetched from github.com/google/fonts to check them
+against, not installed.  The numbers are facts about the fonts; neither kind
+of font file is committed.
 
 The measurement is measure.measure_font_file(), the same function the
 converter uses for an installed face, so a committed table and a live

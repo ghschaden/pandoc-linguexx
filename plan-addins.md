@@ -648,6 +648,14 @@ Word wrote the resolved face into the style on import.
   fixture and the core matches it exactly (leaving the face out of the word
   widths fails 27 tests). OnlyOffice measures for the document's default
   face and size too.
+- **Calibri, Arial, Cambria and Georgia are measured too** (the same day),
+  from the Microsoft fonts installed on the measuring machine, and each
+  checked against its free metric twin, so the numbers can be reproduced:
+  Carlito is identical to Calibri in all 215 shared characters; Liberation
+  Sans matches Arial but for "·"; Gelasio matches Georgia but for "¸" and
+  "µ"; Caladea 1.001, the Google Fonts version, is NOT Cambria's twin (128
+  of 201 characters differ), so Cambria rests on the original alone. All
+  five are wider than Times, by 3% (Calibri) to 12%.
 - **A face not measured** is estimated from Times's metrics, and the pane
   says so.
 - **Not done:** repairing a document an earlier add-in version spoiled
@@ -677,8 +685,8 @@ one table. CLAUDE.md was kept current phase by phase.
 **Still open after the five phases**, each the user's to decide or to try:
 Word for the desktop (the `updateResult()` branch); whether the converter
 should put a paragraph between consecutive `.docx` examples, which would
-end the joined tables; publishing either add-in; and measuring faces
-besides Aptos.
+end the joined tables; and publishing either add-in. (Measuring the common
+Office faces besides Aptos was done the same day.)
 
 ## Risks, and what would settle each
 
