@@ -231,26 +231,27 @@ at an environment boundary, or at a closing brace.
 ### What it does not, and says so
 
 The converter never fails silently. Anything it cannot render faithfully
-produces a warning naming the construct and the line, and degrades to
-readable output rather than to nothing:
+produces a warning naming the construct. Most of it degrades to readable
+output; some of it is deleted, and the rows below say which:
 
 Unless a row says otherwise, this is true of both targets.
 
 | construct | what happens |
 |---|---|
-| `\ex.` inside `itemize`, `enumerate`, `footnote`, `exe`/`xlist` | left as LaTeX, untouched |
+| `\ex.` inside `itemize`, `enumerate` or a footnote | not converted: `\ex` is deleted, and the example's text stays where it was as ordinary unnumbered text, after a stray full stop |
 | `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped |
 | `\exsource{…}` | rendered inline at the end, not flush right |
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
-| `\refrange` | left as LaTeX |
+| `\refrange`, `\prefrange` | deleted with their arguments, and the sentence closes over the gap ("see and"). Inside an example the targets differ: the `.odt` deletes them, the `.docx` prints the LaTeX source |
 | `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references |
-| `\altn`, `\altg` | left as LaTeX |
+| `\altn`, `\altg` | deleted with their arguments. Inside an example the targets differ: the `.odt` deletes them, the `.docx` prints the LaTeX source |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
 | `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | warn; the reference document's styles and the literal marks are used |
-| `[langsci]`, the `\ea … \z` front-end | warns; those examples are left as LaTeX |
+| `[langsci]`, the `\ea … \z` front-end | warns; `\ea` and `\z` are deleted, and the example's text stays as ordinary unnumbered text |
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignored — they describe what a PDF screen reader says, which has no ODT counterpart |
-| gb4e `exe`/`xlist` syntax, `[legacy]` mode | out of scope |
+| gb4e `exe`/`xlist` syntax | out of scope, and deleted: the environment goes with everything in it, the example's text included |
+| `[legacy]` mode | out of scope |
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | resolved with citeproc against the document's `.bib`, with a reference list; the keys are printed if no `.bib` is found |
 | `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
 | an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
