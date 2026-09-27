@@ -274,7 +274,8 @@ def main(argv: list[str] | None = None) -> int:
         space_below_cm=args.space_below,
     )
     emitter = emitter_for(args.to, layout=layout, split=not args.no_split,
-                          brackets=parsed.brackets, labels=parsed.labels)
+                          brackets=parsed.brackets, labels=parsed.labels,
+                          macros=parsed.macros)
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}
 

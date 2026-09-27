@@ -56,6 +56,9 @@ class BaseEmitter:
     brackets: Brackets = field(default_factory=Brackets)
     r"""What to wrap a number in -- \ExLBr & co., as the preamble set them."""
 
+    macros: dict = field(default_factory=dict)
+    """The document's own macros (macros.Macro by name), for the renderer."""
+
     labels: dict[str, tuple[int, str]] = field(default_factory=dict)
     r"""label -> (example index, sub-letter), for a \ref inside an example.
     The prose's go through the inject pass; these never reach it."""
@@ -72,6 +75,7 @@ class BaseEmitter:
         if self.inline is None:
             self.inline = InlineRenderer(self.warnings.append)
         self.inline.labels = self.labels
+        self.inline.macros = self.macros
         self.inline.brackets = self.brackets
         self._warn = self.warnings.append
 

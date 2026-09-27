@@ -32,7 +32,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field, replace
 
+from .inline import KNOWN_COMMANDS
 from .ir import Body, Example, Item, Tier
+from .macros import Macro
+from .macros import collect as collect_macros
 from .latexutil import (
     Brackets,
     cmd_at,
@@ -184,6 +187,12 @@ RELATIVE = {
 RANGES = {"refrange": False, "prefrange": True}
 RANGE_DASH = "\u2013"
 
+#: linguexx's own commands, which a document's \newcommand cannot replace
+#: either -- \newcommand\gl stops LaTeX with "already defined" (measured).
+LINGUEXX_COMMANDS = frozenset(
+    {*EX_CMDS, "gll", "glll", "glt", "gl", "label", "sublabel", "exannot",
+     "exsource", "jdg", "lpzg", *RELATIVE, *RANGES, "altn", "altg"})
+
 #: Prefix for the labels those get rewritten to.  They go through the same
 #: path as a \ref the author wrote, which is the point: no second reference
 #: mechanism to keep in step, and both targets get it for free.
@@ -201,6 +210,8 @@ class ParseResult:
     """label -> (example index, sub-example marker or '')."""
     sublabels: frozenset[str] = frozenset()
     r"""The labels set with \sublabel, which a range may end on bare."""
+    macros: dict[str, Macro] = field(default_factory=dict)
+    """The document's own macros, for the renderer to expand in examples."""
     brackets: Brackets = field(default_factory=Brackets)
     """What the preamble asked an example number to be wrapped in."""
 
@@ -602,6 +613,8 @@ def parse(src: str) -> ParseResult:
 
     labels = _collect_labels(examples)
     sublabels = _sublabels(src, live)
+    macros = collect_macros(src, live, KNOWN_COMMANDS | LINGUEXX_COMMANDS,
+                            warnings.append)
     _warn_sub_sub_references(src, live, examples, warnings)
     rel_spans = _resolve_relatives(src, relatives, spans, labels, warnings)
     for start, stop, name, first, second in ranges:
@@ -618,6 +631,7 @@ def parse(src: str) -> ParseResult:
         warnings=warnings,
         labels=labels,
         sublabels=sublabels,
+        macros=macros,
         brackets=brackets,
     )
 

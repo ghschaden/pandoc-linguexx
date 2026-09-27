@@ -35,6 +35,7 @@ import subprocess
 import unicodedata
 from collections.abc import Callable
 
+from . import macros as _macros
 from .latexutil import Brackets, find_group
 
 XML_ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
@@ -123,6 +124,13 @@ REF_SOURCE = re.compile(r"\\(p?ref)\s*\{[^}]*\}")
 REF_TOKEN = "LXREFTOKEN{n}X"
 
 
+#: Every command the renderer gives a meaning of its own.  A document's
+#: \newcommand over one of these is refused, as LaTeX refuses it.
+KNOWN_COMMANDS = frozenset(
+    set(WRAPPERS) | set(SYMBOLS) | set(ACCENTS) | DECLARATIONS | DISCARD_ARG
+    | {"ref", "pref", "begin", "end", "Tree", "qtree"})
+
+
 class Unsupported(Exception):
     """Raised when the hand-rolled renderer meets something it does not know."""
 
@@ -149,6 +157,8 @@ class InlineRenderer:
         """label -> (example index, sub-example letter): what \\ref names."""
         self.brackets = None
         """The document's \\ExLBr/\\ExRBr, for the number a reference shows."""
+        self.macros: dict[str, _macros.Macro] = {}
+        """The document's own macros, expanded before anything is rendered."""
         self.ref_markup: Callable[..., str] | None = None
         """(index, letter, bare=) -> the target's reference markup, for
         render().  None leaves the number as text."""
@@ -158,6 +168,7 @@ class InlineRenderer:
         """Return OpenDocument inline XML for a LaTeX fragment."""
         if not latex.strip():
             return ""
+        latex = _macros.expand(latex, self.macros, self.warn)
         try:
             xml = self._render(latex)
         except Unsupported as exc:
@@ -192,6 +203,7 @@ class InlineRenderer:
         its (index, letter, bare) attached -- what a target that builds
         its own reference markup (.docx) needs.  Its text is the number as
         it will be shown, so measuring it measures the page."""
+        latex = _macros.expand(latex, self.macros, self.warn)
         try:
             xml = self._render(latex)
         except Unsupported:
