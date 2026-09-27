@@ -109,3 +109,35 @@ def test_the_run_names_prose_lost_inside_an_unknown_environment(
 def test_a_layout_command_does_not_hide_what_follows_it() -> None:
     warnings = _report([_raw("RawBlock", "\\centering\n\\vspace{1em}\\Tree [.S a ]")])
     assert len(warnings) == 1 and "\\Tree" in warnings[0], warnings
+
+
+FALSE_CLAIMS = ("left untouched", "left as LaTeX", "renders it literally",
+                "rendered literally", "kept as raw LaTeX", "left as written")
+
+
+def test_no_warning_claims_the_latex_survives() -> None:
+    """Every one of these warnings said the LaTeX was kept -- "left
+    untouched", "pandoc renders it literally" -- and in every case, read
+    off a converted document, the writer deleted it."""
+    from linguexx2odt.extract import parse
+    src = r"""\documentclass{article}
+\usepackage[langsci]{linguexx}
+\begin{document}
+\ex. One, \refrange{a}{b} and \begin{itemize}\item x\end{itemize}.
+
+See \refrange{a}{b} and \altn{p}{q}; also \Last and \NNext.
+\begin{itemize}\item \ex. Listed.
+
+\end{itemize}
+Note.\footnote{\ex. Noted.
+
+}
+\ex gb4e form.
+
+\a. Stray.
+\end{document}
+"""
+    warnings = parse(src).warnings
+    assert len(warnings) >= 9, warnings
+    wrong = [w for w in warnings if any(c in w for c in FALSE_CLAIMS)]
+    assert not wrong, "\n".join(wrong)

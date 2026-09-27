@@ -47,8 +47,8 @@
   "warnings": [
     "line 3: custom label \"(4$'$)\" printed literally; the NumEx counter is not stepped",
     "line 5: \\exsource rendered inline at the end of the example, not flush right",
-    "line 8: example inside itemize left untouched (nested examples are out of scope v1)",
-    "line 11: example inside a footnote left untouched (nested examples are out of scope v1)",
-    "line 13: stray \\a. outside any example, left untouched (linguexx itself raises a package error here)"
+    "line 8: example inside itemize not converted (nested examples are out of scope v1): \\ex is deleted, its text kept unnumbered",
+    "line 11: example inside a footnote not converted (nested examples are out of scope v1): \\ex is deleted, its text kept unnumbered",
+    "line 13: stray \\a. outside any example (linguexx itself raises a package error here): \\a is deleted, its text kept"
   ]
 }

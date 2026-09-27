@@ -87,7 +87,8 @@ _UNSUPPORTED_OPTIONS = {
         "hangs judgment marks into a gutter; not reproduced here",
     "langsci":
         "selects the \\ea ... \\z front-end, which this converter does "
-        "not parse; those examples are left as LaTeX",
+        "not parse; \\ea and \\z are deleted, and those examples' text "
+        "is kept as ordinary unnumbered text",
     "legacy":
         "selects linguex's geometry; this converter targets the default",
 }
@@ -540,17 +541,24 @@ def parse(src: str) -> ParseResult:
             )
             continue
         elif name == "ex":
-            warnings.append("gb4e \\ex item form found; left untouched (out of scope v1)")
+            warnings.append(
+                "gb4e \\ex item form found (out of scope v1): \\ex is deleted "
+                "and its text kept, and inside exe or xlist the whole "
+                "environment is deleted with it")
         elif name in ("a", "b", "c", "z") and src[end : end + 1] == ".":
             line = src.count("\n", 0, i) + 1
             warnings.append(
-                f"line {line}: stray \\{name}. outside any example, left untouched "
-                f"(linguexx itself raises a package error here)"
+                f"line {line}: stray \\{name}. outside any example (linguexx "
+                f"itself raises a package error here): \\{name} is deleted, "
+                f"its text kept"
             )
         elif name in RELATIVE:
             relatives.append((i, end, name))
         elif name in DEGRADE and name != "exsource":
-            warnings.append(f"{DEGRADE[name]} left as LaTeX; pandoc renders it literally")
+            line = src.count("\n", 0, i) + 1
+            warnings.append(
+                f"line {line}: {DEGRADE[name]} deleted from the output with "
+                f"its arguments; pandoc does not convert it")
         i = end
 
     _scan_unsupported(src, warnings.append)
@@ -598,8 +606,8 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     if bad_env or in_footnote:
         where = f"inside {bad_env}" if bad_env else "inside a footnote"
         warnings.append(
-            f"line {line}: example {where} left untouched "
-            f"(nested examples are out of scope v1)"
+            f"line {line}: example {where} not converted (nested examples "
+            f"are out of scope v1): \\ex is deleted, its text kept unnumbered"
         )
         return resume if resume > start else body_end
 
@@ -619,10 +627,12 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
 
     for cmd, desc in DEGRADE.items():
         if cmd != "exsource" and re.search(r"\\" + cmd + r"(?![a-zA-Z])", body_src):
-            warn(f"{desc} inside an example is rendered literally")
+            warn(f"{desc} inside an example is not converted: deleted in "
+                 f"the .odt, printed as its LaTeX source in the .docx")
 
     for nested in set(re.findall(r"\\begin\s*\{([^}]*)\}", body_src)) & SKIP_ENVS:
-        warn(f"nested {nested} inside the example is kept as raw LaTeX, not aligned")
+        warn(f"nested {nested} inside the example is not aligned: the .odt "
+             f"hands it to pandoc, the .docx prints its LaTeX source")
 
     examples.append(
         Example(
@@ -688,7 +698,7 @@ def _resolve_relatives(
         if not 0 <= at < len(located):
             warnings.append(
                 f"line {line}: \\{name} points past the document's "
-                f"{len(located)} examples; left as written"
+                f"{len(located)} examples; deleted from the output"
             )
             continue
         label = f"{REL_LABEL}{n}"

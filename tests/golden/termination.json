@@ -92,7 +92,7 @@
       },
       "items": [],
       "warnings": [
-        "line 11: nested tabular inside the example is kept as raw LaTeX, not aligned"
+        "line 11: nested tabular inside the example is not aligned: the .odt hands it to pandoc, the .docx prints its LaTeX source"
       ],
       "src": "\\ex. FFF with \\begin{tabular}{ll} a & b \\end{tabular} inside is not cut short.",
       "line": 11
@@ -164,6 +164,6 @@
   ],
   "labels": {},
   "warnings": [
-    "line 11: nested tabular inside the example is kept as raw LaTeX, not aligned"
+    "line 11: nested tabular inside the example is not aligned: the .odt hands it to pandoc, the .docx prints its LaTeX source"
   ]
 }
