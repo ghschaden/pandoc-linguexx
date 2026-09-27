@@ -34,6 +34,7 @@ from pathlib import Path
 
 import pytest
 
+from linguexx2odt import postprocess_docx
 from linguexx2odt.cli import main
 
 HERE = Path(__file__).parent
@@ -500,7 +501,9 @@ def test_consecutive_examples_are_kept_apart_for_word(tmp_path: Path) -> None:
     S6 fact 3): it looked right, but moving or deleting one example meant
     working inside all of them, and the Word add-in cannot untypeset one.
     So a 1 pt LxExampleGap paragraph goes between two examples that touch
-    -- and only there: not before prose, not after the last.
+    -- and only there: not before prose.  One more ends a document whose
+    last word is an example (test_a_docx_never_ends_with_a_table), which
+    this document is.
     """
     docx = build(tmp_path, CONSECUTIVE, "c")
     xml = document_xml(docx)
@@ -510,12 +513,63 @@ def test_consecutive_examples_are_kept_apart_for_word(tmp_path: Path) -> None:
              "gap" if "LxExampleGap" in t else "p" for t in top]
     for a, b in zip(kinds, kinds[1:]):
         assert (a, b) != ("tbl", "tbl"), f"two example tables touch: {kinds}"
-    assert kinds.count("gap") == 2, kinds
-    # the gaps sit between the three consecutive examples, nowhere else
+    assert kinds.count("gap") == 3, kinds
+    # two sit between the three consecutive examples, the third ends the
+    # body after the last one, and there are no others
     first = kinds.index("tbl")
     assert kinds[first:first + 5] == ["tbl", "gap", "tbl", "gap", "tbl"], kinds
+    assert kinds[-2:] == ["tbl", "gap"], kinds
 
     styles = zipfile.ZipFile(docx).read("word/styles.xml").decode("utf-8")
     gap = re.search(r'<w:style [^>]*w:styleId="LxExampleGap".*?</w:style>', styles, re.S)
     assert gap, "LxExampleGap is used but not defined"
     assert 'w:line="20" w:lineRule="exact"' in gap.group(0)
+
+
+ENDS_IN_EXAMPLE = ("\\documentclass{article}\n\\begin{document}\n"
+                   "Before.\n\n\\ex. The last thing in the document.\n\n"
+                   "\\end{document}\n")
+
+
+@pandoc
+def test_a_docx_never_ends_with_a_table(tmp_path: Path) -> None:
+    r"""LibreOffice's text export loops for ever on a .docx whose body ends
+    with a table -- measured: hundreds of MB of temp file and no end, for
+    pandoc's own tables as for ours -- and Word never writes one, keeping a
+    paragraph after a final table.  A document whose last word is an
+    example ends in a 1 pt LxExampleGap paragraph."""
+    tex = tmp_path / "end.tex"
+    tex.write_text(ENDS_IN_EXAMPLE, encoding="utf-8")
+    out = tmp_path / "end.docx"
+    assert main([str(tex), "-o", str(out), "--to", "docx", "-q"]) == 0
+    xml = postprocess_docx.read(out, "word/document.xml")
+    body = xml[:xml.rindex("<w:sectPr")].rstrip()
+    assert not body.endswith("</w:tbl>"), body[-200:]
+    assert body.endswith('<w:pStyle w:val="LxExampleGap"/></w:pPr></w:p>'), \
+        body[-200:]
+
+
+@pandoc
+@pytest.mark.skipif(shutil.which("soffice") is None,
+                    reason="libreoffice not installed")
+def test_libreoffice_can_save_it_as_text(tmp_path: Path) -> None:
+    """The symptom itself.  The whole process group is killed on timeout:
+    the export that loops is writing hundreds of MB a minute."""
+    import os
+    import signal
+    tex = tmp_path / "end.tex"
+    tex.write_text(ENDS_IN_EXAMPLE, encoding="utf-8")
+    out = tmp_path / "end.docx"
+    assert main([str(tex), "-o", str(out), "--to", "docx", "-q"]) == 0
+    proc = subprocess.Popen(
+        ["soffice", "--headless", "--convert-to", "txt:Text",
+         "--outdir", str(tmp_path), str(out)],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True)
+    try:
+        proc.wait(timeout=90)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+        pytest.fail("LibreOffice's text export did not finish: the loop")
+    assert "The last thing" in (tmp_path / "end.txt").read_text("utf-8-sig")

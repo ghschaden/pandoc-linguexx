@@ -91,16 +91,43 @@ def set_default_font(styles_xml: str, run_props: str) -> str:
             + m.group(3) + styles_xml[m.end():])
 
 
+_FINAL_TABLE = re.compile(r"</w:tbl>(\s*)(<w:sectPr\b)")
+
+
+def end_with_paragraph(document_xml: str) -> str:
+    r"""Put a paragraph after a table that ends the body.
+
+    LibreOffice's text export loops for ever on a .docx whose body ends
+    with a table -- measured, on pandoc's own tables as on ours: hundreds
+    of MB of temp file and no end -- and Word never writes one, keeping a
+    paragraph after a final table.  A document whose last word is an
+    example ends in one.  The 1 pt LxExampleGap, the paragraph that keeps
+    consecutive examples apart, so the page gains as good as nothing.
+    """
+    from .styles_docx import GAP_PARA
+
+    gap = f'<w:p><w:pPr><w:pStyle w:val="{GAP_PARA}"/></w:pPr></w:p>'
+    return _FINAL_TABLE.sub(lambda m: f"</w:tbl>{m.group(1)}{gap}{m.group(2)}",
+                            document_xml, count=1)
+
+
 def apply_styles(raw: Path, out: Path, fragment: str,
                  default_run_props: str = "") -> None:
-    """Write *raw* to *out* with the styles added and the face declared."""
+    """Write *raw* to *out* with the styles added, the face declared, and
+    the body ending in a paragraph."""
     from .styles_docx import inject_styles
 
-    if not fragment and not default_run_props:
+    members = {}
+    document = read(raw, "word/document.xml")
+    ended = end_with_paragraph(document)
+    if ended != document:
+        members["word/document.xml"] = ended
+    if fragment or default_run_props:
+        styles = inject_styles(read(raw, "word/styles.xml"), fragment)
+        if default_run_props:
+            styles = set_default_font(styles, default_run_props)
+        members["word/styles.xml"] = styles
+    if not members:
         shutil.copy2(raw, out)
         return
-    styles = read(raw, "word/styles.xml")
-    styles = inject_styles(styles, fragment)
-    if default_run_props:
-        styles = set_default_font(styles, default_run_props)
-    rewrite(raw, out, {"word/styles.xml": styles})
+    rewrite(raw, out, members)
