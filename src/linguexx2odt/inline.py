@@ -114,6 +114,15 @@ REF_MARK = re.compile(
     re.S)
 
 
+#: A reference as written, found again when the renderer has given up on
+#: the text around it.
+REF_SOURCE = re.compile(r"\\(p?ref)\s*\{[^}]*\}")
+
+#: What stands in for a reference while pandoc renders the rest: letters
+#: and digits only, which pandoc passes through as they are.
+REF_TOKEN = "LXREFTOKEN{n}X"
+
+
 class Unsupported(Exception):
     """Raised when the hand-rolled renderer meets something it does not know."""
 
@@ -153,7 +162,7 @@ class InlineRenderer:
             xml = self._render(latex)
         except Unsupported as exc:
             self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
-            return self._pandoc(latex)
+            xml = self._pandoc_keeping_references(latex)
         if self.ref_markup is None:
             return REF_MARK.sub(lambda m: m.group(4), xml)
         return REF_MARK.sub(
@@ -186,12 +195,10 @@ class InlineRenderer:
         try:
             xml = self._render(latex)
         except Unsupported:
-            # Nothing rendered it, so measure the source as written.  This
-            # was a character loop that appended every character in order
-            # and tracked a `depth` it never read -- scaffolding from a
-            # version that counted braces.  ruff's F841 found the dead
-            # variable; the loop around it was the same copy, written long.
-            xml = latex
+            # Nothing rendered it, so the source as written -- except its
+            # references, which are still references: printed as source
+            # they were "\ref{a}" in a .docx cell, and measured as that.
+            xml = self._with_references(latex, esc)
 
         runs: list[tuple[str, bool, tuple | None]] = []
         spans: list[str] = []                  # open <text:span> styles
@@ -382,6 +389,38 @@ class InlineRenderer:
         out.append(f'<lx:ref index="{index}" letter="{esc(letter)}" '
                    f'bare="{int(bare)}">{esc(shown)}</lx:ref>')
         return grp[1]
+
+    def _with_references(self, latex: str, text) -> str:
+        """*latex* with each \\ref and \\pref rendered as a reference, and
+        everything between passed through *text*."""
+        out, pos = [], 0
+        for m in REF_SOURCE.finditer(latex):
+            out.append(text(latex[pos:m.start()]))
+            out.append(self._render(m.group(0)))
+            pos = m.end()
+        out.append(text(latex[pos:]))
+        return "".join(out)
+
+    def _pandoc_keeping_references(self, latex: str) -> str:
+        r"""The pandoc fallback, with the references kept out of it.
+
+        Pandoc knows no example label, so a cell sent to it for any one
+        unknown command lost every \ref in it.  Each goes over as a token
+        and comes back as the reference it stood for.
+        """
+        refs = [m.group(0) for m in REF_SOURCE.finditer(latex)]
+        if not refs:
+            return self._pandoc(latex)
+        counter = iter(range(len(refs)))
+        xml = self._pandoc(REF_SOURCE.sub(
+            lambda _m: REF_TOKEN.format(n=next(counter)), latex))
+        for n, ref in enumerate(refs):
+            token = REF_TOKEN.format(n=n)
+            if token not in xml:
+                self.warn(f"{ref} was inside LaTeX pandoc dropped, and is "
+                          f"missing from the output")
+            xml = xml.replace(token, self._render(ref), 1)
+        return xml
 
     # -- trees ------------------------------------------------------------
     #: environments whose body is bracket notation the Writer macro can draw

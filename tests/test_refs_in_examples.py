@@ -147,3 +147,32 @@ def test_a_redefined_range_dash_is_named() -> None:
                      "\\begin{document}\n\\ex. \\label{a} A.\n\n"
                      "See \\refrange{a}{a}.\n\\end{document}").warnings
     assert any("rangedash" in w for w in warnings), warnings
+
+
+FALLBACK = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\ex. \label{a} One.
+
+\ex. See \ref{a}, \pref{a} and \Last, beside \unknowncommand{x}.
+
+\end{document}
+"""
+
+
+@pandoc
+@pytest.mark.parametrize("target", ["odt", "docx"])
+def test_a_reference_survives_an_unknown_command_beside_it(
+        tmp_path: Path, target: str) -> None:
+    r"""One command the renderer does not know sends the whole cell down
+    the fallback -- pandoc for the .odt, the source as text for the .docx
+    -- and neither knows an example label: the references went with it."""
+    tex = tmp_path / "fb.tex"
+    tex.write_text(FALLBACK, encoding="utf-8")
+    out = tmp_path / f"fb.{target}"
+    assert main([str(tex), "-o", str(out), "--to", target, "-q"]) == 0
+    member = "content.xml" if target == "odt" else "word/document.xml"
+    xml = postprocess.read(out, member)
+    marker = "<text:sequence-ref " if target == "odt" else " REF NumEx"
+    assert xml.count(marker) == 3, xml.count(marker)
+    assert "\\ref" not in xml and "\\Last" not in xml and "lx:ref" not in xml
