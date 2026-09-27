@@ -185,3 +185,23 @@ def test_rewriting_does_not_disturb_the_examples(tmp_path: Path) -> None:
     odt = tmp_path / "rel.odt"
     assert main([str(tex), "-o", str(odt), "-q"]) == 0
     assert _example_count(odt) == 4
+
+
+@pandoc
+@pytest.mark.parametrize("spelling", ["\\Next{}", "\\Next {}", "\\NNext{}"])
+def test_an_empty_group_after_the_command_keeps_the_reference(
+        tmp_path: Path, spelling: str) -> None:
+    r"""``\Next{}`` -- the empty group that keeps the following space -- was
+    rewritten to ``\ref{lx-relative-0}{}``, which pandoc keeps as raw LaTeX
+    and the writer deletes: "see  ok." in place of "see (2) ok."."""
+    tex = tmp_path / "rel.tex"
+    tex.write_text(
+        "\\documentclass{article}\n\\usepackage{linguexx}\n\\begin{document}\n"
+        f"\\ex. One.\n\nsee {spelling} ok.\n\n\\ex. Two.\n\n\\ex. Three.\n\n"
+        "\\end{document}\n", encoding="utf-8")
+    out = tmp_path / "rel.odt"
+    assert main([str(tex), "-o", str(out), "-q"]) == 0
+    body = postprocess.read(out, "content.xml")
+    assert body.count("<text:sequence-ref ") == 1, "the reference was deleted"
+    para = re.search(r"see .*?ok\.", re.sub(r"<[^>]+>", "", body))
+    assert para and "  " not in para.group(0), "the space after it was lost"

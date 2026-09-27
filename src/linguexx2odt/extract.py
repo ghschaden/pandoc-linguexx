@@ -652,6 +652,9 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     return resume
 
 
+_EMPTY_GROUP = re.compile(r"[ \t]*\{\}")
+
+
 def _resolve_relatives(
     src: str,
     relatives: list[tuple[int, int, str]],
@@ -703,6 +706,13 @@ def _resolve_relatives(
             continue
         label = f"{REL_LABEL}{n}"
         labels[label] = (located[at][1], "")
+        # \Next{} -- the empty group is there to keep the space after a
+        # control word.  \ref{...} ends in a brace and keeps it anyway, and
+        # left behind as \ref{...}{} it is raw LaTeX to pandoc, which the
+        # writer deletes: "see  ok." for "see (2) ok.".
+        empty = _EMPTY_GROUP.match(src, stop)
+        if empty:
+            stop = empty.end()
         out.append((start, stop, f"\\{'pref' if bare else 'ref'}{{{label}}}"))
     return out
 
