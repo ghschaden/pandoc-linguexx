@@ -218,8 +218,8 @@ tableau dit lequel :
 | `\ex.` dans `itemize`, `enumerate` ou une note | non converti : `\ex` est supprimé, et le texte de l'exemple reste en place, en texte ordinaire non numéroté, après un point isolé |
 | étiquettes personnalisées `\ex.[(4′)]` | imprimées littéralement ; le compteur n'avance pas |
 | `\exsource{…}` | rendu en ligne à la fin, pas aligné à droite |
-| `\refrange`, `\prefrange` | supprimés avec leurs arguments, et la phrase se referme sur le vide (« voir et »). Dans un exemple, les formats diffèrent : le `.odt` les supprime, le `.docx` imprime la source LaTeX |
-| `\Next`, `\Last`, `\NNext`, `\LLast` et leurs formes `p` | résolus par position et réécrits en renvois vivants |
+| `\refrange`, `\prefrange` | résolus comme linguexx les imprime, dans le texte comme dans les exemples, avec des renvois vivants : « (3a–c) » quand l'intervalle finit sur un `\sublabel`, « (1–3a) » quand il finit sur un `\label`. Un `\rangedash` redéfini est signalé ; le tiret est demi-cadratin |
+| `\Next`, `\Last`, `\NNext`, `\LLast` et leurs formes `p` | résolus par position et réécrits en renvois vivants, dans le texte comme dans les exemples -- où, comme dans linguexx, `\Last` désigne l'exemple lui-même. De même pour `\ref` et `\pref` dans un exemple ; une étiquette qu'aucun exemple ne porte s'imprime `??` et est signalée |
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | résolus par citeproc à partir du `.bib` que le document déclare, avec bibliographie finale ; à défaut de `.bib`, les clés sont imprimées |
 | `\citeauthor`, `\citealt`, `\citeyear` | résolus, mais imprimés `Auteur (Année)` : pandoc n'a qu'un seul mode « auteur dans le texte » ; le nombre est signalé |
 | un exemple dans un environnement inconnu de pandoc (`multicols`, …) | l'exemple est récupéré ; le balisage qui l'entoure ne l'est pas |

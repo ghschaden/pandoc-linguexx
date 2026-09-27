@@ -79,6 +79,9 @@ _UNSUPPORTED_SETTINGS = {
     "SetLeipzig":
         "declares a gloss abbreviation; \\lpzg renders it as small "
         "capitals here either way, but a redefined expansion is not applied",
+    "rangedash":
+        "sets the dash in \\refrange and \\prefrange; this converter "
+        "prints linguexx's default, an en dash",
 }
 
 #: Package options with the same problem.
@@ -138,8 +141,8 @@ SKIP_ENVS = frozenset(
 
 #: Constructs we parse but cannot render faithfully in v1.
 DEGRADE = {
-    "refrange": "ranged reference",
-    "prefrange": "bare ranged reference",
+    # \refrange and \prefrange were listed here, and deleted everywhere
+    # they appeared.  They are resolved now -- see RANGES.
     # \Next, \Last and their kin used to be listed here.  They are resolved
     # now -- see RELATIVE and _resolve_relatives -- so an entry for them
     # would be a warning that never fires.
@@ -171,6 +174,16 @@ RELATIVE = {
     "LLast": (-2, False), "pLLast": (-2, True),
 }
 
+#: Ranged references -> bare?  ``\refrange{a}{b}`` is linguexx's
+#: ``(\pref{a}\rangedash X)`` and ``\prefrange`` the same unbracketed, where
+#: X is b's bare sub-label when b was set with ``\sublabel`` at a sub-example
+#: level, and ``\pref{b}`` otherwise -- read off linguexx.sty, and checked
+#: against what pdflatex prints: "(3a--c)", but "(1--3a)" when the end is a
+#: plain ``\label``.  The brackets are literal parentheses there, not
+#: ``\ExLBr``, and the dash is an en dash (``\rangedash``).
+RANGES = {"refrange": False, "prefrange": True}
+RANGE_DASH = "\u2013"
+
 #: Prefix for the labels those get rewritten to.  They go through the same
 #: path as a \ref the author wrote, which is the point: no second reference
 #: mechanism to keep in step, and both targets get it for free.
@@ -186,6 +199,8 @@ class ParseResult:
     warnings: list[str] = field(default_factory=list)
     labels: dict[str, tuple[int, str]] = field(default_factory=dict)
     """label -> (example index, sub-example marker or '')."""
+    sublabels: frozenset[str] = frozenset()
+    r"""The labels set with \sublabel, which a range may end on bare."""
     brackets: Brackets = field(default_factory=Brackets)
     """What the preamble asked an example number to be wrapped in."""
 
@@ -499,6 +514,7 @@ def parse(src: str) -> ParseResult:
     examples: list[Example] = []
     spans: list[tuple[int, int, str]] = []
     relatives: list[tuple[int, int, str]] = []   # (start, stop, command name)
+    ranges: list[tuple[int, int, str, str, str]] = []   # ... first, second label
 
     env_stack: list[str] = []
     group_stack: list[str] = []
@@ -563,6 +579,13 @@ def parse(src: str) -> ParseResult:
             )
         elif name in RELATIVE:
             relatives.append((i, end, name))
+        elif name in RANGES:
+            first = find_group(src, end)
+            second = find_group(src, first[1]) if first else None
+            if second:
+                ranges.append((i, second[1], name, first[0].strip(),
+                               second[0].strip()))
+                end = second[1]
         elif name in DEGRADE and name != "exsource":
             line = src.count("\n", 0, i) + 1
             warnings.append(
@@ -578,13 +601,22 @@ def parse(src: str) -> ParseResult:
         examples = [_redecorate(ex, brackets) for ex in examples]
 
     labels = _collect_labels(examples)
+    sublabels = _sublabels(src, live)
     rel_spans = _resolve_relatives(src, relatives, spans, labels, warnings)
+    for start, stop, name, first, second in ranges:
+        line = src.count("\n", 0, start) + 1
+        rel_spans.append((start, stop, _range(
+            name, first, second, labels, sublabels,
+            lambda msg, line=line: warnings.append(f"line {line}: {msg}"))))
+    examples = _references_in_examples(
+        examples, _located(spans), labels, sublabels, warnings)
 
     return ParseResult(
         residue=_build_residue(src, spans, rel_spans),
         examples=examples,
         warnings=warnings,
         labels=labels,
+        sublabels=sublabels,
         brackets=brackets,
     )
 
@@ -674,6 +706,117 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
 _EMPTY_GROUP = re.compile(r"[ \t]*\{\}")
 
 
+def _located(spans: list[tuple[int, int, str]]) -> list[tuple[int, int]]:
+    """(source position, example index) of every example, in source order.
+    The index is read back off the placeholder rather than taken to be the
+    position in the list: they agree today, and a positional assumption is
+    the kind that stops being true quietly."""
+    located = []
+    for start, _stop, ph in spans:
+        m = PLACEHOLDER_RE.fullmatch(ph)
+        if m:
+            located.append((start, int(m.group(1))))
+    return sorted(located)
+
+
+def _relative_target(nxt: int, offset: int) -> int:
+    """Position of the example a relative reference names, given how many
+    examples begin before it.  That count is also the position of the NEXT
+    one, so \\Next is `nxt` and \\Last is nxt - 1 -- which, inside an
+    example, is that example itself, as linguexx prints it."""
+    return nxt + offset - 1 if offset > 0 else nxt + offset
+
+
+_SUBLABEL = re.compile(r"\\sublabel\s*\{([^}]*)\}")
+
+
+def _sublabels(src: str, live: list[bool]) -> frozenset[str]:
+    return frozenset(m.group(1).strip() for m in _SUBLABEL.finditer(src)
+                     if live[m.start()])
+
+
+def _range(name: str, first: str, second: str,
+           labels: dict[str, tuple[int, str]], sublabels: frozenset[str],
+           warn) -> str:
+    """``\\refrange{a}{b}`` as LaTeX the reference path already handles:
+    two ``\\pref``, or one and b's bare sub-label (see RANGES)."""
+    for label in (first, second):
+        if label not in labels:
+            warn(f"\\{name}{{{first}}}{{{second}}}: no example is "
+                 f"labelled {label!r}")
+    letter = labels.get(second, (0, ""))[1]
+    end = letter if second in sublabels and letter else f"\\pref{{{second}}}"
+    inner = f"\\pref{{{first}}}{RANGE_DASH}{end}"
+    return inner if RANGES[name] else f"({inner})"
+
+
+_REL_IN_TEXT = re.compile(
+    r"\\(" + "|".join(sorted(RELATIVE, key=len, reverse=True)) + r")"
+    r"(?![a-zA-Z])(?:[ \t]*\{\})?")
+_RANGE_IN_TEXT = re.compile(
+    r"\\(p?refrange)\s*\{([^}]*)\}\s*\{([^}]*)\}")
+
+
+def _references_in_examples(examples, located, labels, sublabels, warnings):
+    r"""Relative references and ranges inside an example's own text.
+
+    The prose gets these through the residue; an example's text never goes
+    there, so \Next in an example was left for the renderer, which knew no
+    such command.  Every one in example p is resolved as from a point inside
+    p -- p + 1 examples begin before it -- and rewritten to the \ref and
+    \pref the renderer turns into fields.
+    """
+    position = {index: p for p, (_start, index) in enumerate(located)}
+    out = []
+    for ex in examples:
+        nxt = position.get(ex.index, ex.index) + 1
+        count = 0
+
+        def warn(msg: str, ex=ex) -> None:
+            warnings.append(f"line {ex.line}: {msg}")
+
+        def relative(m: re.Match, ex=ex, nxt=nxt) -> str:
+            nonlocal count
+            name = m.group(1)
+            offset, bare = RELATIVE[name]
+            at = _relative_target(nxt, offset)
+            if not 0 <= at < len(located):
+                warn(f"\\{name} points past the document's {len(located)} "
+                     f"examples; printed as ??, as LaTeX prints a reference "
+                     f"it cannot resolve")
+                return "??" if bare else "(??)"
+            label = f"{REL_LABEL}e{ex.index}-{count}"
+            count += 1
+            labels[label] = (located[at][1], "")
+            return f"\\{'pref' if bare else 'ref'}{{{label}}}"
+
+        def rng(m: re.Match) -> str:
+            return _range(m.group(1), m.group(2).strip(), m.group(3).strip(),
+                          labels, sublabels, warn)
+
+        def fix(latex: str) -> str:
+            if "\\" not in latex:
+                return latex
+            return _RANGE_IN_TEXT.sub(rng, _REL_IN_TEXT.sub(relative, latex))
+
+        out.append(_map_text(ex, fix))
+    return out
+
+
+def _map_text(ex: Example, fix) -> Example:
+    """The example with *fix* applied to every field that is set as text."""
+    def body(b: Body) -> Body:
+        return replace(
+            b, text=fix(b.text), translation=fix(b.translation),
+            source=fix(b.source), annot=fix(b.annot),
+            tiers=tuple(Tier(cells=tuple(fix(c) for c in t.cells))
+                        for t in b.tiers))
+    return replace(
+        ex,
+        body=body(ex.body) if ex.body is not None else None,
+        items=tuple(replace(it, body=body(it.body)) for it in ex.items))
+
+
 def _resolve_relatives(
     src: str,
     relatives: list[tuple[int, int, str]],
@@ -702,12 +845,7 @@ def _resolve_relatives(
     # back off the placeholder rather than taken to be the position in the
     # list: they agree today, and a positional assumption is the kind that
     # stops being true quietly.
-    located = []
-    for start, _stop, ph in spans:
-        m = PLACEHOLDER_RE.fullmatch(ph)
-        if m:
-            located.append((start, int(m.group(1))))
-    located.sort()
+    located = _located(spans)
 
     out: list[tuple[int, int, str]] = []
     for n, (start, stop, name) in enumerate(relatives):
@@ -715,7 +853,7 @@ def _resolve_relatives(
         # How many examples begin before this point; that count is also the
         # position of the NEXT one, so \Next is `nxt` and \Last is nxt - 1.
         nxt = sum(1 for s, _ in located if s < start)
-        at = nxt + offset - 1 if offset > 0 else nxt + offset
+        at = _relative_target(nxt, offset)
         line = src.count("\n", 0, start) + 1
         if not 0 <= at < len(located):
             warnings.append(

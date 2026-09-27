@@ -56,6 +56,10 @@ class BaseEmitter:
     brackets: Brackets = field(default_factory=Brackets)
     r"""What to wrap a number in -- \ExLBr & co., as the preamble set them."""
 
+    labels: dict[str, tuple[int, str]] = field(default_factory=dict)
+    r"""label -> (example index, sub-letter), for a \ref inside an example.
+    The prose's go through the inject pass; these never reach it."""
+
     any_judgment: bool = False
     """Whether *any* example in the document carries a judgment mark.
 
@@ -67,6 +71,8 @@ class BaseEmitter:
     def __post_init__(self) -> None:
         if self.inline is None:
             self.inline = InlineRenderer(self.warnings.append)
+        self.inline.labels = self.labels
+        self.inline.brackets = self.brackets
         self._warn = self.warnings.append
 
     #: pandoc's name for the markup this emitter writes, as it appears in a

@@ -153,17 +153,21 @@ def test_the_prose_reads_correctly(tmp_path: Path) -> None:
     assert "Two ahead is (4), bare 2." in text, text[:300]
 
 
-def test_a_relative_inside_an_example_is_not_rewritten() -> None:
-    r"""Only prose is scanned; an example body is consumed whole.
+def test_a_relative_inside_an_example_leaves_the_prose_numbering_alone() -> None:
+    r"""The prose scan skips example bodies, and still must.
 
-    Worth pinning: the scan skips example bodies, so a \Next in a
-    translation is not seen here at all, and if that ever changes the
-    numbering would shift under it.
+    This pinned that a \Next inside an example was not rewritten, so that
+    the prose's synthetic labels would not shift under it.  It is rewritten
+    now (test_refs_in_examples) -- from a point inside its example, so \Next
+    in (1) is (2) -- but under labels of its own, and the prose's numbering
+    is what it was.
     """
     src = ("\\documentclass{article}\n\\usepackage{linguexx}\n"
-           "\\begin{document}\n\\ex. See \\Next.\n\n\\ex. Second.\n"
-           "\\end{document}\n")
-    assert _targets(src) == []
+           "\\begin{document}\n\\ex. See \\Next.\n\nThen \\Last.\n\n"
+           "\\ex. Second.\n\\end{document}\n")
+    labels = parse(src).labels
+    assert labels["lx-relative-0"] == (0, ""), "the prose's \\Last moved"
+    assert labels["lx-relative-e0-0"] == (1, ""), "the example's \\Next"
 
 
 def _example_count(odt: Path) -> int:

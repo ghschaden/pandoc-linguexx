@@ -35,7 +35,7 @@ import subprocess
 import unicodedata
 from collections.abc import Callable
 
-from .latexutil import find_group
+from .latexutil import Brackets, find_group
 
 XML_ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
 
@@ -105,6 +105,15 @@ ACCENTS = {
 }
 
 
+#: A reference, as the renderer's own markup carries it until an emitter
+#: says what it becomes: ``render()`` asks ``ref_markup`` for ODF,
+#: ``segments()`` hands it to the .docx emitter, and ``runs()`` measures the
+#: text inside, which is the number as the reader will see it.
+REF_MARK = re.compile(
+    r'<lx:ref index="(\d+)" letter="([^"]*)" bare="([01])">(.*?)</lx:ref>',
+    re.S)
+
+
 class Unsupported(Exception):
     """Raised when the hand-rolled renderer meets something it does not know."""
 
@@ -115,6 +124,10 @@ def esc(text: str) -> str:
     return text
 
 
+def _unesc(text: str) -> str:
+    return text.replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+
+
 class InlineRenderer:
     def __init__(self, warn: Callable[[str], None] | None = None) -> None:
         self.warn = warn or (lambda _m: None)
@@ -123,6 +136,13 @@ class InlineRenderer:
         """Automatic <style:style> definitions harvested from pandoc
         fallbacks; postprocess.py injects these into content.xml."""
         self._style_seq = 0
+        self.labels: dict[str, tuple[int, str]] = {}
+        """label -> (example index, sub-example letter): what \\ref names."""
+        self.brackets = None
+        """The document's \\ExLBr/\\ExRBr, for the number a reference shows."""
+        self.ref_markup: Callable[..., str] | None = None
+        """(index, letter, bare=) -> the target's reference markup, for
+        render().  None leaves the number as text."""
 
     # -- public ----------------------------------------------------------
     def render(self, latex: str) -> str:
@@ -130,10 +150,15 @@ class InlineRenderer:
         if not latex.strip():
             return ""
         try:
-            return self._render(latex)
+            xml = self._render(latex)
         except Unsupported as exc:
             self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
             return self._pandoc(latex)
+        if self.ref_markup is None:
+            return REF_MARK.sub(lambda m: m.group(4), xml)
+        return REF_MARK.sub(
+            lambda m: self.ref_markup(int(m.group(1)), _unesc(m.group(2)),
+                                      bare=m.group(3) == "1"), xml)
 
     #: character styles that draw their text as small capitals
     SMALLCAPS_STYLES = frozenset({LEIPZIG, SMALLCAPS})
@@ -151,6 +176,13 @@ class InlineRenderer:
         lowercase letter it replaces, so a ``\\lpzg`` gloss measured as
         lowercase comes out too narrow for what is put in it.
         """
+        return [(text, sc) for text, sc, _ref in self.segments(latex)]
+
+    def segments(self, latex: str) -> list[tuple[str, bool, tuple | None]]:
+        """``runs()``, with each reference kept apart as its own segment and
+        its (index, letter, bare) attached -- what a target that builds
+        its own reference markup (.docx) needs.  Its text is the number as
+        it will be shown, so measuring it measures the page."""
         try:
             xml = self._render(latex)
         except Unsupported:
@@ -161,17 +193,25 @@ class InlineRenderer:
             # variable; the loop around it was the same copy, written long.
             xml = latex
 
-        runs: list[tuple[str, bool]] = []
+        runs: list[tuple[str, bool, tuple | None]] = []
         spans: list[str] = []                  # open <text:span> styles
         buf: list[str] = []
 
         def flush() -> None:
             if buf:
-                runs.append(("".join(buf), self._small_caps(spans)))
+                runs.append(("".join(buf), self._small_caps(spans), None))
                 buf.clear()
 
         i = 0
         while i < len(xml):
+            ref = REF_MARK.match(xml, i) if xml[i] == "<" else None
+            if ref:
+                flush()
+                runs.append((ref.group(4), self._small_caps(spans),
+                             (int(ref.group(1)), _unesc(ref.group(2)),
+                              ref.group(3) == "1")))
+                i = ref.end()
+                continue
             if xml[i] == "<":
                 j = xml.find(">", i)
                 tag = xml[i + 1:j] if j >= 0 else ""
@@ -188,10 +228,7 @@ class InlineRenderer:
             i += 1
         flush()
 
-        return [
-            (t.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">"), sc)
-            for t, sc in runs
-        ]
+        return [(_unesc(t), sc, ref) for t, sc, ref in runs]
 
     def _small_caps(self, spans: list[str]) -> bool:
         return any(name in self.SMALLCAPS_STYLES for name in spans)
@@ -315,7 +352,36 @@ class InlineRenderer:
         if name in ("Tree", "qtree"):
             return self._qtree(s, j, out)
 
+        if name in ("ref", "pref"):
+            return self._reference(s, name, j, out)
+
         raise Unsupported(f"unhandled command \\{name}")
+
+    # -- references ---------------------------------------------------------
+    def _reference(self, s: str, name: str, j: int, out: list[str]) -> int:
+        r"""``\ref{x}``/``\pref{x}`` -> a reference the emitter makes a field.
+
+        It was an unhandled command, so the .odt sent the whole cell to
+        pandoc, which knows nothing of example labels and printed "[x]" or
+        nothing, and the .docx printed the source.  A label no example
+        carries is printed as LaTeX prints it, ``??``, and named.
+        """
+        grp = find_group(s, j)
+        if grp is None:
+            raise Unsupported(f"\\{name} without a braced label")
+        label, bare = grp[0].strip(), name == "pref"
+        br = self.brackets or Brackets()
+        left, right = ("", "") if bare else (br.ex_l, br.ex_r)
+        if label not in self.labels:
+            self.warn(f"\\{name}{{{label}}} inside an example: no example is "
+                      f"labelled {label!r}; printed as ??")
+            out.append(esc(f"{left}??{right}"))
+            return grp[1]
+        index, letter = self.labels[label]
+        shown = f"{left}{index + 1}{letter}{right}"
+        out.append(f'<lx:ref index="{index}" letter="{esc(letter)}" '
+                   f'bare="{int(bare)}">{esc(shown)}</lx:ref>')
+        return grp[1]
 
     # -- trees ------------------------------------------------------------
     #: environments whose body is bracket notation the Writer macro can draw

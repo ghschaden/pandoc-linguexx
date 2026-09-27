@@ -200,7 +200,10 @@ class DocxEmitter(BaseEmitter):
         Small capitals are direct formatting here.  A named character style
         a Word user can edit is Phase 4, with the rest of the styles.
         """
-        return "".join(run(text, sc) for text, sc in self.inline.runs(latex))
+        return "".join(
+            self.reference(ref[0], ref[1], bare=ref[2]) if ref
+            else run(text, sc)
+            for text, sc, ref in self.inline.segments(latex))
 
     def _judgment(self, body: Body) -> str:
         return self._runs(body.judgment) if body.judgment else ""

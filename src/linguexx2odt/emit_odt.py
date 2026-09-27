@@ -98,6 +98,11 @@ class Emitter(BaseEmitter):
     width inline in the cell."""
 
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        # A \ref inside an example is rendered here, not by the inject pass.
+        self.inline.ref_markup = self.reference
+
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:
         return sequence_ref(index, letter, self.brackets, bare=bare)
