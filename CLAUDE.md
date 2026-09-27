@@ -76,7 +76,11 @@ and a check that ever renders to PDF must skip that band.
   take 28 tests — every end-to-end one — out of the run and leave the exit
   code at 0; `tests/test_tooling.py` now fails instead and names them.
   `LINGUEXX2ODT_ALLOW_MISSING=1` turns that back into a skip for a run you
-  know is partial. CI may not set it, and a test asserts that.
+  know is partial. CI may not set it, and a test asserts that. The same
+  holds for `../linguexx`: the corpus test is parametrized over its test
+  documents, so without the checkout it was collected zero times, and CI
+  ran 105 fewer tests than a local run until CI cloned it (at
+  `LINGUEXX_VER`, which a test holds to the README's target version).
 
 ## Two targets, one IR
 `--to odt` is the complete one; `--to docx` (plan-docx.md, Phases 1–4) does

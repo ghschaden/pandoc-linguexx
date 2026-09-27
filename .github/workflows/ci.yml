@@ -9,6 +9,10 @@ on:
 # here rather than two to drift apart.
 env:
   PANDOC_VER: "3.6.1"
+  # The linguexx this converter targets -- the README's "Targets linguexx"
+  # line, which test_tooling holds this to.  Its test documents are the
+  # corpus test_extract parses, one test per document.
+  LINGUEXX_VER: "1.3.2"
 
 # Every job names its Ubuntu rather than taking ubuntu-latest, which GitHub
 # moves to Ubuntu 26 on 2026-10-19: the suite and the macro job install
@@ -68,6 +72,15 @@ jobs:
 
       - name: Install the package
         run: python -m pip install --quiet -e ".[dev]"
+
+      # Beside this checkout, where the corpus test looks.  Without it that
+      # test is collected zero times rather than skipped, and CI passed 177
+      # tests to a local 282 without a word; test_tooling now fails instead.
+      - name: Check out the linguexx corpus
+        run: |
+          git clone --quiet --depth 1 --branch "$LINGUEXX_VER" \
+            https://github.com/ghschaden/linguexx.git ../linguexx
+          ls ../linguexx/tests/*.tex | wc -l
 
       # No LINGUEXX2ALLOW_MISSING here, deliberately: the escape hatch is
       # for a person who knows what they are not running, and in CI it

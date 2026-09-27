@@ -187,3 +187,59 @@ def test_ci_runs_the_suite_without_the_escape_hatch() -> None:
         "the CI workflow sets LINGUEXX2ODT_ALLOW_MISSING, which lets a "
         "runner missing a tool report green"
     )
+
+
+#: The linguexx repository's own test documents, which
+#: test_extract.test_corpus_never_crashes feeds through the parser.
+CORPUS = REPO.parent / "linguexx" / "tests"
+README = REPO / "README.md"
+
+
+def test_the_linguexx_corpus_is_present() -> None:
+    """Fail — do not vanish — when ../linguexx is not checked out.
+
+    The corpus test is parametrized over the files it finds, so without
+    them it is not skipped a hundred times, it is collected zero times:
+    CI passed 177 tests where a local run passed 282, and nothing said so.
+    """
+    if any(CORPUS.glob("*.tex")):
+        return
+    message = (
+        f"no linguexx test documents at {CORPUS}: the corpus test, one "
+        f"parse per document, did not run.  Clone linguexx beside this "
+        f"repository, or set LINGUEXX2ODT_ALLOW_MISSING=1 to say "
+        f"deliberately that this run does not cover it."
+    )
+    if ALLOW_MISSING:
+        pytest.skip(message)
+    pytest.fail(message)
+
+
+def _job(text: str, name: str) -> str:
+    """One job's section of the workflow, so a step is found in the job
+    that needs it and not merely somewhere in the file."""
+    m = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  [\w-]+:\n|\Z)",
+                  text, re.M | re.S)
+    return m.group(1) if m else ""
+
+
+@pytest.mark.skipif(not WORKFLOW.exists(),
+                    reason="no CI workflow in this tree")
+def test_ci_checks_the_corpus_out_at_the_targeted_version() -> None:
+    """The corpus CI parses is the linguexx this converter says it
+    targets.  Bumping the README's version without the clone would test
+    the new claim against the old documents, and pass."""
+    target = re.search(r"\*\*Targets linguexx ([\d.]+)\.\*\*",
+                       README.read_text(encoding="utf-8"))
+    assert target, "the README no longer states the linguexx version targeted"
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert re.search(rf'^\s*LINGUEXX_VER:\s*"{re.escape(target.group(1))}"\s*$',
+                     text, re.M), (
+        f"the workflow does not pin LINGUEXX_VER to {target.group(1)}, "
+        f"the version the README says this converter targets")
+    job = _job(text, "test")
+    assert re.search(r"git clone\b.*--branch\s+\"?\$LINGUEXX_VER\"?"
+                     r".*ghschaden/linguexx\S*\s+\.\./linguexx\s*$",
+                     re.sub(r"\\\n\s*", " ", job), re.M), (
+        "the test job does not clone linguexx at $LINGUEXX_VER into "
+        "../linguexx, where the corpus test looks")
