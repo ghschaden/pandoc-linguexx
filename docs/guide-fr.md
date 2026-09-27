@@ -222,6 +222,7 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | résolus par citeproc à partir du `.bib` que le document déclare, avec bibliographie finale ; à défaut de `.bib`, les clés sont imprimées |
 | `\citeauthor`, `\citealt`, `\citeyear` | résolus, mais imprimés `Auteur (Année)` : pandoc n'a qu'un seul mode « auteur dans le texte » ; le nombre est signalé |
 | un exemple dans un environnement inconnu de pandoc (`multicols`, …) | l'exemple est récupéré ; le balisage qui l'entoure ne l'est pas |
+| `\input`, `\include`, `\includeonly` | lus et convertis avec le document, exemples et renvois compris. Les chemins partent du répertoire du document principal, comme pour LaTeX ; un fichier que seul `TEXINPUTS` trouverait est signalé absent et laissé de côté. Les avertissements nomment le fichier et la ligne concernés |
 | `\altn`, `\altg` | laissés en LaTeX |
 | `\GlossTransSide` | avertit ; converti en exemple ordinaire, traduction en dessous. Choix délibéré |
 | `[phantomalign]`, `\GlossPhantomAlign` | avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |

@@ -254,6 +254,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | resolved with citeproc against the document's `.bib`, with a reference list; the keys are printed if no `.bib` is found |
 | `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
 | an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
+| `\input`, `\include`, `\includeonly` | read and converted as part of the document, examples and references included. Paths are taken from the main document's directory, as LaTeX does; a file found only through `TEXINPUTS` is reported missing and left out. Warnings name the file and line they are about |
 | math inside examples | handed to pandoc; may not survive |
 | consecutive examples, `.docx` only | kept apart by a 1 pt paragraph in its own style, `LxExampleGap`: Word joins tables that touch, and without it a run of examples was one table in Word. Each step between consecutive examples is 1 pt taller than in the `.odt`, and nothing else moves (measured). A file converted before 2026-09-26 still has them touching; reconvert it |
 | anything else unknown | handed to pandoc, as `opendocument` or `openxml` |

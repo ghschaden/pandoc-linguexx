@@ -32,6 +32,7 @@ from pathlib import Path
 from . import postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
+from .includes import expand_includes
 from .inject import inject
 from .latexutil import live_mask, scan_bibliography
 from .styles import Layout, named_styles
@@ -41,8 +42,10 @@ MIN_PANDOC = (3, 0)
 
 def _pandoc(args: list[str], **kw) -> subprocess.CompletedProcess:
     """Run pandoc.  Callers pass absolute paths, so `cwd` is free to be the
-    source document's directory — which is what makes relative \\input,
-    \\include and \\includegraphics resolve the way latex would."""
+    source document's directory — which is what makes a relative
+    \\includegraphics resolve the way latex would.  Not \\input and
+    \\include: under +raw_tex pandoc does not open them, and includes.py
+    has spliced them in before pandoc runs."""
     try:
         return subprocess.run(["pandoc", *args], check=True, capture_output=True,
                               text=True, **kw)
@@ -246,13 +249,16 @@ def main(argv: list[str] | None = None) -> int:
     out_path = out_path.resolve()
     workdir = src_path.parent
 
-    source = src_path.read_text(encoding="utf-8")
-    parsed = parse(source)
-
     for name in ("example_spacing", "space_above", "space_below"):
         value = getattr(args, name)
         if value is not None and value < 0:
             sys.exit(f"linguexx2odt: --{name.replace('_', '-')} cannot be negative")
+
+    source_warnings: list[str] = []
+    expanded = expand_includes(src_path.read_text(encoding="utf-8"), workdir,
+                               source_warnings.append, main=src_path)
+    source = expanded.text
+    parsed = parse(source)
 
     layout = Layout(
         font_name=args.font,
@@ -267,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}
 
-    warnings = list(parsed.warnings) + list(emitter.warnings)
+    warnings = source_warnings + list(parsed.warnings) + list(emitter.warnings)
 
     with tempfile.TemporaryDirectory(prefix="linguexx2odt-") as tmpdir:
         tmp = Path(tmpdir)
@@ -371,7 +377,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if warnings and not args.quiet:
         for w in warnings:
-            print(f"linguexx2odt: warning: {w}", file=sys.stderr)
+            print(f"linguexx2odt: warning: {expanded.locate(w)}",
+                  file=sys.stderr)
 
     if args.verbose:
         glossed = sum(1 for e in parsed.examples if e.glossed)
