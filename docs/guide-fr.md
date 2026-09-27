@@ -219,6 +219,7 @@ tableau dit lequel :
 | étiquettes personnalisées `\ex.[(4′)]` | imprimées littéralement ; le compteur n'avance pas |
 | `\exsource{…}` | rendu en ligne à la fin, pas aligné à droite |
 | `\refrange`, `\prefrange` | résolus comme linguexx les imprime, dans le texte comme dans les exemples, avec des renvois vivants : « (3a–c) » quand l'intervalle finit sur un `\sublabel`, « (1–3a) » quand il finit sur un `\label`. Un `\rangedash` redéfini est signalé ; le tiret est demi-cadratin |
+| un renvoi à un sous-sous-exemple (le niveau romain), intervalles compris | non pris en charge : imprimé sans la lettre de son sous-exemple, « (1i) » là où linguexx imprime « (1b-i) ». L'exécution avertit à chaque renvoi |
 | `\Next`, `\Last`, `\NNext`, `\LLast` et leurs formes `p` | résolus par position et réécrits en renvois vivants, dans le texte comme dans les exemples -- où, comme dans linguexx, `\Last` désigne l'exemple lui-même. De même pour `\ref` et `\pref` dans un exemple ; une étiquette qu'aucun exemple ne porte s'imprime `??` et est signalée |
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | résolus par citeproc à partir du `.bib` que le document déclare, avec bibliographie finale ; à défaut de `.bib`, les clés sont imprimées |
 | `\citeauthor`, `\citealt`, `\citeyear` | résolus, mais imprimés `Auteur (Année)` : pandoc n'a qu'un seul mode « auteur dans le texte » ; le nombre est signalé |

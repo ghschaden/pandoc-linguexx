@@ -602,6 +602,7 @@ def parse(src: str) -> ParseResult:
 
     labels = _collect_labels(examples)
     sublabels = _sublabels(src, live)
+    _warn_sub_sub_references(src, live, examples, warnings)
     rel_spans = _resolve_relatives(src, relatives, spans, labels, warnings)
     for start, stop, name, first, second in ranges:
         line = src.count("\n", 0, start) + 1
@@ -728,6 +729,37 @@ def _relative_target(nxt: int, offset: int) -> int:
 
 
 _SUBLABEL = re.compile(r"\\sublabel\s*\{([^}]*)\}")
+
+
+_ANY_REF = re.compile(
+    r"\\(p?ref|p?refrange)\s*\{([^}]*)\}(?:\s*\{([^}]*)\})?")
+
+
+def _warn_sub_sub_references(src, live, examples, warnings) -> None:
+    r"""Name each reference to a sub-sub-example: not supported.
+
+    linguexx prints one as "(1b-i)"; this converter's reference carries the
+    example's number and the item's own numeral, "(1i)", without the letter
+    above it.  Decided 2026-09-27 not to implement (plan.md) -- which is a
+    reason to say so where it happens, not to print a wrong number quietly.
+    """
+    deep = {it.body.label for ex in examples for it in ex.items
+            if it.level >= 2 and it.body.label}
+    if not deep:
+        return
+    for m in _ANY_REF.finditer(src):
+        if not live[m.start()]:
+            continue
+        names = [m.group(2).strip()]
+        if m.group(1).endswith("range") and m.group(3) is not None:
+            names.append(m.group(3).strip())
+        for name in (n for n in names if n in deep):
+            line = src.count("\n", 0, m.start()) + 1
+            warnings.append(
+                f"line {line}: \\{m.group(1)} names the sub-sub-example "
+                f"{name!r}, and prints it without its sub-example's letter "
+                f"-- (1i) where linguexx prints (1b-i); references to "
+                f"sub-sub-examples are not supported")
 
 
 def _sublabels(src: str, live: list[bool]) -> frozenset[str]:

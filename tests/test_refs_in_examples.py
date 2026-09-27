@@ -176,3 +176,21 @@ def test_a_reference_survives_an_unknown_command_beside_it(
     marker = "<text:sequence-ref " if target == "odt" else " REF NumEx"
     assert xml.count(marker) == 3, xml.count(marker)
     assert "\\ref" not in xml and "\\Last" not in xml and "lx:ref" not in xml
+
+
+def test_a_reference_to_a_sub_sub_example_is_named_as_unsupported() -> None:
+    r"""linguexx prints "(1b-i)"; this converter prints "(1i)".  Decided
+    2026-09-27: cross-references to sub-sub-examples are not implemented --
+    but a wrong number is not left unsaid, in prose or in an example, and a
+    reference to a sub-example one level up is not warned about."""
+    from linguexx2odt.extract import parse
+    src = ("\\documentclass{article}\n\\usepackage{linguexx}\n\\begin{document}\n"
+           "\\ex. \\a. \\label{la} Letter a.\n"
+           "\\b. \\a. \\label{r1} Roman one. \\b. \\sublabel{r2} Roman two.\n\n"
+           "\\ex. In an example, \\ref{r2}.\n\n"
+           "See \\ref{r1}, \\pref{r2}, \\refrange{r1}{r2} and \\ref{la}.\n"
+           "\\end{document}\n")
+    warned = [w for w in parse(src).warnings if "sub-sub-example" in w]
+    assert {w.split(":")[0] for w in warned} == {"line 7", "line 9"}, warned
+    assert any("r1" in w for w in warned) and any("r2" in w for w in warned)
+    assert not any("'la'" in w for w in warned), warned

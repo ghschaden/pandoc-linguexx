@@ -243,6 +243,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\exsource{…}` | rendered inline at the end, not flush right |
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
 | `\refrange`, `\prefrange` | resolved as linguexx prints them, in prose and inside examples, with live references: "(3a–c)" when the range ends on a `\sublabel`, "(1–3a)" when it ends on a `\label`. A redefined `\rangedash` warns; the dash is an en dash |
+| a reference to a sub-sub-example (the roman level), ranges over them included | not supported: printed without its sub-example's letter, "(1i)" where linguexx prints "(1b-i)". The run warns at each one |
 | `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references, in prose and inside examples -- where, as in linguexx, `\Last` is the example itself. So are `\ref` and `\pref` inside an example; a label no example carries prints as `??` and warns |
 | `\altn`, `\altg` | not supported: neither format can represent a stack of alternatives, and the run warns not to use them in a document you mean to convert. Where they are used anyway, they are deleted with their arguments; inside an example the `.odt` deletes them and the `.docx` prints the LaTeX source |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |

@@ -379,3 +379,10 @@ Decided since, and no longer open:
   table, and any approximation would be an invented rendering. The run
   warns the author not to use them in a document meant for conversion
   (`extract.UNREPRESENTABLE`, `AVOID`).
+- **Cross-references to sub-sub-examples** (2026-09-27): not implemented.
+  linguexx prints one as "(1b-i)", with the enclosing letter; the
+  converter's reference carries the example's number and the item's own
+  numeral only, "(1i)" -- ranges over them likewise. Measured against
+  pdflatex. The run warns at each such reference
+  (`extract._warn_sub_sub_references`), rather than print a wrong number
+  quietly.
