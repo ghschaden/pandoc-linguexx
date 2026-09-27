@@ -370,3 +370,12 @@ LibreOffice) is de-risked in S2 before any real investment.
 Ruby method; `\alt`/`\altg`; footnote examples; `gb4e`/`legacy` syntax
 options; math inside examples; automatic line-breaking of overlong
 examples; DOCX output; round-tripping ODT→LaTeX.
+
+Decided since, and no longer open:
+
+- **`\altn`/`\altg`, and a list or table inside an example** (2026-09-27):
+  not supported, and not approximated. Neither `.odt` nor `.docx` can
+  represent a stack of alternatives or a second layout inside an example
+  table, and any approximation would be an invented rendering. The run
+  warns the author not to use them in a document meant for conversion
+  (`extract.UNREPRESENTABLE`, `AVOID`).

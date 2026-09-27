@@ -148,6 +148,15 @@ DEGRADE = {
     "exsource": "\\exsource",
 }
 
+#: Constructs no example table can hold, in either target: a stack of
+#: alternatives is drawn with a TikZ brace, and a list or table inside an
+#: example is a second layout inside the first.  Decided 2026-09-27: not
+#: approximated -- an approximation is an invented answer -- but named, with
+#: the advice not to use them in a document meant for conversion.
+UNREPRESENTABLE = frozenset({"altn", "altg"})
+AVOID = ("neither .odt nor .docx can represent it, so do not use it in a "
+         "document you mean to convert")
+
 #: Relative reference -> (how many examples away, bare number?).  Negative
 #: counts backwards.  These are resolved by POSITION, which the converter can
 #: do and linguexx deliberately does not: linguexx only links to an anchor a
@@ -558,7 +567,9 @@ def parse(src: str) -> ParseResult:
             line = src.count("\n", 0, i) + 1
             warnings.append(
                 f"line {line}: {DEGRADE[name]} deleted from the output with "
-                f"its arguments; pandoc does not convert it")
+                f"its arguments; "
+                + (AVOID if name in UNREPRESENTABLE
+                   else "pandoc does not convert it"))
         i = end
 
     _scan_unsupported(src, warnings.append)
@@ -628,11 +639,12 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     for cmd, desc in DEGRADE.items():
         if cmd != "exsource" and re.search(r"\\" + cmd + r"(?![a-zA-Z])", body_src):
             warn(f"{desc} inside an example is not converted: deleted in "
-                 f"the .odt, printed as its LaTeX source in the .docx")
+                 f"the .odt, printed as its LaTeX source in the .docx"
+                 + (f"; {AVOID}" if cmd in UNREPRESENTABLE else ""))
 
     for nested in set(re.findall(r"\\begin\s*\{([^}]*)\}", body_src)) & SKIP_ENVS:
         warn(f"nested {nested} inside the example is not aligned: the .odt "
-             f"hands it to pandoc, the .docx prints its LaTeX source")
+             f"hands it to pandoc, the .docx prints its LaTeX source; {AVOID}")
 
     examples.append(
         Example(

@@ -141,3 +141,29 @@ Note.\footnote{\ex. Noted.
     assert len(warnings) >= 9, warnings
     wrong = [w for w in warnings if any(c in w for c in FALSE_CLAIMS)]
     assert not wrong, "\n".join(wrong)
+
+
+def test_what_no_table_can_hold_is_named_as_something_to_avoid() -> None:
+    r"""\altn, \altg and a list or table inside an example have no form in
+    an example table, in either target.  Decided 2026-09-27: not
+    approximated, but named, with the advice not to use them in a document
+    meant for conversion -- in prose and inside an example alike."""
+    from linguexx2odt.extract import parse
+    src = r"""\begin{document}
+Prose \altn{est}{*sont} and \altg{a}{b}.
+
+\ex. In \altn{est}{*sont} one.
+
+\ex. With \begin{itemize}\item x\end{itemize} and \begin{tabular}{l} y \end{tabular}.
+
+\ex. Plain \refrange{a}{b}.
+
+\end{document}
+"""
+    warnings = parse(src).warnings
+    avoid = [w for w in warnings if "do not use it" in w]
+    assert len(avoid) == 5, "\n".join(warnings)
+    for name in ("\\altn", "\\altg", "itemize", "tabular"):
+        assert any(name in w for w in avoid), (name, avoid)
+    assert not any("ranged reference" in w for w in avoid), \
+        "a range is representable; it is not something to avoid"

@@ -244,7 +244,7 @@ Unless a row says otherwise, this is true of both targets.
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
 | `\refrange`, `\prefrange` | deleted with their arguments, and the sentence closes over the gap ("see and"). Inside an example the targets differ: the `.odt` deletes them, the `.docx` prints the LaTeX source |
 | `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references |
-| `\altn`, `\altg` | deleted with their arguments. Inside an example the targets differ: the `.odt` deletes them, the `.docx` prints the LaTeX source |
+| `\altn`, `\altg` | not supported: neither format can represent a stack of alternatives, and the run warns not to use them in a document you mean to convert. Where they are used anyway, they are deleted with their arguments; inside an example the `.odt` deletes them and the `.docx` prints the LaTeX source |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
 | `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | warn; the reference document's styles and the literal marks are used |
@@ -257,6 +257,7 @@ Unless a row says otherwise, this is true of both targets.
 | an example inside an environment pandoc does not know (`multicols`, …) | the example is recovered; the surrounding markup is not |
 | `\input`, `\include`, `\includeonly` | read and converted as part of the document, examples and references included. Paths are taken from the main document's directory, as LaTeX does; a file found only through `TEXINPUTS` is reported missing and left out. Warnings name the file and line they are about |
 | math inside examples | handed to pandoc; may not survive |
+| a list or table inside an example (`itemize`, `tabular`, …) | not supported: an example table cannot hold a second layout, and the run warns not to use one in a document you mean to convert. Where it is used anyway, the `.odt` hands it to pandoc and the `.docx` prints the LaTeX source |
 | consecutive examples, `.docx` only | kept apart by a 1 pt paragraph in its own style, `LxExampleGap`: Word joins tables that touch, and without it a run of examples was one table in Word. Each step between consecutive examples is 1 pt taller than in the `.odt`, and nothing else moves (measured). A file converted before 2026-09-26 still has them touching; reconvert it |
 | anything else unknown | handed to pandoc. What pandoc cannot convert either is deleted from the output, and the run names each such command or environment, with a count. Spacing, page-break and font-size commands are deleted without a word: they set no text |
 

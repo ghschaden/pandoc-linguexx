@@ -224,7 +224,7 @@ tableau dit lequel :
 | `\citeauthor`, `\citealt`, `\citeyear` | résolus, mais imprimés `Auteur (Année)` : pandoc n'a qu'un seul mode « auteur dans le texte » ; le nombre est signalé |
 | un exemple dans un environnement inconnu de pandoc (`multicols`, …) | l'exemple est récupéré ; le balisage qui l'entoure ne l'est pas |
 | `\input`, `\include`, `\includeonly` | lus et convertis avec le document, exemples et renvois compris. Les chemins partent du répertoire du document principal, comme pour LaTeX ; un fichier que seul `TEXINPUTS` trouverait est signalé absent et laissé de côté. Les avertissements nomment le fichier et la ligne concernés |
-| `\altn`, `\altg` | supprimés avec leurs arguments. Dans un exemple, les formats diffèrent : le `.odt` les supprime, le `.docx` imprime la source LaTeX |
+| `\altn`, `\altg` | non pris en charge : aucun des deux formats ne peut représenter une pile d'alternatives, et l'exécution avertit de ne pas les employer dans un document destiné à la conversion. S'ils le sont quand même, ils sont supprimés avec leurs arguments ; dans un exemple, le `.odt` les supprime et le `.docx` imprime la source LaTeX |
 | `\GlossTransSide` | avertit ; converti en exemple ordinaire, traduction en dessous. Choix délibéré |
 | `[phantomalign]`, `\GlossPhantomAlign` | avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | avertissent ; les styles du document de référence et les marques littérales sont utilisés |
@@ -233,6 +233,7 @@ tableau dit lequel :
 | syntaxe gb4e `exe`/`xlist` | hors périmètre, et supprimée : l'environnement disparaît avec tout son contenu, texte de l'exemple compris |
 | mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
+| une liste ou un tableau dans un exemple (`itemize`, `tabular`, …) | non pris en charge : un tableau d'exemple ne peut pas contenir une seconde mise en page, et l'exécution avertit de ne pas l'employer dans un document destiné à la conversion. S'il l'est quand même, le `.odt` le confie à pandoc et le `.docx` imprime la source LaTeX |
 | toute autre construction inconnue | confiée à pandoc. Ce que pandoc ne sait pas non plus convertir est supprimé de la sortie, et l'exécution nomme chaque commande ou environnement concerné, avec leur nombre. Les commandes d'espacement, de saut de page et de taille de police sont supprimées sans mot dire : elles ne composent aucun texte |
 | exemples consécutifs, `.docx` seulement | séparés par un paragraphe de 1 pt dans son propre style, `LxExampleGap` : Word réunit les tableaux qui se touchent, et sans lui une suite d'exemples y devenait un seul tableau. Chaque pas entre exemples consécutifs est de 1 pt plus haut que dans le `.odt`, rien d'autre ne bouge (mesuré). Un fichier converti avant le 26 septembre 2026 garde ses tableaux accolés : reconvertissez-le |
 
