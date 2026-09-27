@@ -33,7 +33,7 @@ from . import postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
 from .includes import expand_includes
-from .inject import inject
+from .inject import inject, report_dropped_latex
 from .latexutil import live_mask, scan_bibliography
 from .styles import Layout, named_styles
 
@@ -314,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
 
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
                           emitter=emitter)
+        report_dropped_latex(doc, warnings.append)
 
         ast_path = tmp / "ast.json"
         ast_path.write_text(json.dumps(doc), encoding="utf-8")

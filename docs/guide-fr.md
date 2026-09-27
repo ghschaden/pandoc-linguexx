@@ -231,6 +231,7 @@ ligne, et dégrade vers quelque chose de lisible plutôt que vers rien :
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignorés — ils décrivent ce qu'un lecteur d'écran dit d'un PDF, ce qui n'a pas d'équivalent ODT |
 | syntaxe gb4e `exe`/`xlist`, mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
+| toute autre construction inconnue | confiée à pandoc. Ce que pandoc ne sait pas non plus convertir est supprimé de la sortie, et l'exécution nomme chaque commande ou environnement concerné, avec leur nombre. Les commandes d'espacement, de saut de page et de taille de police sont supprimées sans mot dire : elles ne composent aucun texte |
 | exemples consécutifs, `.docx` seulement | séparés par un paragraphe de 1 pt dans son propre style, `LxExampleGap` : Word réunit les tableaux qui se touchent, et sans lui une suite d'exemples y devenait un seul tableau. Chaque pas entre exemples consécutifs est de 1 pt plus haut que dans le `.odt`, rien d'autre ne bouge (mesuré). Un fichier converti avant le 26 septembre 2026 garde ses tableaux accolés : reconvertissez-le |
 
 Lisez les avertissements : ils désignent précisément les endroits à

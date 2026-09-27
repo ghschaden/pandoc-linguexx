@@ -256,3 +256,81 @@ def inject(doc: dict, blocks_by_index, labels, warn=None,
            emitter=None) -> tuple[dict, Injector]:
     inj = Injector(blocks_by_index, labels, warn, emitter=emitter)
     return inj.run(doc), inj
+
+
+# -- what the writer will delete -----------------------------------------
+
+#: Commands pandoc 3.10 keeps as raw LaTeX that set no text: spacing, page
+#: breaks, sizes, document structure.  Each was measured to arrive raw; all
+#: are deleted by the writer, and none of the deletions loses a word.  Kept
+#: short on purpose -- a name missing here costs a line of warning, a name
+#: wrongly here costs a silent loss.
+LAYOUT_ONLY = frozenset("""
+    noindent indent vspace hspace hfill vfill bigskip medskip smallskip
+    newpage clearpage cleardoublepage pagebreak nopagebreak linebreak
+    nolinebreak enlargethispage FloatBarrier centering raggedleft
+    setlength addtolength pagestyle thispagestyle
+    onehalfspacing doublespacing singlespacing sloppy fussy protect
+    normalsize small footnotesize large phantom
+    maketitle printbibliography bibliographystyle
+    appendix frontmatter mainmatter backmatter label selectlanguage
+""".split())
+
+_FIRST_CMD = re.compile(r"\s*\\(?:begin\s*\{([^}]*)\}|([a-zA-Z@]+|.))")
+#: What freeing an example from an unknown environment leaves behind: the
+#: bare opening or closing line, which that rescue already warns about.
+_BARE_DELIMITER = re.compile(
+    r"\s*(?:\\begin\{[^}]*\}(?:\s*(?:\[[^\]]*\]|\{[^}]*\}))*"
+    r"|\\end\{[^}]*\})\s*")
+#: A command's star and bracketed or braced arguments, to skip past it.
+_ARGUMENTS = re.compile(r"^\*?(?:\s*(?:\[[^\]]*\]|\{[^}]*\}))*")
+
+
+def report_dropped_latex(doc: dict, warn: Callable[[str], None]) -> None:
+    r"""Name the raw LaTeX left in the finished AST, which both writers
+    delete.  ``\Next``, an unresolved ``Cite`` and ``\input`` were each
+    lost this way, silently, before being fixed one at a time; this is the
+    net for the next one.  Citations are skipped: citeproc renders them,
+    or ``_degrade_citations`` replaces their fallback and says so."""
+    found: dict[str, int] = {}
+
+    def walk(node) -> None:
+        if isinstance(node, list):
+            for x in node:
+                walk(x)
+            return
+        if not isinstance(node, dict) or node.get("t") == "Cite":
+            return
+        if node.get("t") in ("RawBlock", "RawInline"):
+            fmt, text = (node.get("c") or ["", ""])[:2]
+            if fmt in ("latex", "tex"):
+                key = _dropped_key(str(text))
+                if key:
+                    found[key] = found.get(key, 0) + 1
+            return
+        walk(node.get("c"))
+
+    walk(doc.get("blocks", []))
+    if found:
+        named = ", ".join(k if n == 1 else f"{k} ({n})"
+                          for k, n in found.items())
+        warn(f"LaTeX pandoc does not convert, deleted from the output "
+             f"(an environment with everything in it): {named}")
+
+
+def _dropped_key(text: str) -> str | None:
+    """What to call a raw fragment in the warning, or None if it holds no
+    text.  Layout commands are skipped rather than trusted to speak for
+    the fragment: ``\\centering`` before a tree is still a tree."""
+    while True:
+        if not text.strip() or _BARE_DELIMITER.fullmatch(text):
+            return None
+        m = _FIRST_CMD.match(text)
+        if m is None:
+            return text.strip()[:30]
+        if m.group(1) is not None:
+            return f"\\begin{{{m.group(1)}}}"
+        if m.group(2) not in LAYOUT_ONLY:
+            return f"\\{m.group(2)}"
+        text = _ARGUMENTS.sub("", text[m.end():], count=1)
+

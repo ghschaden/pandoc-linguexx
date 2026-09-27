@@ -257,7 +257,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\input`, `\include`, `\includeonly` | read and converted as part of the document, examples and references included. Paths are taken from the main document's directory, as LaTeX does; a file found only through `TEXINPUTS` is reported missing and left out. Warnings name the file and line they are about |
 | math inside examples | handed to pandoc; may not survive |
 | consecutive examples, `.docx` only | kept apart by a 1 pt paragraph in its own style, `LxExampleGap`: Word joins tables that touch, and without it a run of examples was one table in Word. Each step between consecutive examples is 1 pt taller than in the `.odt`, and nothing else moves (measured). A file converted before 2026-09-26 still has them touching; reconvert it |
-| anything else unknown | handed to pandoc, as `opendocument` or `openxml` |
+| anything else unknown | handed to pandoc. What pandoc cannot convert either is deleted from the output, and the run names each such command or environment, with a count. Spacing, page-break and font-size commands are deleted without a word: they set no text |
 
 ### Why `\GlossTransSide` is normalised rather than reproduced
 
