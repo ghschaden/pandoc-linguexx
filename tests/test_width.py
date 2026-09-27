@@ -189,3 +189,19 @@ def test_an_uncovered_character_still_gets_a_width() -> None:
     for ch in ("漢", "\u2603"):
         assert 0.0 < _advance(ch) <= 1.0
 
+
+
+@pytest.mark.parametrize("option, value", [
+    ("--text-width", "0"), ("--text-width", "-5"),
+    ("--font-pt", "0"), ("--font-pt", "-3"),
+])
+def test_a_width_or_size_that_is_not_positive_is_refused(
+        tmp_path: Path, option: str, value: str) -> None:
+    """--text-width 0 was a ZeroDivisionError traceback out of the ODT
+    emitter; --font-pt -3 was accepted and produced a document."""
+    tex = tmp_path / "one.tex"
+    tex.write_text("\\begin{document}\n\\ex. One.\n\n\\end{document}\n",
+                   encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        main([str(tex), option, value, "-o", str(tmp_path / "one.odt")])
+    assert "must be positive" in str(exc.value.code)

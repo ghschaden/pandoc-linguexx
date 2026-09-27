@@ -253,6 +253,11 @@ def main(argv: list[str] | None = None) -> int:
         value = getattr(args, name)
         if value is not None and value < 0:
             sys.exit(f"linguexx2odt: --{name.replace('_', '-')} cannot be negative")
+    # Zero is no better than negative here: every column is a share of the
+    # text width, and a zero width was a ZeroDivisionError traceback.
+    for name in ("text_width", "font_pt"):
+        if getattr(args, name) <= 0:
+            sys.exit(f"linguexx2odt: --{name.replace('_', '-')} must be positive")
 
     source_warnings: list[str] = []
     expanded = expand_includes(src_path.read_text(encoding="utf-8"), workdir,
@@ -335,12 +340,12 @@ def main(argv: list[str] | None = None) -> int:
         _pandoc(pandoc_args, cwd=workdir)
 
         if args.to == "docx":
-            # Nothing to patch, yet.  ODT needs a pass to declare its
-            # sequence and to carry automatic column styles that a raw
-            # block cannot; OOXML needs neither -- a SEQ field declares
-            # itself by being used, and a column's width lives in the cell.
-            # What it WILL need is the named styles, so that a Word user
-            # can restyle from the sidebar as a Writer user can: Phase 4.
+            # Only the named styles to add, so that a Word user can restyle
+            # from the sidebar as a Writer user can.  ODT also needs its
+            # sequence declared and automatic column styles that a raw
+            # block cannot carry; OOXML needs neither -- a SEQ field
+            # declares itself by being used, and a column's width lives in
+            # the cell.
             postprocess_docx.apply_styles(
                 raw_odt, out_path, styles_docx.styles_fragment(layout),
                 # Not when the user supplied a reference document: their
