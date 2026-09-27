@@ -117,3 +117,16 @@ def test_comments_do_not_leak_into_bodies() -> None:
     src = "\\begin{document}\n\\ex. Visible text.  % a trailing comment\n\n\\end{document}"
     result = parse(src)
     assert result.examples[0].body.text == "Visible text."
+
+
+def test_a_label_in_the_first_sub_example_is_that_sub_example_s() -> None:
+    r"""``\a. \label{s}`` named the whole example: the example's own label
+    was searched for anywhere in it, and the first sub-example's is the
+    first found.  linguexx prints \ref{s} as (1a)."""
+    def labels(head: str) -> dict:
+        return parse(f"\\begin{{document}}\n\\ex. {head}\\a. \\label{{s1}} A. "
+                     "\\b. \\label{s2} B.\n\n\\end{document}").labels
+
+    assert labels("") == {"s1": (0, "a"), "s2": (0, "b")}
+    assert labels("\\label{whole} ") == {
+        "whole": (0, ""), "s1": (0, "a"), "s2": (0, "b")}

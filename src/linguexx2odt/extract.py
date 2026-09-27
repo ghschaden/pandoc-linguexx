@@ -632,7 +632,14 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
         warn(f"custom label {custom!r} printed literally; the NumEx counter is not stepped")
 
     shorthand = name == "exg"
-    label, rest = _pull_command(strip_comments(body_src), "label")
+    # The example's own \label is one written before its first sub-example.
+    # Searched for anywhere, it took the first sub-example's: "\a. \label{s}"
+    # made s name the whole example, and \ref{s} printed (3) for (3a).
+    stripped = strip_comments(body_src)
+    first_sub = SUB_RE.search(stripped)
+    head_end = first_sub.start() if first_sub else len(stripped)
+    label, head = _pull_command(stripped[:head_end], "label")
+    rest = head + stripped[head_end:]
     items = _parse_items(rest, shorthand, warn) if SUB_RE.search(rest) else ()
     body = None if items else _parse_body(rest, shorthand, warn)
 
