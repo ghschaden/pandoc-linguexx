@@ -205,3 +205,88 @@ def test_a_warning_names_the_file_and_line_it_is_about(tmp_path: Path) -> None:
     assert at("c2") == "chapters/ch.tex, line 2: x"
     assert at("m5") == "line 5: x"
     assert expanded.locate("no line here") == "no line here"
+
+
+# -- beyond the document's directory: kpsewhich ------------------------------
+#
+# A fake kpsewhich on PATH, answering as the real one does -- a path on
+# stdout, or exit 1; -var-value=NAME prints the variable -- so that these
+# run where no TeX is installed, CI included, instead of skipping there.
+
+FAKE_KPSEWHICH = """#!/bin/sh
+case "$1" in
+  -var-value=TEXMFDIST|-var-value=TEXMFMAIN) echo "$FAKE_DIST"; exit 0;;
+  -var-value=*) echo ""; exit 0;;
+esac
+for d in "$FAKE_SHARED" "$FAKE_DIST/tex"; do
+  if [ -f "$d/$1" ]; then echo "$d/$1"; exit 0; fi
+done
+exit 1
+"""
+
+
+@pytest.fixture
+def texmf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
+    import os
+    bin_dir, shared, dist = (tmp_path / d for d in ("bin", "shared", "dist"))
+    for d in (bin_dir, shared, dist / "tex"):
+        d.mkdir(parents=True)
+    kpse = bin_dir / "kpsewhich"
+    kpse.write_text(FAKE_KPSEWHICH, encoding="utf-8")
+    kpse.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("FAKE_SHARED", str(shared))
+    monkeypatch.setenv("FAKE_DIST", str(dist))
+    doc = tmp_path / "doc"
+    doc.mkdir()
+    return {"doc": doc, "shared": shared, "dist": dist / "tex", "bin": bin_dir}
+
+
+def _run(doc: Path, src: str):
+    warnings: list[str] = []
+    return expand_includes(src, doc, warnings.append), warnings
+
+
+def test_a_file_only_kpsewhich_finds_is_read(texmf) -> None:
+    r"""A shared macro file on TEXINPUTS or in ~/texmf: found as LaTeX
+    finds it, and its lines named by where it lives."""
+    (texmf["shared"] / "macros.tex").write_text("\\newcommand{\\x}{X}\nm2\n",
+                                                encoding="utf-8")
+    expanded, warnings = _run(texmf["doc"], "\\input{macros}\nbody\n")
+    assert expanded.text == "\\newcommand{\\x}{X}\nm2\n\nbody\n"
+    assert warnings == []
+    where = expanded.locate("line 2: x")
+    assert where.endswith("macros.tex, line 2: x"), where
+
+
+def test_the_document_s_own_file_comes_first(texmf) -> None:
+    (texmf["shared"] / "one.tex").write_text("SHARED", encoding="utf-8")
+    (texmf["doc"] / "one.tex").write_text("LOCAL", encoding="utf-8")
+    expanded, _ = _run(texmf["doc"], "\\input{one}")
+    assert expanded.text == "LOCAL\n"
+
+
+def test_a_distribution_file_is_found_and_not_expanded(texmf) -> None:
+    r"""\input{glyphtounicode}: pdfTeX configuration, not text.  Found, so
+    not reported missing; not spliced in, since pandoc would only delete
+    what it holds."""
+    (texmf["dist"] / "glyphtounicode.tex").write_text(
+        "\\pdfglyphtounicode{A}{0041}\n", encoding="utf-8")
+    expanded, warnings = _run(texmf["doc"], "a \\input{glyphtounicode} b")
+    assert expanded.text == "a  b"
+    assert warnings == []
+
+
+def test_include_asks_kpsewhich_for_the_tex_file_only(texmf) -> None:
+    (texmf["shared"] / "ch").write_text("BARE", encoding="utf-8")
+    expanded, warnings = _run(texmf["doc"], "\\include{ch}")
+    assert "BARE" not in expanded.text
+    assert len(warnings) == 1 and "ch" in warnings[0], warnings
+
+
+def test_without_kpsewhich_the_warning_says_what_was_not_searched(
+        texmf, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", str(texmf["doc"]))      # no kpsewhich there
+    _, warnings = _run(texmf["doc"], "\\input{macros}")
+    assert len(warnings) == 1, warnings
+    assert "kpsewhich" in warnings[0] and "not installed" in warnings[0]

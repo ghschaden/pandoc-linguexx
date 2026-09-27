@@ -26,14 +26,23 @@ exited 0.  And the example scanner reads one string -- an example in a
 chapter file never became a field even when pandoc did read the file.
 Expanding first gives both of them the document LaTeX sees.
 
-Files are looked for where LaTeX looks first: relative to the main
-document's directory, whichever file names them.  ``TEXINPUTS`` is not
-searched; a file found only there is reported as missing.
+Files are looked for where LaTeX looks: first relative to the main
+document's directory, whichever file names them, then through
+``kpsewhich`` -- TeX's own lookup, so ``TEXINPUTS``, ``~/texmf`` and the
+distribution, exactly as LaTeX would search them.  A shared macro file is
+the case that matters: pandoc applies a ``\newcommand``, and without the
+file every command it defines reached the writer raw, to be deleted.  A
+file the distribution ships (``\input{glyphtounicode}``) is engine
+configuration, not text: found, so not reported missing, and not spliced
+in.  Without ``kpsewhich`` only the document's directory is searched, and
+the warning for a missing file says so.
 """
 
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,7 +89,7 @@ def expand_includes(src: str, workdir: Path, warn: Callable[[str], None],
     skipped: list[str] = []
     pieces: list[tuple[str, str | None, int]] = []
     stack = (main.resolve(),) if main is not None else ()
-    _expand(src, None, workdir, warn, stack, only, skipped, pieces)
+    _expand(src, None, _Finder(workdir), warn, stack, only, skipped, pieces)
     if skipped:
         warn(f"\\includeonly: {len(skipped)} \\include'd file(s) left out, "
              f"as LaTeX leaves them out: {', '.join(skipped)}")
@@ -120,16 +129,64 @@ def _label(path: Path, workdir: Path) -> str:
         return str(path)
 
 
-def _resolve(name: str, workdir: Path, include: bool) -> Path | None:
-    base = workdir / name
-    # \input{x} tries x.tex before x; \include{x} only ever reads x.tex.
-    candidates = [base.with_name(base.name + ".tex")]
-    if not include:
-        candidates.append(base)
-    return next((p for p in candidates if p.is_file()), None)
+class _Finder:
+    """Where a named file is: beside the document, else wherever
+    ``kpsewhich`` finds it.  One per run, so the distribution's roots are
+    asked for once."""
+
+    def __init__(self, workdir: Path) -> None:
+        self.workdir = workdir
+        self.kpsewhich = shutil.which("kpsewhich")
+        self._dist: tuple[Path, ...] | None = None
+
+    def find(self, name: str, include: bool) -> Path | None:
+        # \input{x} tries x.tex before x; \include{x} only ever reads x.tex.
+        names = [name + ".tex"] if include else [name + ".tex", name]
+        for n in names:
+            local = self.workdir / n
+            if local.is_file():
+                return local
+        for n in names:
+            found = self._kpse(n)
+            if found is not None:
+                return found
+        return None
+
+    def in_distribution(self, path: Path) -> bool:
+        if self._dist is None:
+            roots = []
+            for var in ("TEXMFDIST", "TEXMFMAIN"):
+                value = self._run("-var-value=" + var)
+                roots += [Path(v).resolve() for v in (value or "").split(":")
+                          if v.strip()]
+            self._dist = tuple(roots)
+        return any(path.is_relative_to(root) for root in self._dist)
+
+    def _kpse(self, name: str) -> Path | None:
+        out = self._run(name)
+        path = Path(out) if out else None
+        return path if path is not None and path.is_file() else None
+
+    def _run(self, arg: str) -> str | None:
+        if self.kpsewhich is None:
+            return None
+        try:
+            proc = subprocess.run(
+                [self.kpsewhich, arg], cwd=self.workdir, capture_output=True,
+                text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        out = proc.stdout.strip().splitlines()
+        return out[0].strip() if proc.returncode == 0 and out else None
+
+    def where_not_found(self) -> str:
+        return ("not found next to the document or by kpsewhich"
+                if self.kpsewhich else
+                "not found next to the document, and kpsewhich, which would "
+                "search TEXINPUTS and the TeX tree, is not installed")
 
 
-def _expand(src: str, label: str | None, workdir: Path, warn,
+def _expand(src: str, label: str | None, finder: _Finder, warn,
             stack: tuple[Path, ...], only: set[str] | None,
             skipped: list[str], out: list[tuple[str, str | None, int]]) -> None:
     """Append *src*, spliced, to *out* as (text, file, first line) pieces;
@@ -178,12 +235,14 @@ def _expand(src: str, label: str | None, workdir: Path, warn,
         if name == "include" and only is not None and target not in only:
             skipped.append(target)
             continue
-        found = _resolve(target, workdir, name == "include")
+        found = finder.find(target, name == "include")
         if found is None:
-            warn(f"{written}: no such file next to the document; "
+            warn(f"{written}: {finder.where_not_found()}; "
                  f"what it contains is not in the output")
             continue
         found = found.resolve()
+        if finder.in_distribution(found):
+            continue
         if found in stack:
             warn(f"{written}: {found.name} includes itself; "
                  f"the repetition is left out")
@@ -193,8 +252,9 @@ def _expand(src: str, label: str | None, workdir: Path, warn,
         if name == "include":
             insert("\n\n", stop)
         start = len(out)
-        _expand(found.read_text(encoding="utf-8"), _label(found, workdir),
-                workdir, warn, (*stack, found), only, skipped, out)
+        _expand(found.read_text(encoding="utf-8"),
+                _label(found, finder.workdir), finder, warn, (*stack, found),
+                only, skipped, out)
         # A file ends a line: without this, a comment on its last line
         # would swallow whatever follows the \input on the including line.
         if not "".join(p[0] for p in out[start:]).endswith("\n"):
