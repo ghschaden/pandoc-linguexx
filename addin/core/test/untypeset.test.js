@@ -25,7 +25,8 @@ const FIXTURES = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/f
  * the text's first column is found from the translation, and the only one.
  */
 function built(lines, width = 17, formats = [], converter = false) {
-  const ex = toExample(parseLines(lines).items);
+  const parsed = parseLines(lines);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const [lay, aj] = converter ? prepareDocument([ex], { ...LAYOUT, text_width_cm: width }, { formats })
     : prepareSelection(ex, { ...LAYOUT, text_width_cm: width }, { formats });
   const t = tableRows(ex, planTable(ex, lay, { anyJudgment: aj, formats }).plan);

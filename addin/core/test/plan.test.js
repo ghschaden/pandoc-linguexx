@@ -25,7 +25,7 @@ const PLANS = read("../../../tests/fixtures/typed-examples.plans.json");
 
 function corePlan(lines, textWidth, face = LAYOUT.font_name) {
   const parsed = parseLines(lines);
-  const ex = toExample(parsed.items);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const [layout, anyJudgment] = prepareDocument([ex], { ...LAYOUT, text_width_cm: textWidth, font_name: face });
   const { plan, warnings } = planTable(ex, layout, { anyJudgment });
   return {

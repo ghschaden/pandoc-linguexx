@@ -330,9 +330,10 @@ Const IT_SIZE   As Integer = 7
 '
 ' The lines get what LxSelectedLines gives a selection: trimmed, blank ones
 ' dropped.  No formatting, so no format marks (LxFmtN = 0).  Returns
-' Array("error", message) for a refusal, else Array("items", items), each
-' item Array(marker, judgment, translation, annotation, tiers) with tiers an
-' array of word arrays; one tier means unglossed.
+' Array("error", message) for a refusal, else Array("items", items, head),
+' each item Array(marker, judgment, translation, annotation, tiers) with
+' tiers an array of word arrays; one tier means unglossed.  *head* is the
+' line before the first sub-example, or "".
 '
 ' With *bTrees* True the lines are parsed as the tree command parses them
 ' (LxTreeOnly), and each item carries a sixth element: its own lines, the
@@ -412,7 +413,7 @@ Function ParseLinesQuiet(aLines As Variant, Optional bTrees As Variant) As Varia
         End If
     Next k
     LxTreeOnly = False
-    ParseLinesQuiet = Array("items", aOut())
+    ParseLinesQuiet = Array("items", aOut(), LxStrip(LxHeadLine))
     Exit Function
 Failed:
     LxTreeOnly = False
@@ -444,12 +445,14 @@ End Sub
 Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As String) As Variant
     Dim aItems() As Variant
     Dim aBody() As String
-    Dim i As Integer, n As Integer, nBody As Integer
+    Dim i As Integer, n As Integer, nBody As Integer, nFirst As Integer
     Dim bAny As Boolean
     Dim sMarker As String, sRest As String, sLine As String
 
     sError = ""
     LxTErr = ""
+    LxHeadLine = ""
+    nFirst = 0
 
     bAny = False
     For i = 0 To nLines - 1
@@ -468,11 +471,22 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
         Exit Function
     End If
 
-    If Not LxLooksLikeMarker(aLines(0)) Then
+    ' One line before the first sub-example, when that one is "a.": the text
+    ' linguexx sets between \ex. and \a.  Two lines, or a first letter that
+    ' is not a, is still a selection begun part-way through an example.
+    If Not LxLooksLikeMarker(aLines(0)) And nLines > 1 Then
+        If LxIsFirstMarker(LxMarkerOf(LxTrimTagged(aLines(1)))) Then
+            LxHeadLine = aLines(0)
+            nFirst = 1
+        End If
+    End If
+
+    If Not LxLooksLikeMarker(aLines(nFirst)) Then
         sError = "A sub-example letter appears part-way through the selection, " & _
                  "but the selection does not start with one." & Chr(10) & Chr(10) & _
                  "Start at the first sub-example, or leave the letters out " & _
                  "and gloss one example at a time."
+        LxHeadLine = ""
         LxParseItems = Array()
         Exit Function
     End If
@@ -480,7 +494,7 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
     ReDim aItems(nLines - 1)
     ReDim aBody(nLines - 1)
     n = 0 : nBody = 0 : sMarker = ""
-    For i = 0 To nLines - 1
+    For i = nFirst To nLines - 1
         If LxLooksLikeMarker(aLines(i)) Then
             If nBody > 0 Then
                 aItems(n) = LxMakeItem(sMarker, aBody(), nBody)
@@ -534,6 +548,13 @@ End Function
 ' the command the user chose is the whole of the signal, and Typeset
 ' example never draws a tree.
 Dim LxTreeOnly As Boolean
+
+' The line typed before the first sub-example, when there is one: the text
+' linguexx sets between \ex. and \a., on the number's line.  Set by
+' LxParseItems, read by LxEmitTable -- carried beside the items, as LxTErr
+' is, rather than as a sixth part of every item, which it belongs to none
+' of.  Tagged, so its formatting reaches the cell.
+Dim LxHeadLine As String
 
 ' The width left for content beside the number, so a tree can say when it
 ' will not fit.  Set in LxLayOut, where the page is still in view.
@@ -901,7 +922,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     Dim oCur As Object
     Dim aItem As Variant, aTiers As Variant, aWords As Variant, aNames As Variant
     Dim aWidths() As Double, dSum As Double
-    Dim bFirstOfAll As Boolean, bFirstOfItem As Boolean
+    Dim bFirstOfAll As Boolean, bFirstOfItem As Boolean, bHead As Boolean
 
     nItems = UBound(aItems) + 1
     nFill = 0
@@ -914,6 +935,8 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     For k = 0 To nItems - 1
         nRows = nRows + LxItemRows(aItems(k), aNBands(k))
     Next k
+    bHead = (Len(LxHeadLine) > 0 And nLead = 3)
+    If bHead Then nRows = nRows + 1           ' the line before the letters
 
     oTable = oDoc.createInstance("com.sun.star.text.TextTable")
     oTable.initialize(nRows, nTotalCols)
@@ -965,6 +988,16 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
 
     nRow = 2
     bFirstOfAll = True
+    ' The line before the first sub-example: the number's row, one cell from
+    ' the marker column to the edge of the block, where linguexx sets it --
+    ' and where linguexx2odt puts it, so a converted example and a typed one
+    ' are the same table.  The first sub-example then starts its own row.
+    If bHead Then
+        Call LxInsertNumber(oDoc, oTable.getCellByName(LxCell(0, nRow)))
+        Call LxWideCell(oTable, nRow, 1, nTotalCols - 1, LxHeadLine, CELL_PARA)
+        bFirstOfAll = False
+        nRow = nRow + 1
+    End If
     For k = 0 To nItems - 1
         aItem = aItems(k)
         aTiers = aItem(IT_TIERS)
@@ -1681,6 +1714,19 @@ End Function
 
 
 ' Does this line open with a sub-example marker?
+' Is this marker the first of its sequence -- "a.", "(a)", "A)"?  A line
+' before the letters is a head only in front of the first of them.
+Function LxIsFirstMarker(sMarker As String) As Boolean
+    Dim s As String
+    LxIsFirstMarker = False
+    s = LxStrip(sMarker)
+    If Len(s) < 2 Then Exit Function
+    s = Left(s, Len(s) - 1)
+    If Left(s, 1) = "(" Then s = Mid(s, 2)
+    LxIsFirstMarker = (LCase(s) = "a")
+End Function
+
+
 Function LxLooksLikeMarker(sLine As String) As Boolean
     LxLooksLikeMarker = (Len(LxMarkerOf(sLine)) > 0)
 End Function
@@ -2703,6 +2749,18 @@ Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
         ElseIf LxRowHasStyle(oTable, aCells, SPACE_ABOVE) _
             Or LxRowHasStyle(oTable, aCells, SPACE_BELOW) Then
             ' a spacer row: height, and nothing else
+        ElseIf bMarker And nOut = 0 And UBound(aCells) = 1 Then
+            ' The line before the first sub-example: the number and one cell
+            ' across the rest, which no other row of a paradigm can be -- it
+            ' has a number, a letter and its text at least.  It goes back as
+            ' the line before the letters, which LxParseItems reads as the
+            ' head again.
+            Call LxTakeCellNumber(oTable, nRow)
+            sLine = LxRowText(oTable, aCells, 1, False)
+            If Len(LxStrip(sLine)) > 0 Then
+                aOut(nOut) = sLine
+                nOut = nOut + 1
+            End If
         ElseIf LxRowHasStyle(oTable, aCells, TRANS_PARA) Then
             ' The translation is running text in a cell of its own, so it
             ' comes back as it stands — no columns to rejoin, no braces.

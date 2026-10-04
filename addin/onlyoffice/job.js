@@ -295,7 +295,7 @@ export function prepareJob(read, now = Date.now(), { trees = false } = {}) {
       `face is ${face}, which has not been measured. Words may wrap in their columns.`);
   }
 
-  const ex = toExample(parsed.items);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const settings = readSettings(read.props || {});
   const [layout, anyJudgment] = prepareSelection(ex,
     { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: sel.formats, settings });

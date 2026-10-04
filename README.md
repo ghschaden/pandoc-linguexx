@@ -375,7 +375,9 @@ instead of taking `--text-width` on trust. Since it shares the style
 names, it also works as a post-processor on converted documents.
 
 Sub-example paradigms (`a. … b. …`) work too, glossed or not, with the
-letters in their own column and one number for the paradigm.
+letters in their own column and one number for the paradigm. One line
+typed before `a.` is the text that leads the paradigm, set on the number's
+line as linguexx sets the text between `\ex.` and `\a.`.
 
 It also draws **syntax trees** from bracket notation: select
 `[DP [D the] [NP [N tree]]]`, press the shortcut, and get a numbered

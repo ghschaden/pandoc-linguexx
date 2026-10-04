@@ -204,6 +204,13 @@
         "b. Otro ejemplo aqui",
         "another example here"
       ]
+    },
+    "head_then_b": {
+      "lines": [
+        "Esto es un ejemplo",
+        "b. Otro ejemplo aqui"
+      ],
+      "why": "One line before the letters is a head only in front of a.: before b. it is a selection begun part-way through an example."
     }
   },
   "ACCEPT": {
@@ -289,6 +296,27 @@
       ],
       "back": null,
       "why": "The one that needs the band mark: without it every band comes back as another gloss tier, and this example returns six lines instead of three."
+    },
+    "head": {
+      "lines": [
+        "Square brackets around the number.",
+        "a. sub one",
+        "b. sub two"
+      ],
+      "back": null,
+      "why": "The line before the first sub-example -- linguexx's text between \\ex. and \\a. -- was refused by the grammar, so a converted example carrying one could be untypeset but not typeset again."
+    },
+    "head_glossed": {
+      "lines": [
+        "As the grammars put it:",
+        "a. Esto es un ejemplo",
+        "this is a example",
+        "'This is an example.'",
+        "b. Otro ejemplo",
+        "another example"
+      ],
+      "back": null,
+      "why": "A head in front of glossed sub-examples, one of them translated: the head row must not be read as a tier, and the translation must not end the paradigm."
     }
   },
   "BANDED": {
@@ -1011,6 +1039,9 @@
     "REFUSE/marker_partway": {
       "error": "A sub-example letter appears part-way through the selection, but the selection does not start with one.\n\nStart at the first sub-example, or leave the letters out and gloss one example at a time."
     },
+    "REFUSE/head_then_b": {
+      "error": "A sub-example letter appears part-way through the selection, but the selection does not start with one.\n\nStart at the first sub-example, or leave the letters out and gloss one example at a time."
+    },
     "ACCEPT/abbreviation": {
       "items": [
         {
@@ -1317,6 +1348,76 @@
           ]
         }
       ]
+    },
+    "UNTYPESET_CASES/head": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "sub",
+              "one"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "sub",
+              "two"
+            ]
+          ]
+        }
+      ],
+      "head": "Square brackets around the number."
+    },
+    "UNTYPESET_CASES/head_glossed": {
+      "items": [
+        {
+          "marker": "a.",
+          "judgment": "",
+          "translation": "'This is an example.'",
+          "annot": "",
+          "tiers": [
+            [
+              "Esto",
+              "es",
+              "un",
+              "ejemplo"
+            ],
+            [
+              "this",
+              "is",
+              "a",
+              "example"
+            ]
+          ]
+        },
+        {
+          "marker": "b.",
+          "judgment": "",
+          "translation": "",
+          "annot": "",
+          "tiers": [
+            [
+              "Otro",
+              "ejemplo"
+            ],
+            [
+              "another",
+              "example"
+            ]
+          ]
+        }
+      ],
+      "head": "As the grammars put it:"
     },
     "BANDED/banded": {
       "items": [

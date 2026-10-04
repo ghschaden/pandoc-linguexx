@@ -289,6 +289,12 @@ numéro**.
   suivi de `.` ou `)` — `a.`, `(b)`, `iii.` La reconnaissance est étroite
   exprès, pour que `Dr.` ou `no.` ne soient pas pris pour des lettres.
 - La lettre peut précéder la ligne objet, ou être seule sur sa ligne.
+- **Une ligne avant les lettres** est le texte qui introduit le
+  paradigme — ce que linguexx place entre `\ex.` et `\a.`. Elle va sur la
+  ligne du numéro, à partir de la colonne des lettres, et `a.` commence la
+  suivante. Une seule ligne, et seulement devant `a.` : tout autre texte
+  avant les lettres est une sélection commencée au milieu d'un exemple, et
+  elle est refusée.
 - **Une lettre de sous-exemple se place exactement là où commence le texte
   d'un exemple principal** — la géométrie de linguexx.
 - Les items peuvent être glosés ou non **dans le même paradigme**, et

@@ -20,7 +20,8 @@ import { untypesetPackage } from "../untypeset.js";
 const FIXTURES = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/fixtures/typed-examples.json", import.meta.url)), "utf-8"));
 
 function builtPackage(lines, formats = [], number = { id: 11, name: "LxEx5", cached: "4" }) {
-  const ex = toExample(parseLines(lines).items);
+  const parsed = parseLines(lines);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const [lay, aj] = prepareSelection(ex, LAYOUT, { formats });
   const { plan } = planTable(ex, lay, { anyJudgment: aj, formats });
   return flatPackage(exampleTable(ex, plan, { number, formats }), { withStyles: true });

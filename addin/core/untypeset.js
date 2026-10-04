@@ -106,6 +106,15 @@ export function readTable(rows) {
   for (const row of rows) {
     if (!row.length) continue;
     if (has(row, NAMES.SPACE_ABOVE) || has(row, NAMES.SPACE_BELOW)) continue;
+    // The text before the first sub-example: the number and one cell across
+    // the rest, which no other row of a paradigm can be -- it has a number,
+    // a letter and its text at least.  It goes back as the line before the
+    // letters, which parseLines reads as the head again.
+    if (marker && out.length === 0 && row.length === 2) {
+      const line = trimTagged(row[1].text);
+      if (strip(line)) out.push(line);
+      continue;
+    }
     if (has(row, NAMES.TRANS_PARA)) {
       const line = rowText(row, lead, false);
       if (strip(line)) out.push(line);

@@ -29,7 +29,8 @@ const FIXTURES = read("../../../tests/fixtures/typed-examples.json");
 const DOCX = read("../../../tests/fixtures/typed-examples.docx.json");
 
 function table(lines, width, drawn) {
-  const ex = toExample(parseLines(lines).items);
+  const parsed = parseLines(lines);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const bodies = ex.body ? [ex.body] : ex.items.map((i) => i.body);
   bodies.forEach((b, k) => { b.translation = drawn[k]; });
   const [layout, anyJudgment] = prepareDocument([ex], { ...LAYOUT, text_width_cm: width });

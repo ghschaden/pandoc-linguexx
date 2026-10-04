@@ -167,7 +167,8 @@ function compare(key, got, want, problems) {
 /** What the Word layer writes for the selection the editor reported. */
 function expected(read) {
   const sel = linesFromRead(read);
-  const ex = toExample(parseLines(sel.lines).items);
+  const parsed = parseLines(sel.lines);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const width = read.widthTwips / TWIPS_PER_CM;
   // the document's face and size, as prepareJob lays it out
   const face = read.font || LAYOUT.font_name;

@@ -22,7 +22,7 @@ const FIXTURES = JSON.parse(readFileSync(
 /** The core's answer in the shape the macro's golden is recorded in. */
 function asGolden(result) {
   if (result.error) return { error: result.error };
-  return {
+  const out = {
     items: result.items.map((it) => ({
       marker: strip(it.marker),
       judgment: it.judgment,
@@ -31,6 +31,9 @@ function asGolden(result) {
       tiers: it.tiers.map((words) => words.map(strip)),
     })),
   };
+  // Recorded only when there is one, as the macro suite records it.
+  if (strip(result.head || "")) out.head = strip(result.head);
+  return out;
 }
 
 test("the golden covers every fixture", () => {

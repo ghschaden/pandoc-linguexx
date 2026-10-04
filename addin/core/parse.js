@@ -149,6 +149,15 @@ export function markerOf(line) {
   return "";
 }
 
+/** Is this marker the first of its sequence -- "a.", "(a)", "A)"? -- LxIsFirstMarker. */
+export function isFirstMarker(marker) {
+  let s = strip(marker);
+  if (!s) return false;
+  s = s.slice(0, -1);
+  if (s[0] === "(") s = s.slice(1);
+  return s.toLowerCase() === "a";
+}
+
 export function looksLikeMarker(line) {
   return markerOf(line).length > 0;
 }
@@ -290,12 +299,22 @@ export function makeItem(marker, body) {
  * comes back as {error} stops the parse, as LxTErr stops LxParseItems.
  */
 export function parseLines(rawLines, make = makeItem) {
-  const lines = rawLines.map(trimTagged).filter((l) => l.length > 0);
+  let lines = rawLines.map(trimTagged).filter((l) => l.length > 0);
   if (lines.length === 0) return { error: "no lines" };
 
   if (!lines.some(looksLikeMarker)) {
     const item = make("", lines);
-    return item.error ? { error: item.error } : { items: [item] };
+    return item.error ? { error: item.error } : { items: [item], head: "" };
+  }
+
+  // One line before the first sub-example, when that one is "a.": the text
+  // linguexx sets between \ex. and \a., on the number's line.  Anything
+  // more -- two lines, or a first letter that is not a -- is still a
+  // selection begun part-way through an example, and refused.
+  let head = "";
+  if (!looksLikeMarker(lines[0]) && lines.length > 1 && isFirstMarker(markerOf(lines[1]))) {
+    head = lines[0];
+    lines = lines.slice(1);
   }
 
   if (!looksLikeMarker(lines[0])) {
@@ -335,5 +354,5 @@ export function parseLines(rawLines, make = makeItem) {
   if (items.length === 0) {
     return { error: "Every selected line is a sub-example letter with nothing after it." };
   }
-  return { items };
+  return { items, head };
 }

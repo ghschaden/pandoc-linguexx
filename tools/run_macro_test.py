@@ -2065,6 +2065,48 @@ def check_wide_example(ctx) -> int:
     return 0
 
 
+def check_head(ctx, out: Path, profile: Path) -> int:
+    """The line before the first sub-example sits where linguexx sets it.
+
+    linguexx puts the text between \\ex. and \\a. on the number's line,
+    starting where the sub-example letters stand, and "a." on the next line
+    (measured off its PDF: both at 165.65pt).  The macro builds the same
+    row as linguexx2odt: the number, then one cell from the marker column
+    to the block's edge.
+    """
+    print("--- head")
+    lines = UNTYPESET_CASES["head"][0]
+    doc = make_doc(ctx, lines)
+    msg = run(ctx)
+    if msg:
+        doc.dispose()
+        print(f"    FAIL: macro said {msg!r}")
+        return 1
+    odt = out / "head.odt"
+    doc.storeToURL(odt.as_uri(), (PropertyValue("FilterName", 0, "writer8", 0),))
+    doc.dispose()
+    words = words_of(render(profile, odt))
+    first = lines[0].split()[0]
+    head = next(((x, y) for t, x, y in words if t == first), None)
+    letter = next(((x, y) for t, x, y in words if t == "a."), None)
+    number = next(((x, y) for t, x, y in words if t == "(1)"), None)
+    if not (head and letter and number):
+        print(f"    FAIL: missing a word: head {head}, a. {letter}, (1) {number}")
+        return 1
+    bad = 0
+    if abs(head[0] - letter[0]) > 0.5:
+        print(f"    FAIL: the head starts at {head[0]:.2f}, the letters at {letter[0]:.2f}")
+        bad += 1
+    # y is a word's top edge, and "(" rises above a capital: same line
+    # within 2pt, where the next line is a whole line (14pt) away.
+    if abs(head[1] - number[1]) > 2.0 or not letter[1] > head[1] + 5:
+        print(f"    FAIL: head at y {head[1]:.2f}, number {number[1]:.2f}, a. {letter[1]:.2f}")
+        bad += 1
+    if not bad:
+        print(f"    ok — head at x {head[0]:.2f} with the letters, on the number's line")
+    return bad
+
+
 def check_untypeset(ctx, out: Path, profile: Path) -> int:
     """An example comes back as the lines it was built from.
 
@@ -2943,6 +2985,7 @@ def main() -> int:
     failures += check_tree_items(ctx)
     failures += check_number_adoption(ctx, out, profile)
     failures += check_wide_example(ctx)
+    failures += check_head(ctx, out, profile)
     failures += check_untypeset(ctx, out, profile)
     failures += check_undo(ctx)
     failures += check_extension(out)
@@ -2952,14 +2995,20 @@ def main() -> int:
 
 def macro_parse(ctx, lines: list[str]) -> dict:
     """What the macro's own parser makes of *lines*, as plain data."""
-    kind, payload = run(ctx, "ParseLinesQuiet", (tuple(lines),))
+    result = run(ctx, "ParseLinesQuiet", (tuple(lines),))
+    kind, payload = result[0], result[1]
     if kind == "error":
         return {"error": payload}
-    return {"items": [
+    out = {"items": [
         {"marker": marker, "judgment": judgment, "translation": translation,
          "annot": annot, "tiers": [list(words) for words in tiers]}
         for marker, judgment, translation, annot, tiers in payload
     ]}
+    # The line before the first sub-example, recorded only when there is
+    # one, so that every golden without one stays as it was.
+    if len(result) > 2 and result[2]:
+        out["head"] = result[2]
+    return out
 
 
 def check_parse_golden(ctx) -> int:
@@ -3040,7 +3089,8 @@ def macro_tree(ctx, lines: list[str]) -> dict:
 def macro_tree_items(ctx, lines: list[str]) -> dict:
     """What the tree command's parse makes of a selection: macro_parse, with
     each item's own lines -- the tree it will be drawn from."""
-    kind, payload = run(ctx, "ParseLinesQuiet", (tuple(lines), True))
+    result = run(ctx, "ParseLinesQuiet", (tuple(lines), True))
+    kind, payload = result[0], result[1]
     if kind == "error":
         return {"error": payload}
     return {"items": [

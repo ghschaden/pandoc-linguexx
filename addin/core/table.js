@@ -106,8 +106,16 @@ export function tableRows(ex, plan) {
   }
 
   let rows = [];
+  // The text before the first sub-example: the number's row, one cell from
+  // the marker column to the block's edge, where linguexx sets it; the
+  // first sub-example then has a row of its own (emit_docx._table).
+  const head = Boolean(ex.head && ex.items && ex.items.length);
+  if (head) {
+    rows.push([cell(widths[0], { kind: "number" }),
+      cell(sum(widths.slice(1)), text(ex.head), widths.length - 1)]);
+  }
   p.bodies.forEach(([marker, body], k) => {
-    rows = rows.concat(bodyRows(marker, body, k === 0, k));
+    rows = rows.concat(bodyRows(marker, body, k === 0 && !head, k));
   });
   // Spacer rows: the space around an example is a style's height, which a
   // user can change for the whole document from one place.

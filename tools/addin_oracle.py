@@ -113,10 +113,13 @@ def example(parse: dict, where: str) -> Example:
     items = parse["items"]
     if len(items) == 1 and not items[0]["marker"]:
         return Example(index=0, placeholder="", body=body(items[0], where))
+    # The line before the first sub-example, when the macro read one: the
+    # converter's Example.head, set on the number's row.
     return Example(index=0, placeholder="", items=tuple(
         Item(level=1, ordinal=k, marker=latex(it["marker"], where),
              body=body(it, where))
-        for k, it in enumerate(items)))
+        for k, it in enumerate(items)),
+        head=latex(parse.get("head", ""), where))
 
 
 def plan(ex: Example, text_width: float, face: str = "Times New Roman") -> dict:

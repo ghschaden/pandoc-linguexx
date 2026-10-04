@@ -500,6 +500,11 @@ grid of the table is the union of what every item and every band produces,
 each word spanning the columns it covers. A letter may lead the object
 language as above or stand alone on its line.
 
+- **One line before the letters** is the text that leads the paradigm —
+  what linguexx sets between `\ex.` and `\a.`. It goes on the number's
+  line, from where the letters stand, and `a.` starts the next one. Only
+  one line, and only in front of `a.`: anything else before the letters is
+  a selection begun part-way through an example, and is refused.
 - **Markers** are a single letter or a roman numeral followed by `.` or
   `)` — `a.`, `(b)`, `iii.`. Deliberately narrow, so `Dr.` and `no.` are
   not mistaken for one. A judgment mark may follow with no space —

@@ -245,7 +245,7 @@ async function typeset(trees = false) {
       const parsed = trees ? parseTreeLines(read.lines) : parseLines(read.lines);
       if (parsed.error) throw new Refusal(parsed.error);
 
-      const ex = toExample(parsed.items);
+      const ex = toExample(parsed.items, 0, parsed.head);
       const width = read.textWidthCm ?? LAYOUT.text_width_cm;
       if (read.textWidthCm === null) {
         notes.push(`Word did not say how wide the text block is; the example is laid out for ${width} cm.`);

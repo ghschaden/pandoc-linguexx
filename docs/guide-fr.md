@@ -483,6 +483,12 @@ personnalisés*).
 
 ## C.1 Les styles disponibles
 
+- **Une ligne avant les lettres** est le texte qui introduit le
+  paradigme — ce que linguexx place entre `\ex.` et `\a.`. Elle va sur la
+  ligne du numéro, à partir de la colonne des lettres, et `a.` commence la
+  suivante. Une seule ligne, et seulement devant `a.` : tout autre texte
+  avant les lettres est une sélection commencée au milieu d'un exemple, et
+  elle est refusée.
 ### Styles de paragraphe
 
 | style | ce qu'il gouverne |

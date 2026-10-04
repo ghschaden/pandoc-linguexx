@@ -70,7 +70,8 @@ test("the job is core/table.js's rows in twips, runs split by format", () => {
   const r = read([{ inTable: false, runs: [run("Ich habe")] }, { inTable: false, runs: [run("I "), run("have", { italic: true })] }]);
   const { job } = prepareJob(r, 1e12);
   const sel = linesFromRead(r);
-  const ex = toExample(parseLines(sel.lines).items);
+  const parsed = parseLines(sel.lines);
+  const ex = toExample(parsed.items, 0, parsed.head);
   const [lay, aj] = prepareSelection(ex, { ...LAYOUT, text_width_cm: 9638 / 566.93 }, { formats: sel.formats });
   const t = tableRows(ex, planTable(ex, lay, { anyJudgment: aj, formats: sel.formats }).plan);
   assert.deepEqual(job.grid, t.grid.map(dxa));
