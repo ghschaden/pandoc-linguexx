@@ -395,8 +395,13 @@ fields made since the document was opened, and none loaded from the file
 -- the converter's or the plugin's own, saved and reopened alike. Trimming
 the instruction's spaces changes nothing. The old examples go on showing
 1, 2, 3 next to the new (1). The test accepts that state and says so if
-it ever changes. Whether OnlyOffice Desktop behaves the same is not yet
-checked; the README says so.
+it ever changes.
+
+OnlyOffice Desktop does renumber them: the same insertion, done by
+hand in the Desktop editor, saved the numbers as 1 to 4 and the
+references as 2, 2, 3, 3. `docx2linguexx` read it back with four
+examples and every reference on its example. So the stale numbers are
+Document Builder's, which the suite runs, and not the editor's.
 
 ### Not done
 

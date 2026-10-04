@@ -744,7 +744,8 @@ builder.CloseFile();
   // matter: in Document Builder 9.4, UpdateAllFields renumbers the fields
   // made in this session and none loaded from the file -- the converter's or
   // the plugin's own, saved and reopened alike (measured 2026-10-04) -- so
-  // the old examples keep 1, 2, 3.  docx2linguexx reads the fields, not
+  // the old examples keep 1, 2, 3.  OnlyOffice Desktop does renumber them
+  // (checked by hand the same day).  docx2linguexx reads the fields, not
   // what they show, and is held to the right numbers below either way.
   const previews = ["Der Kater schlief", "Das kleine Kind schläft", "As the grammars put it:",
     "que Pierre est fatigué [CP]"];
