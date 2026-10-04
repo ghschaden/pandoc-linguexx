@@ -566,6 +566,7 @@ cases are checked through `.odt` too.
 | text before a `\gll` | comes back as a braced first word with nothing beneath it, `\gll {As Cicero puts it,} magnam …`: the converter set it as that column. linguexx sets the gloss 1.65 pt further right than after free text (measured) |
 | LaTeX the converter printed as source (a `tabular` inside an example, `\altg` in a `.docx`) | comes back as that text, escaped, which is what the document shows |
 | a drawn tree (Writer macro, add-ins) | kept as a LaTeX comment holding the bracket notation it was typed as, and the run says so; the notation is the macro's, not forest's, and is not translated |
+| sub-examples typed `i.`, `ii.` at the first level (the Writer macro and the add-ins accept them) | come back lettered, `a.`, `b.`, with a warning: linguexx letters the first level, and its `\Exalph` switch is document-wide |
 | a sub-example marker "i." after "h." | read as the ninth letter, not as a deeper level: the table does not say which, and linguexx would print both the same |
 | a glossed example with one sub-example, no translation and no judgment | read as no sub-example: nothing in the table tells the marker column from a first gloss word |
 | tracked changes | read as accepted, as pandoc reads the prose |

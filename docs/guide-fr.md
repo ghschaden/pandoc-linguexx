@@ -283,6 +283,7 @@ par cellule. Six cas sont aussi vérifiés en passant par `.odt`.
 | texte avant un `\gll` | revient comme un premier mot entre accolades sans rien dessous, `\gll {As Cicero puts it,} magnam …` : le convertisseur l'a placé dans cette colonne. linguexx place alors la glose 1,65 pt plus à droite qu'après du texte libre (mesuré) |
 | LaTeX que le convertisseur a imprimé tel quel (un `tabular` dans un exemple, `\altg` dans un `.docx`) | revient comme ce texte, échappé : c'est ce que montre le document |
 | un arbre dessiné (macro Writer, compléments) | gardé en commentaire LaTeX contenant la notation à crochets dans laquelle il a été tapé, et l'exécution le signale ; cette notation est celle de la macro, pas celle de forest, et n'est pas traduite |
+| sous-exemples tapés `i.`, `ii.` au premier niveau (la macro Writer et les compléments les acceptent) | reviennent avec des lettres, `a.`, `b.`, et un avertissement : linguexx numérote le premier niveau par des lettres, et son réglage `\Exalph` vaut pour tout le document |
 | une marque de sous-exemple « i. » après « h. » | lue comme la neuvième lettre, pas comme un niveau inférieur : le tableau ne dit pas lequel, et linguexx imprimerait les deux pareil |
 | un exemple glosé à un seul sous-exemple, sans traduction ni jugement | lu comme sans sous-exemple : rien dans le tableau ne distingue la colonne des marques d'un premier mot glosé |
 | modifications suivies | lues comme acceptées, comme pandoc lit le texte |

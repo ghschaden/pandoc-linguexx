@@ -2107,6 +2107,123 @@ def check_head(ctx, out: Path, profile: Path) -> int:
     return bad
 
 
+def _reverse_view_of_parse(parse: dict) -> dict:
+    """The macro's parse of typed lines, as the examples linguexx should get."""
+    def body(it):
+        tiers = [list(t) for t in it["tiers"]]
+        glossed = len(tiers) > 1
+        return {"judgment": it["judgment"],
+                "text": " ".join(tiers[0]) if tiers and not glossed else "",
+                "tiers": tiers if glossed else [],
+                "translation": it["translation"], "annot": it["annot"]}
+    items = parse["items"]
+    if len(items) == 1 and not items[0]["marker"]:
+        return {"head": parse.get("head", ""), "body": body(items[0]), "items": []}
+    return {"head": parse.get("head", ""), "body": None,
+            "items": [(it["marker"], body(it)) for it in items]}
+
+
+def _reverse_view_of_tex(tex: str) -> dict | None:
+    """What a LaTeX document's one example reads as, in that shape: every
+    field as the text the converter's own renderer draws, quotes folded."""
+    from linguexx2odt.extract import parse
+    from linguexx2odt.inline import InlineRenderer
+
+    res = parse(tex)
+    if len(res.examples) != 1:
+        return None
+    r = InlineRenderer()
+    r.labels, r.brackets, r.macros = res.labels, res.brackets, res.macros
+    fold = str.maketrans({"`": "'", "\u2018": "'", "\u2019": "'"})
+
+    def text(latex: str) -> str:
+        return " ".join("".join(t for t, _ in r.runs(latex)).split()).translate(fold)
+
+    def body(b):
+        tiers = [[text(c) for c in t.cells] for t in b.tiers]
+        for t in tiers:
+            while t and not t[-1]:
+                t.pop()
+        return {"judgment": text(b.judgment), "text": text(b.text), "tiers": tiers,
+                "translation": text(" ".join(x for x in (b.translation, b.source) if x)),
+                "annot": text(b.annot)}
+    ex = res.examples[0]
+    return {"head": text(ex.head), "body": body(ex.body) if ex.body else None,
+            "items": [(it.marker, body(it.body)) for it in ex.items]}
+
+
+#: Typed examples the way back cannot give back as typed, and why.  Each must
+#: still differ, and the run must have said so: an exception that outlives
+#: its cause hides the next difference.
+REVERSE_KNOWN = {
+    "SUB_CASES/sub_roman":
+        "sub-examples typed i., ii. at the first level: linguexx letters the "
+        "first level (\\Exalph, document-wide, which the converter does not "
+        "read), so they come back as a., b., with a warning",
+}
+
+
+def check_reverse(ctx, out: Path) -> int:
+    """docx2linguexx on what the macro typesets: the way back, for tables the
+    macro built rather than the converter.
+
+    Every typed-line fixture is typeset in Writer, saved through LibreOffice's
+    Word export -- the exporter odt2linguexx itself runs -- and read back to
+    LaTeX.  The example linguexx then reads must be the macro's own parse of
+    the typed lines (the recorded golden), field for field: the converter's
+    round trips never saw the macro's tables, which always reserve a judgment
+    column and are merged in Writer rather than spanned.
+    """
+    from linguexx2odt import reverse
+
+    print("--- reverse (docx2linguexx on the macro's tables)")
+    fold = str.maketrans({"`": "'", "\u2018": "'", "\u2019": "'"})
+    bad = 0
+    n = 0
+    for group, cases in FIXTURES.items():
+        if group.startswith("_") or group in ("parsed", "REFUSE"):
+            continue
+        for name, case in cases.items():
+            key = f"{group}/{name}"
+            doc = make_doc(ctx, case["lines"])
+            msg = run(ctx)
+            if msg:
+                doc.dispose()
+                print(f"    FAIL: {key}: typesetting said {msg!r}")
+                bad += 1
+                continue
+            docx = out / f"reverse-{group}-{name}.docx"
+            doc.storeToURL(docx.as_uri(), (PropertyValue("FilterName", 0, "MS Word 2007 XML", 0),))
+            doc.dispose()
+            tex = docx.with_suffix(".tex")
+            warnings: list[str] = []
+            reverse.convert(docx, tex, warnings.append)
+            # Both sides through JSON, so a pair is a list on each.
+            got = json.loads(json.dumps(_reverse_view_of_tex(tex.read_text(encoding="utf-8")),
+                                        ensure_ascii=False))
+            want = json.loads(json.dumps(_reverse_view_of_parse(FIXTURES["parsed"][key]),
+                                         ensure_ascii=False).translate(fold))
+            n += 1
+            if key in REVERSE_KNOWN:
+                if got == want or not warnings:
+                    print(f"    FAIL: {key} is listed in REVERSE_KNOWN but "
+                          f"{'now reads back as typed' if got == want else 'gave no warning'}")
+                    bad += 1
+                else:
+                    print(f"    known — {key}: {REVERSE_KNOWN[key]}")
+                continue
+            if got != want:
+                print(f"    FAIL: {key}\n      want {json.dumps(want, ensure_ascii=False)[:400]}"
+                      f"\n      got  {json.dumps(got, ensure_ascii=False)[:400]}"
+                      + (f"\n      warnings {warnings}" if warnings else ""))
+                bad += 1
+    if not bad:
+        known = sum(1 for k in REVERSE_KNOWN if k.split("/")[0] in FIXTURES)
+        print(f"    ok — {n - known} typeset examples read back as the macro "
+              f"parsed them, {known} known exception(s)")
+    return bad
+
+
 def check_untypeset(ctx, out: Path, profile: Path) -> int:
     """An example comes back as the lines it was built from.
 
@@ -2986,6 +3103,7 @@ def main() -> int:
     failures += check_number_adoption(ctx, out, profile)
     failures += check_wide_example(ctx)
     failures += check_head(ctx, out, profile)
+    failures += check_reverse(ctx, out)
     failures += check_untypeset(ctx, out, profile)
     failures += check_undo(ctx)
     failures += check_extension(out)

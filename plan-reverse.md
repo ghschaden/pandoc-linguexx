@@ -355,6 +355,23 @@ taken from the add-in pane with `getFileAsync`.
   it as `\ref{ex:1}`, and every old reference follows its example, though
   Word on the web still shows the old numbers.
 
+### Tables the Writer macro built (2026-10-04)
+
+The converter's round trips never saw the macro's tables. Those always
+reserve a judgment column and are merged in Writer rather than spanned.
+`check_reverse` in `tools/run_macro_test.py` now typesets every
+typed-line fixture in Writer and saves it through LibreOffice's Word
+export, the exporter `odt2linguexx` runs. It reads the result back and
+requires the macro's own recorded parse of the lines, field for field.
+
+- 38 of 39 match.
+- The exception is listed in `REVERSE_KNOWN`: `SUB_CASES/sub_roman`,
+  whose sub-examples are typed `i.`, `ii.` at the first level. linguexx
+  letters the first level (`\Exalph` is document-wide, and the converter
+  does not read it), so they come back as `a.`, `b.`, with a warning.
+- The check fails if a known exception starts matching, or stops warning.
+- CI runs it in the macro job, which already has pandoc.
+
 ### Not done
 
 - **Trees** come back as a comment holding the macro's bracket notation,
