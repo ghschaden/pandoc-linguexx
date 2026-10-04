@@ -55,6 +55,25 @@ export function freshBookmark(existing, now = Date.now()) {
 }
 
 /**
+ * Which of a number field's bookmarks are that example's own: those round
+ * exactly one example number.  Word reports every bookmark that encloses a
+ * field, and one round several numbers belongs to none of them -- pandoc
+ * ends a section heading's bookmark after the section's last paragraph, so
+ * in a converted document the heading's label enclosed every example, came
+ * first in each field's list, and every example was listed as (4) and every
+ * reference made to the heading (measured, Word on the web, 2026-10-04).
+ * Returns field -> its own bookmarks.
+ */
+export function ownBookmarks(fields) {
+  const count = {};
+  for (const f of fields) {
+    if (!isExampleNumber(f.code)) continue;
+    for (const b of new Set(f.bookmarks || [])) count[b] = (count[b] || 0) + 1;
+  }
+  return (f) => (f.bookmarks || []).filter((b) => count[b] === 1);
+}
+
+/**
  * The numbering as it should be.  *fields* is every field in document
  * order as {code, shown, bookmarks}, bookmarks being those round the field.
  * Returns {numbers: bookmark -> number, stale: [...]}, stale listing every
@@ -64,11 +83,12 @@ export function freshBookmark(existing, now = Date.now()) {
 export function audit(fields) {
   const numbers = {};
   const stale = [];
+  const own = ownBookmarks(fields);
   let n = 0;
   for (const f of fields) {
     if (!isExampleNumber(f.code)) continue;
     n += 1;
-    for (const b of f.bookmarks || []) numbers[b] = n;
+    for (const b of own(f)) numbers[b] = n;
     if (String(f.shown).trim() !== String(n)) stale.push({ kind: "number", shown: f.shown, want: n });
   }
   for (const f of fields) {

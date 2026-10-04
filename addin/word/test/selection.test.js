@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 
 import { parseLines, strip } from "../../core/parse.js";
 import { readSelection } from "../selection.js";
-import { audit, freshBookmark, numberAt, refTarget, staleMessage } from "../numbering.js";
+import { audit, freshBookmark, numberAt, ownBookmarks, refTarget, staleMessage } from "../numbering.js";
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 function pkg(body, styles = "") {
@@ -183,4 +183,21 @@ test("a reference to some other bookmark is not an example's, and not stale", ()
     f(" REF LxEx1 \\h ", "1"),
   ]);
   assert.deepEqual(stale, []);
+});
+
+test("a bookmark round several examples is none of theirs -- a section's label", () => {
+  // A converted document in Word on the web: pandoc's heading bookmark ends
+  // after the section, so Word reports it round every number, first.  It
+  // listed every example as (4) and sent a new reference to the heading.
+  const sec = "word-round-trip";
+  const fields = [
+    f(" SEQ NumEx \\* ARABIC ", "1", [sec, "LxExNew"]),
+    f(" SEQ NumEx \\* ARABIC ", "1", [sec, "NumEx0"]),
+    f(" SEQ NumEx \\* ARABIC ", "2", [sec, "NumEx1"]),
+    f(" REF NumEx0 \\h ", "1"),
+  ];
+  assert.deepEqual(audit(fields).numbers, { LxExNew: 1, NumEx0: 2, NumEx1: 3 });
+  const own = ownBookmarks(fields);
+  assert.deepEqual(fields.slice(0, 3).map((x) => own(x)[0]), ["LxExNew", "NumEx0", "NumEx1"]);
+  assert.deepEqual(audit(fields).stale.filter((s) => s.kind === "reference").map((s) => s.want), [2]);
 });

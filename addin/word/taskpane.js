@@ -29,7 +29,7 @@ import { advancesFor } from "../core/measure.js";
 import { looksLikeMarker, parseLines, strip } from "../core/parse.js";
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
-import { audit, freshBookmark, isExampleNumber, numberAt, refTarget, staleMessage } from "./numbering.js";
+import { audit, freshBookmark, isExampleNumber, numberAt, ownBookmarks, refTarget, staleMessage } from "./numbering.js";
 import { drawTree, parseTreeLines } from "../core/tree.js";
 import { MAX_DRAWING_ID, treeRun } from "./drawing.js";
 import { AFTER_EXAMPLE, exampleTable, flatPackage, sequenceRef } from "./ooxml.js";
@@ -466,6 +466,7 @@ async function listExamples() {
   await Word.run(async (ctx) => {
     const every = await allFields(ctx);
     const { numbers } = audit(every);
+    const own = ownBookmarks(every);
     const fields = every.filter((f) => isExampleNumber(f.code));
     // The preview is the row holding the number, not the table's first
     // row: Word joins adjacent tables (S6 fact 3), so a converted document's
@@ -485,7 +486,7 @@ async function listExamples() {
     });
     await ctx.sync();
     fields.forEach((f, i) => {
-      const bookmark = f.bookmarks[0];
+      const bookmark = own(f)[0];
       if (!bookmark) return;
       const text = rows[i] ? rows[i].values[0].slice(1).join(" ")
         : paras[i].text.replace(/^\s*\(?\s*\d+\s*\)?/, "");

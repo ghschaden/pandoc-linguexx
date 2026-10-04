@@ -327,18 +327,36 @@ After these fixes `KNOWN_FORWARD_LOSSES` is empty. Every golden gained
 its head and `trailing-translation` its first column, without the false
 warning).
 
+### S8: files saved by Word itself (2026-10-04)
+
+Run in Word on the web (Chromium driven over CDP). Word's own file was
+taken from the add-in pane with `getFileAsync`.
+
+- **Round 1, the converted document, unedited:** Word rewrote the file
+  (12,190 bytes against 11,798) and kept every bookmark (`NumEx0`...), every
+  `SEQ`/`REF` field and every `Lx*` style. `docx2linguexx` gives LaTeX
+  identical to the converter's own file.
+- **Round 2, an example typeset and a reference inserted through the Word
+  add-in:** this found two add-in bugs, both fixed and re-run.
+  - **Styles dropped.** Word on the web drops a `w:pStyle` or `w:rStyle`
+    that the inserted package does not define, even when the document has
+    the style. The add-in sent the definitions only to a document lacking
+    them, so in a converted document a typeset example was "Normal"
+    throughout, which no reader recognises as an example. It now always
+    sends them. The document's own definition wins, so a style the user
+    changed stays changed (measured).
+  - **Wrong bookmark.** Pandoc's section bookmark ends after the section,
+    so Word reports it around every number. The add-in took the first
+    bookmark as each example's, which listed every example as (4) and
+    pointed a new reference at the heading. An example's own bookmark is
+    now one round exactly one number (`numbering.ownBookmarks`).
+
+  After the fixes, the new example comes back as `ex:1`, the reference to
+  it as `\ref{ex:1}`, and every old reference follows its example, though
+  Word on the web still shows the old numbers.
+
 ### Not done
 
-- **S8, a file saved by Word itself.** The tests rewrite a converted file
-  the way Word writes:
-  - `w:fldSimple`;
-  - `_Ref` bookmark names;
-  - tracked changes;
-  - direct italics;
-  - a tree drawing.
-
-  No file actually saved by Word or OnlyOffice has been read yet. That is
-  the next measurement, through Word on the web as the add-in was tested.
 - **Trees** come back as a comment holding the macro's bracket notation,
   with a warning. Translating that notation to forest is a question of
   its own: bare leaves and `,name=` options look as if they read
