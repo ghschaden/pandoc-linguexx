@@ -55,5 +55,8 @@ export function untypesetPackage(tableOoxml, id = 1) {
     }
     return `<w:p>${head}${runs(line, t.formats)}</w:p>`;
   });
-  return { pkg: flatPackage(paragraphs.join("")), lines: got.lines, number: t.number, formats: t.formats };
+  // With the styles: Word on the web drops a run's LxLeipzig when the package
+  // does not define it, even in a document that has it (measured, 2026-10-04),
+  // as it drops a cell's paragraph style (taskpane.js).
+  return { pkg: flatPackage(paragraphs.join(""), { withStyles: true }), lines: got.lines, number: t.number, formats: t.formats };
 }

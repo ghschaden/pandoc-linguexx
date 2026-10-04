@@ -35,7 +35,6 @@ import { MAX_DRAWING_ID, treeRun } from "./drawing.js";
 import { AFTER_EXAMPLE, exampleTable, flatPackage, sequenceRef } from "./ooxml.js";
 import { readSelection } from "./selection.js";
 import { untypesetPackage } from "./untypeset.js";
-import { STYLE_IDS } from "./styles.js";
 
 const POINTS_PER_CM = 72 / 2.54;
 const LAYOUT_FIELDS = ["indentCm", "numberCm", "markerCm", "aboveCm", "belowCm"];
@@ -231,8 +230,6 @@ async function typeset(trees = false) {
       const every = ctx.document.body.fields;
       every.load("items/code");
       const marks = ctx.document.body.getRange("Whole").getBookmarks(true, true);
-      const styles = ctx.document.getStyles();
-      styles.load("items/nameLocal");
       // The face the lines are typed in is the face the example is set in
       // and measured for -- Word reports it resolved ("Aptos", not a theme
       // slot).
@@ -290,12 +287,17 @@ async function typeset(trees = false) {
         return treeRun(d.shapes, { id: drawingId(), source: d.source, formats: read.formats, face, halfPoints });
       };
       const table = exampleTable(ex, plan, { number: { id, name, cached: String(n) }, formats: read.formats, tree });
-      const have = new Set(styles.items.map((s) => s.nameLocal));
-      const withStyles = STYLE_IDS.some((s) => !have.has(s));
-
+      // The styles go with every example, not only into a document that
+      // lacks them.  Word on the web drops a w:pStyle the inserted package
+      // does not define, even when the document has the style: a table
+      // typeset into a converted document came out "Normal" throughout,
+      // an example to no reader.  And a definition the document already
+      // has is not overwritten -- the document's own wins, so a style the
+      // user changed stays changed (both measured, Word on the web,
+      // 2026-10-04).
       inserting = true;
       sel.insertOoxml(flatPackage(table + AFTER_EXAMPLE,
-        { withStyles, defaults: { face, halfPoints } }), "Replace");
+        { withStyles: true, defaults: { face, halfPoints } }), "Replace");
       await ctx.sync();
     });
   } catch (e) {
