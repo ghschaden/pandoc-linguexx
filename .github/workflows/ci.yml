@@ -142,6 +142,16 @@ jobs:
           echo "${DOCBUILDER_SHA256}  /tmp/docbuilder.tar.xz" | sha256sum -c -
           mkdir -p ~/documentbuilder
           tar xJf /tmp/docbuilder.tar.xz -C ~/documentbuilder
+      # The converter, for the converted paper the plugin typesets into, and
+      # docx2linguexx, which reads the result back.  Without it that check
+      # fails rather than skipping: a check that skips in CI is the silent
+      # green this workflow exists to prevent.
+      - name: Install pandoc
+        run: |
+          curl -sSL --retry 3 -o /tmp/pandoc.deb \
+            "https://github.com/jgm/pandoc/releases/download/${PANDOC_VER}/pandoc-${PANDOC_VER}-1-amd64.deb"
+          sudo dpkg -i /tmp/pandoc.deb
+          pandoc --version | head -1
       - name: Run the plugin in Document Builder
         env:
           DOCBUILDER: /home/runner/documentbuilder/opt/onlyoffice/documentbuilder/docbuilder

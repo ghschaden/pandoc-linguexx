@@ -372,6 +372,32 @@ requires the macro's own recorded parse of the lines, field for field.
 - The check fails if a known exception starts matching, or stops warning.
 - CI runs it in the macro job, which already has pandoc.
 
+### Typeset into a converted paper, in OnlyOffice (2026-10-04)
+
+The Word test's second round, run automatically in Document Builder
+(`tools/run_onlyoffice_test.mjs`, "converted"):
+
+- The converter writes `tests/fixtures/converted-paper.tex` as a `.docx`.
+- The plugin's own commands typeset an example ahead of the others and
+  complete a bracketed reference to it, as its button pastes one.
+- `docx2linguexx` then reads every example, label and reference back
+  right: the new example as `ex:1`, the old ones renumbered.
+
+Neither Word bug is present here:
+
+- The plugin builds its tables with the builder API, so no styles are
+  dropped.
+- Its example list only takes a bookmark round a bare number, so the
+  section's bookmark doesn't qualify.
+
+One host finding: Document Builder 9.4's `UpdateAllFields` renumbers the
+fields made since the document was opened, and none loaded from the file
+-- the converter's or the plugin's own, saved and reopened alike. Trimming
+the instruction's spaces changes nothing. The old examples go on showing
+1, 2, 3 next to the new (1). The test accepts that state and says so if
+it ever changes. Whether OnlyOffice Desktop behaves the same is not yet
+checked; the README says so.
+
 ### Not done
 
 - **Trees** come back as a comment holding the macro's bracket notation,

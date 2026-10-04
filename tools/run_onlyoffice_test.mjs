@@ -684,6 +684,103 @@ builder.CloseFile();
   console.log(`--- trees: paradigm (${log.res && log.res.number}), untypeset to ${back.length} lines and back as ` +
     `(${log.again && log.again.number}); ${inTable.length} drawings in the table, ${outside.length} outside; ${labels} labels`);
 }
+// -- a converted document: typeset into it, refer to it, read it back --------
+//
+// Every scenario above starts from an empty document.  A converted one is
+// where the Word add-in failed in Word on the web (plan-reverse.md, S8): its
+// styles already exist and a section's bookmark encloses every example.  So
+// the converter writes tests/fixtures/converted-paper.tex as .docx, the
+// plugin typesets an example ahead of the others and completes a reference
+// to it, and docx2linguexx must read every example, number and reference
+// back -- the new one first, the old ones renumbered.
+
+const converted = join(OUT, "converted.docx");
+const typesetInto = join(OUT, "converted-typeset.docx");
+try {
+  execFileSync("python3", ["-m", "linguexx2odt", join(ROOT, "tests/fixtures/converted-paper.tex"),
+    "--to", "docx", "-o", converted, "-q"],
+  { cwd: ROOT, env: { ...process.env, PYTHONPATH: join(ROOT, "src") }, stdio: ["ignore", "ignore", "pipe"] });
+} catch (e) {
+  problems.push(`converted: the converter did not run (pandoc and python3 are needed): ${String(e.stderr || e).slice(0, 200)}`);
+}
+if (existsSync(converted)) {
+  run(`builder.OpenFile(${JSON.stringify(converted)});
+${bundle}
+if (typeof Asc.scope !== "object" || !Asc.scope) Asc.scope = {};
+var doc = Api.GetDocument();
+var log = {};
+try {
+  var at = -1;
+  for (var i = 0; i < doc.GetElementsCount(); i++) {
+    var el = doc.GetElement(i);
+    if (el.GetClassType() === "paragraph" && el.GetText().trim() === "A glossed example comes first.") { at = i; break; }
+  }
+  if (at < 0) throw new Error("the paragraph to typeset after is not there");
+  var lines = ["Der Kater schlief", "the tomcat slept", "‘The tomcat slept.’"];
+  for (var l = 0; l < lines.length; l++) { var p = Api.CreateParagraph(); p.AddText(lines[l]); doc.AddElement(at + 1 + l, p); }
+  doc.GetElement(at + 1).GetRange().ExpandTo(doc.GetElement(at + lines.length).GetRange()).Select();
+  var prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 30);
+  if (prep.refusal) throw new Error("typeset refused: " + prep.refusal);
+  Asc.scope.job = prep.job;
+  log.res = LinguExx.insertExample();
+  log.bookmark = prep.job.bookmark;
+  log.list = LinguExx.listExamples().map(function (e) { return "(" + e.number + ") " + e.preview; });
+  // As the plugin's button pastes it: in brackets, the box "bare" unticked.
+  doc.GetElement(at).AddText(" Compare (LXREFnew)");
+  Asc.scope.ref = { placeholder: "LXREFnew", bookmark: log.bookmark };
+  log.ref = LinguExx.completeReference();
+} catch (e) { log.error = String(e && e.stack || e); }
+builder.SaveFile("docx", ${JSON.stringify(typesetInto)});
+var out = Api.CreateParagraph(); out.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, out);
+builder.SaveFile("docx", ${JSON.stringify(typesetInto + ".log.docx")});
+builder.CloseFile();
+`, "converted");
+
+  const fail = (m) => problems.push(`converted: ${m}`);
+  const first = findAll(parse(unzip(`${typesetInto}.log.docx`, "word/document.xml")), "w:p")[0];
+  const log = JSON.parse(findAll(first, "w:t").map(textOf).join("").replace(/^LXRESULT/, ""));
+  if (log.error) fail(log.error);
+  // The examples in order, the new one first.  Their numbers are another
+  // matter: in Document Builder 9.4, UpdateAllFields renumbers the fields
+  // made in this session and none loaded from the file -- the converter's or
+  // the plugin's own, saved and reopened alike (measured 2026-10-04) -- so
+  // the old examples keep 1, 2, 3.  docx2linguexx reads the fields, not
+  // what they show, and is held to the right numbers below either way.
+  const previews = ["Der Kater schlief", "Das kleine Kind schläft", "As the grammars put it:",
+    "que Pierre est fatigué [CP]"];
+  const listed = (log.list || []).map((s) => s.replace(/^\(\d+\) /, ""));
+  const shown = (log.list || []).map((s) => (s.match(/^\((\d+)\)/) || [])[1]).join(",");
+  if (JSON.stringify(listed) !== JSON.stringify(previews)) fail(`the plugin lists ${JSON.stringify(log.list)}`);
+  if (shown === "1,2,3,4") console.log("--- converted: the reopened document's numbers were renumbered -- " +
+    "OnlyOffice now updates loaded fields; the README's OnlyOffice row can say so");
+  else if (shown !== "1,1,2,3") fail(`the plugin shows numbers ${shown}`);
+  let tex = "";
+  try {
+    const back = join(OUT, "converted-typeset.tex");
+    execFileSync("python3", ["-m", "linguexx2odt.reverse", typesetInto, "-o", back, "-q"],
+      { cwd: ROOT, env: { ...process.env, PYTHONPATH: join(ROOT, "src") }, stdio: ["ignore", "ignore", "pipe"] });
+    tex = readFileSync(back, "utf-8");
+  } catch (e) {
+    fail(`docx2linguexx did not run: ${String(e.stderr || e).slice(0, 200)}`);
+  }
+  for (const line of [
+    "A glossed example comes first. Compare \\ref{ex:1}",
+    "\\ex.\\label{ex:1} \\gll Der Kater schlief\\\\",
+    "\\ex.\\label{ex:2} \\gll Das {kleine Kind} schläft\\\\",
+    "\\ex.\\label{ex:3} As the grammars put it:",
+    "\\a.\\label{ex:3a} *\\gll Der Hund schlafen\\\\",
+    "\\b.\\label{ex:3b} Der Hund schläft.",
+    "\\ex. que Pierre est fatigué\\exannot{[CP]}",
+    "See \\ref{ex:2}, \\pref{ex:2}, \\ref{ex:3a} and \\ref{ex:3b}.",
+    "referring to \\ref{ex:3}.}",
+  ]) {
+    if (tex && !tex.includes(line)) fail(`docx2linguexx gives no ${JSON.stringify(line)}`);
+  }
+  const examples = (tex.match(/^\\ex\./gm) || []).length;
+  if (tex && examples !== 4) fail(`${examples} examples came back, not 4`);
+  console.log(`--- converted: typeset as (${log.res && log.res.number}) into a converted paper; ` +
+    `listed ${JSON.stringify(log.list)}; ${examples} examples back through docx2linguexx`);
+}
 if (problems.length) {
   console.log(problems.slice(0, 40).map((p) => `    FAIL: ${p}`).join("\n"));
   if (problems.length > 40) console.log(`    ... and ${problems.length - 40} more`);
