@@ -386,3 +386,6 @@ Decided since, and no longer open:
   pdflatex. The run warns at each such reference
   (`extract._warn_sub_sub_references`), rather than print a wrong number
   quietly.
+- **Round-tripping ODT→LaTeX** (2026-10-04): built for documents whose
+  examples this project made (`docx2linguexx`, `odt2linguexx`;
+  plan-reverse.md, tier A). Documents typed freehand (tier B) remain open.

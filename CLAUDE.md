@@ -24,6 +24,17 @@ with Document Builder pinned to 9.4.0 by SHA-256. Its
 free build watermarks the page header; nothing in the test reads headers,
 and a check that ever renders to PDF must skip that band.
 
+A fourth is the way back: `docx2linguexx` and `odt2linguexx`
+(`reverse.py`, `untypeset.py`; plan-reverse.md, tier A), for documents
+whose examples this project made. It reads `document.xml` rather than
+pandoc's AST, which drops an empty paragraph's style (every spacer row)
+and every field. An `.odt` goes through LibreOffice to `.docx`, because
+pandoc's ODT reader drops the text of references. Its oracle is the
+forward path: `parse(tex)` must equal the parse of the round trip, over
+`tests/cases` and the linguexx corpus (`tests/test_reverse.py`). A
+document the forward path loses text from is listed in
+`KNOWN_FORWARD_LOSSES` with the reason, not dropped from the run.
+
 ## Environment
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a
   versioned interface), LibreOffice for the rendering half, poppler for

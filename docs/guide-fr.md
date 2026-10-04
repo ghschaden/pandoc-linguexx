@@ -242,6 +242,55 @@ tableau dit lequel :
 Lisez les avertissements : ils désignent précisément les endroits à
 reprendre à la main.
 
+## A.7 Le chemin du retour : `docx2linguexx` et `odt2linguexx`
+
+Un document passé par Word ou Writer, et modifié là-bas, peut revenir en
+LaTeX :
+
+```
+docx2linguexx article.docx -o article.tex
+odt2linguexx  article.odt  -o article.tex
+PYTHONPATH=src python3 -m linguexx2odt.reverse article.docx   # depuis une copie du dépôt
+```
+
+Chaque tableau d'exemple redevient un exemple linguexx, avec ses lignes,
+ses groupes entre accolades, ses jugements, ses sous-exemples (sur les
+deux niveaux), sa traduction et son `\exannot`. Chaque renvoi à un exemple
+redevient un `\ref` ou un `\pref` avec une étiquette. Le reste du document
+passe par l'écrivain LaTeX de pandoc, dont le modèle reçoit
+`\usepackage[lazy]{linguexx}`.
+
+L'outil vaut pour les documents dont les exemples viennent de ce projet :
+le convertisseur, la macro Writer, ou les compléments Word et OnlyOffice.
+Il lit les styles de paragraphe qu'ils posent sur chaque cellule
+(`LxExampleCell`, `LxTranslation`, …) et les champs de numéro et de
+renvoi. Un exemple tapé à la main, avec des tabulations, des espaces ou un
+tableau de l'auteur, n'est pas reconnu : il revient comme le texte ou le
+tableau qu'en fait pandoc.
+
+Un `.odt` est d'abord enregistré en `.docx` par LibreOffice, qui doit donc
+être installé : le lecteur ODT de pandoc perd le texte de tous les renvois.
+
+La vérification est le convertisseur lui-même. Chaque document de test, et
+chaque document de la suite de tests de linguexx, est converti en `.docx`
+puis ramené, et doit redonner les mêmes exemples que l'original, cellule
+par cellule. Six cas sont aussi vérifiés en passant par `.odt`.
+
+| construction | ce qui se passe |
+|---|---|
+| étiquettes | engendrées (`ex:1`, `ex:2a`) ; le document n'a jamais eu celles de l'auteur. Seul un exemple auquel quelque chose renvoie en reçoit une |
+| `\exsource` | revient dans la traduction (`\glt`) : le convertisseur l'a placé sur la même ligne |
+| texte avant un `\gll` | revient comme un premier mot entre accolades sans rien dessous, `\gll {As Cicero puts it,} magnam …` : le convertisseur l'a placé dans cette colonne. linguexx place alors la glose 1,65 pt plus à droite qu'après du texte libre (mesuré) |
+| LaTeX que le convertisseur a imprimé tel quel (un `tabular` dans un exemple, `\altg` dans un `.docx`) | revient comme ce texte, échappé : c'est ce que montre le document |
+| un arbre dessiné (macro Writer, compléments) | gardé en commentaire LaTeX contenant la notation à crochets dans laquelle il a été tapé, et l'exécution le signale ; cette notation est celle de la macro, pas celle de forest, et n'est pas traduite |
+| une marque de sous-exemple « i. » après « h. » | lue comme la neuvième lettre, pas comme un niveau inférieur : le tableau ne dit pas lequel, et linguexx imprimerait les deux pareil |
+| un exemple glosé à un seul sous-exemple, sans traduction ni jugement | lu comme sans sous-exemple : rien dans le tableau ne distingue la colonne des marques d'un premier mot glosé |
+| modifications suivies | lues comme acceptées, comme pandoc lit le texte |
+| petites capitales dans un exemple | `\lpzg` : dans un exemple, ce sont des étiquettes de glose. Cela vaut pour les petites capitales posées à la main (un document fait dans Writer ou Word, où la macro et les compléments gardent ce qui a été tapé), pour un style de caractère de l'auteur qui les applique, et pour le style `LxLeipzig` du convertisseur, `\textsc` d'un `.docx` compris. La ponctuation aux deux bouts de petites capitales tapées reste dehors : `-pst.` revient en `-\lpzg{pst}.`. `LxLeipzig` revient tel que l'auteur l'avait écrit dans `\lpzg`. Un `\textsc` converti en `.odt` garde son propre style et revient en `\textsc`. Les petites capitales du texte courant sont celles de pandoc, `\textsc` |
+| italique, gras posés à la main dans une cellule | `\textit`, `\textbf` |
+| la mise en page | non relue : linguexx calcule ses propres largeurs et bandes |
+| le texte courant | celui de pandoc : son modèle charge microtype et parskip, donc les paragraphes ne sont pas en retrait et une ligne qui commence par un guillemet le fait légèrement déborder |
+
 ---
 
 # Partie B — la macro Writer `LinguExx.bas`
@@ -434,6 +483,12 @@ Points à connaître :
   des lettres de sous-exemple.
 - La lettre peut **précéder la ligne objet** (comme ci-dessus) ou être
   **seule sur sa ligne**.
+- **Une ligne avant les lettres** est le texte qui introduit le
+  paradigme — ce que linguexx place entre `\ex.` et `\a.`. Elle va sur la
+  ligne du numéro, à partir de la colonne des lettres, et `a.` commence la
+  suivante. Une seule ligne, et seulement devant `a.` : tout autre texte
+  avant les lettres est une sélection commencée au milieu d'un exemple, et
+  elle est refusée.
 - **Une lettre de sous-exemple se place exactement là où commence le
   texte d'un exemple principal.** C'est la géométrie de linguexx, et c'est
   la raison pour laquelle la colonne de jugement est prélevée sur la
@@ -483,12 +538,6 @@ personnalisés*).
 
 ## C.1 Les styles disponibles
 
-- **Une ligne avant les lettres** est le texte qui introduit le
-  paradigme — ce que linguexx place entre `\ex.` et `\a.`. Elle va sur la
-  ligne du numéro, à partir de la colonne des lettres, et `a.` commence la
-  suivante. Une seule ligne, et seulement devant `a.` : tout autre texte
-  avant les lettres est une sélection commencée au milieu d'un exemple, et
-  elle est refusée.
 ### Styles de paragraphe
 
 | style | ce qu'il gouverne |
@@ -737,6 +786,10 @@ linguexx2odt article.tex --example-spacing 0.35
 
 # page A4 avec des marges plus étroites
 linguexx2odt article.tex --page a4-wide --text-width 18
+
+# revenir en LaTeX
+docx2linguexx article.docx -o article.tex
+odt2linguexx article.odt -o article.tex
 ```
 
 Dans Writer : sélectionner les lignes, puis **Ctrl+Maj+E** (ou le

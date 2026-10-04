@@ -524,6 +524,56 @@ org.onlyoffice.desktopeditors` gives it back). Offline, copy the folder
 Desktop's user plugin folder instead and restart; for the Flatpak that is
 `~/.var/app/org.onlyoffice.desktopeditors/data/onlyoffice/desktopeditors/sdkjs-plugins/`.
 
+## The way back: `docx2linguexx` and `odt2linguexx`
+
+A document that went to Word or Writer, and was edited there, can come
+back to LaTeX:
+
+```
+docx2linguexx paper.docx -o paper.tex
+odt2linguexx  paper.odt  -o paper.tex
+PYTHONPATH=src python3 -m linguexx2odt.reverse paper.docx   # from a checkout
+```
+
+Every example table becomes a linguexx example again, with its tiers,
+braced groups, judgments, sub-examples (both levels), translation and
+`\exannot`. Every reference to an example becomes `\ref` or `\pref` with
+a label. The rest of the document is pandoc's LaTeX writer, with
+`\usepackage[lazy]{linguexx}` added to its template.
+
+It is for documents whose examples this project made: the converter, the
+Writer macro, or the Word and OnlyOffice add-ins. It reads the paragraph
+styles they put on every cell (`LxExampleCell`, `LxTranslation`, …) and
+the number and reference fields. An example someone typed with tabs,
+spaces or a table of their own is not recognised and comes back as
+pandoc's prose or table (plan-reverse.md, tier B, not built).
+
+An `.odt` is first saved as `.docx` by LibreOffice, which therefore has to
+be installed: pandoc's own ODT reader drops the text of every
+cross-reference.
+
+The test is the forward converter. Every test document and every document
+in linguexx's own test suite is converted to `.docx` and back, and must
+give the same examples, cell for cell, as the original. Six structural
+cases are checked through `.odt` too.
+
+### What it does not, and says so
+
+| construct | what happens |
+|---|---|
+| labels | generated (`ex:1`, `ex:2a`); the document never had the author's. Only an example something refers to gets one |
+| `\exsource` | comes back as part of the translation (`\glt`): the converter set it in the same row |
+| text before a `\gll` | comes back as a braced first word with nothing beneath it, `\gll {As Cicero puts it,} magnam …`: the converter set it as that column. linguexx sets the gloss 1.65 pt further right than after free text (measured) |
+| LaTeX the converter printed as source (a `tabular` inside an example, `\altg` in a `.docx`) | comes back as that text, escaped, which is what the document shows |
+| a drawn tree (Writer macro, add-ins) | kept as a LaTeX comment holding the bracket notation it was typed as, and the run says so; the notation is the macro's, not forest's, and is not translated |
+| a sub-example marker "i." after "h." | read as the ninth letter, not as a deeper level: the table does not say which, and linguexx would print both the same |
+| a glossed example with one sub-example, no translation and no judgment | read as no sub-example: nothing in the table tells the marker column from a first gloss word |
+| tracked changes | read as accepted, as pandoc reads the prose |
+| small capitals in an example | `\lpzg`: in an example they are gloss labels. That covers small capitals typed directly (a document made in Writer or Word, where the macro and the add-ins keep what was typed), a character style of the author's own that sets them, and the converter's `LxLeipzig`, `\textsc` in a `.docx` included. Punctuation at either end of typed small capitals stays outside: `-pst.` comes back as `-\lpzg{pst}.`. `LxLeipzig` comes back exactly as the author wrote it inside `\lpzg`. A `\textsc` converted to `.odt` keeps its own style and comes back as `\textsc`. Small capitals in the prose are pandoc's, `\textsc` |
+| italic, bold typed directly in a cell | `\textit`, `\textbf` |
+| the layout | not read back: linguexx sets its own widths and bands |
+| the prose | pandoc's: its template loads microtype and parskip, so paragraphs are not indented and a line that opens with a quote hangs it slightly |
+
 ## Checking the renumbering
 
 Open the output in Writer, put the cursor before an example, insert a new

@@ -27,6 +27,8 @@ dev = ["pytest>=7"]
 
 [project.scripts]
 linguexx2odt = "linguexx2odt.cli:main"
+docx2linguexx = "linguexx2odt.reverse:main_docx"
+odt2linguexx = "linguexx2odt.reverse:main_odt"
 
 [tool.setuptools.packages.find]
 where = ["src"]
