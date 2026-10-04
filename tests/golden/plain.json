@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. A first plain example.",
       "line": 4
@@ -31,9 +33,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. A second one, with \\emph{emphasis} and \\textbf{bold}.\n",
       "line": 8

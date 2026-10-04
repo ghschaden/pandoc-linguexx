@@ -130,3 +130,15 @@ def test_a_label_in_the_first_sub_example_is_that_sub_example_s() -> None:
     assert labels("") == {"s1": (0, "a"), "s2": (0, "b")}
     assert labels("\\label{whole} ") == {
         "whole": (0, ""), "s1": (0, "a"), "s2": (0, "b")}
+
+
+@pytest.mark.parametrize("head", ["*\\gll ", "* \\gll ", "\\gll *", "\\jdg{\\dag}\\gll "])
+def test_a_judgment_keeps_the_gloss_braces(head: str) -> None:
+    r"""A judged gloss lost its braces: the object line was rejoined to look
+    for the mark and split again, so ``{ccc ddd}`` became two words.
+    linguexx sets it as one, with the gloss beneath its first letter
+    (measured: "zzz" at x 207.99 under "ccc", "ddd" after it)."""
+    body = parse(f"\\begin{{document}}\n\\ex. {head}aaa {{ccc ddd}} bbb\\\\\n"
+                 "xxx zzz yyy\\\\\n\n\\end{document}").examples[0].body
+    assert body.judgment
+    assert body.tiers[0].cells == ("aaa", "ccc ddd", "bbb")

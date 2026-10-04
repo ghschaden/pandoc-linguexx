@@ -171,8 +171,19 @@ class Emitter(BaseEmitter):
         )
 
         rows: list[str] = []
+        head = bool(ex.head and ex.items)
+        if head:
+            # The text before the first sub-example: on the number's row,
+            # from the marker column to the edge of the text block, where
+            # linguexx sets it and wraps it (measured).  The first
+            # sub-example then starts its own row, without the number.
+            rows.append(
+                "<table:table-row>" + self._cell(self._number_text(ex))
+                + self._cell(self.inline.render(ex.head), span=len(widths) - 1)
+                + "</table:table-row>")
         for k, (marker, body) in enumerate(bodies):
-            rows += self._body_rows(ex, marker, body, k == 0, grid, k, filler,
+            rows += self._body_rows(ex, marker, body, k == 0 and not head,
+                                    grid, k, filler,
                                     has_marker, has_judgment, has_annot)
 
         span = len(widths)

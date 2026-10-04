@@ -31,9 +31,11 @@
         "translation": "`This is a small example.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gll Dies ist ein kleines Beispiel \\\\\n     this is a small example \\\\\n\\glt `This is a small example.'",
       "line": 3
@@ -65,9 +67,11 @@
         "translation": "`The little child sleeps.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gll Das {kleine Kind} schl\\\"aft \\\\\n     the {little child} sleeps \\\\\n\\glt `The little child sleeps.'",
       "line": 7
@@ -99,9 +103,11 @@
         "translation": "Unequal lines: empty gloss cells.",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gll Eins zwei drei vier \\\\\n     one two \\\\\n\\glt Unequal lines: empty gloss cells.",
       "line": 11
@@ -140,9 +146,11 @@
         "translation": "`I slept.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\glll Ich habe geschlafen \\\\\n      ich hab-e schlaf-en \\\\\n      \\lpzg{1sg} have-\\lpzg{1sg} sleep-\\lpzg{ptcp} \\\\\n\\glt `I slept.'",
       "line": 15
@@ -188,9 +196,11 @@
         "translation": "`The dog sleeps.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gl Der Hund schl\\\"aft \\\\\n     der Hund schlaf-t \\\\\n     \\lpzg{def.nom.sg.m} dog sleep-\\lpzg{3sg} \\\\\n     D N V \\\\ \\endgl\n\\glt `The dog sleeps.'\n",
       "line": 20

@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. *Auto-detected star.",
       "line": 3
@@ -31,9 +33,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. ??Doubly questionable.",
       "line": 5
@@ -50,9 +54,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. ?*Mixed marks.",
       "line": 7
@@ -69,9 +75,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\#Hash via control sequence.",
       "line": 9
@@ -88,9 +96,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\%\\#Percent-hash combination.",
       "line": 11
@@ -107,9 +117,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\jdg{\\dag}Explicit arbitrary mark.",
       "line": 13
@@ -132,7 +144,8 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         },
         {
@@ -146,10 +159,12 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         }
       ],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\n\\a. *Starred sub-example,\n\\b. plain sub-example: texts must align.\n",
       "line": 15

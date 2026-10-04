@@ -27,9 +27,11 @@
         "translation": "Judged glossed shorthand.",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\exg. *Das Beispiel funktionieren \\\\\n      the example work.\\lpzg{inf} \\\\\n\\glt Judged glossed shorthand.",
       "line": 3
@@ -69,7 +71,8 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         },
         {
@@ -96,10 +99,12 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         }
       ],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\n\\ag. Erstes Unterbeispiel mit Glosse \\\\\n     first sub.example with gloss \\\\\n\\bg. Zweites auch \\\\\n     second too \\\\\n",
       "line": 7

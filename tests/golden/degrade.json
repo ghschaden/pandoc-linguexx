@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [
         "line 3: custom label \"(4$'$)\" printed literally; the NumEx counter is not stepped"
       ],
@@ -33,9 +35,11 @@
         "translation": "",
         "source": "(Schaden 2020: 45)",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [
         "line 5: \\exsource rendered inline at the end of the example, not flush right"
       ],

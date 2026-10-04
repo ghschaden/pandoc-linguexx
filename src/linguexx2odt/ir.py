@@ -62,6 +62,10 @@ class Body:
     label: str = ""
     """``\\label``/``\\sublabel`` target defined here, or ''."""
 
+    more_labels: tuple[str, ...] = ()
+    """Further targets defined here: ``\\a.\\label{x}\\sublabel{y}`` names
+    one sub-example twice, and both names must resolve."""
+
     @property
     def glossed(self) -> bool:
         return bool(self.tiers)
@@ -98,6 +102,11 @@ class Example:
 
     items: tuple[Item, ...] = ()
     """Set when it does."""
+
+    head: str = ""
+    """With sub-examples: the text between ``\\ex.`` and the first ``\\a.``,
+    LaTeX source.  linguexx sets it on the number's line, from where the
+    sub-example letters stand, and the first sub-example on the next."""
 
     warnings: tuple[str, ...] = ()
     src: str = ""

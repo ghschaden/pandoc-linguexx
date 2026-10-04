@@ -402,9 +402,14 @@ def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], st
 
 
 def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
-    label, chunk = _pull_command(chunk, "sublabel")
-    if not label:
-        label, chunk = _pull_command(chunk, "label")
+    # Both may be there, one name each.  Only the first was pulled, and
+    # the \label stayed in the text: the .docx printed "\label{cv:a}" in
+    # front of the sub-example (linguexx's cleveref.tex).
+    sub, chunk = _pull_command(chunk, "sublabel")
+    plain, chunk = _pull_command(chunk, "label")
+    names = [n for n in (sub, plain) if n]
+    label = names[0] if names else ""
+    more_labels = tuple(names[1:])
     source, chunk = _pull_command(chunk, "exsource")
     if source:
         warn("\\exsource rendered inline at the end of the example, not flush right")
@@ -438,21 +443,40 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
             translation = trailing
 
     if tiers:
-        judgment, first = _pull_judgment(leftover + " " + " ".join(tiers[0].cells), warn)
-        if judgment:
-            tiers = (Tier(cells=split_cells(first)),) + tiers[1:]
-        else:
+        # The mark is looked for in what precedes the first word and in the
+        # first word, and nowhere else.  Rejoining the whole object line to
+        # look for it and splitting it again undid its braces: "{ccc ddd}"
+        # came back as two words in every judged gloss, where linguexx sets
+        # one (measured).
+        cells = tiers[0].cells
+        leftover = leftover.strip()
+        judgment = ""
+        if leftover:
+            judgment, leftover = _pull_judgment(leftover, warn)
             leftover = leftover.strip()
-            if leftover:
-                warn(f"text before the gloss kept as body text: {leftover[:40]!r}")
+        elif cells:
+            judgment, first = _pull_judgment(cells[0], warn)
+            if judgment:
+                cells = ((first.strip(),) if first.strip() else ()) + cells[1:]
+        rest = tiers[1:]
+        if leftover:
+            # Text before the \gll.  linguexx sets it on the object line and
+            # starts the gloss after it, so it is a first column with nothing
+            # beneath it -- 1.65pt nearer the first gloss word than a braced
+            # first word would be (measured), within what the estimated
+            # columns differ by anyway.  It used to be kept as Body.text,
+            # which neither emitter writes when there are tiers: the run
+            # said "kept" and the text was gone.
+            cells = (" ".join(leftover.split()),) + cells
+            rest = tuple(Tier(cells=("",) + t.cells) for t in rest)
         return Body(
             judgment=judgment,
-            text=leftover.strip() if not judgment else "",
-            tiers=tiers,
+            tiers=(Tier(cells=cells),) + rest,
             translation=translation,
             source=source,
             annot=annot,
             label=label,
+            more_labels=more_labels,
         )
 
     judgment, text = _pull_judgment(head, warn)
@@ -463,19 +487,27 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
         source=source,
         annot=annot,
         label=label,
+        more_labels=more_labels,
     )
 
 
-def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[Item, ...]:
+def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[str, tuple[Item, ...]]:
     """Split an example body into sub-examples, honouring linguexx's
     counter semantics: ``\\a.`` opens a deeper level, any other letter is
-    'next item here', ``\\z.`` pops one level."""
+    'next item here', ``\\z.`` pops one level.
+
+    Returns the text before the first sub-example as well.  It was dropped
+    here, with no warning: linguexx prints it on the number's line, and the
+    .odt and the .docx did not print it at all."""
     pieces = split_top(body_src, SUB_RE)
     items: list[Item] = []
+    head = ""
     level = 0
     counters = {1: 0, 2: 0}
     for sep, chunk in pieces:
         if not sep:
+            if not items:
+                head = " ".join(chunk.split())
             continue
         m = SUB_RE.fullmatch(sep)
         letter, g = m.group(1), bool(m.group(2))
@@ -499,7 +531,7 @@ def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[Item, ...]:
         )
         for _ in range(pops):
             level = max(1, level - 1)
-    return tuple(items)
+    return head, tuple(items)
 
 
 def _strip_pops(chunk: str) -> tuple[str, int]:
@@ -687,7 +719,8 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     head_end = first_sub.start() if first_sub else len(stripped)
     label, head = _pull_command(stripped[:head_end], "label")
     rest = head + stripped[head_end:]
-    items = _parse_items(rest, shorthand, warn) if SUB_RE.search(rest) else ()
+    head_text, items = (_parse_items(rest, shorthand, warn)
+                        if SUB_RE.search(rest) else ("", ()))
     body = None if items else _parse_body(rest, shorthand, warn)
 
     for cmd, desc in DEGRADE.items():
@@ -708,6 +741,7 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
             custom_label=custom,
             body=body,
             items=items,
+            head=head_text if items else "",
             warnings=tuple(local),
             src=src[start:body_end],
             line=line,
@@ -757,8 +791,8 @@ def _warn_sub_sub_references(src, live, examples, warnings) -> None:
     above it.  Decided 2026-09-27 not to implement (plan.md) -- which is a
     reason to say so where it happens, not to print a wrong number quietly.
     """
-    deep = {it.body.label for ex in examples for it in ex.items
-            if it.level >= 2 and it.body.label}
+    deep = {name for ex in examples for it in ex.items if it.level >= 2
+            for name in (it.body.label, *it.body.more_labels) if name}
     if not deep:
         return
     for m in _ANY_REF.finditer(src):
@@ -952,9 +986,12 @@ def _collect_labels(examples: list[Example]) -> dict[str, tuple[int, str]]:
     for ex in examples:
         if ex.label:
             labels[ex.label] = (ex.index, "")
-        if ex.body is not None and ex.body.label:
-            labels[ex.body.label] = (ex.index, "")
+        if ex.body is not None:
+            for name in (ex.body.label, *ex.body.more_labels):
+                if name:
+                    labels[name] = (ex.index, "")
         for it in ex.items:
-            if it.body.label:
-                labels[it.body.label] = (ex.index, _ordinal_text(it.level, it.ordinal))
+            for name in (it.body.label, *it.body.more_labels):
+                if name:
+                    labels[name] = (ex.index, _ordinal_text(it.level, it.ordinal))
     return labels

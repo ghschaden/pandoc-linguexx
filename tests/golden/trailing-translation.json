@@ -31,9 +31,11 @@
         "translation": "`if Hermagoras had acquired great skill' (Cicero)",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gll quodsi magnam Hermagoras habuisset facultatem \\\\\n     if great.\\textsc{acc} Hermagoras.\\textsc{nom} have.\\textsc{pluprf} ability.\\textsc{acc} \\\\\n     `if Hermagoras had acquired great skill' (Cicero)",
       "line": 7
@@ -72,9 +74,11 @@
         "translation": "`I slept.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\glll Ich habe geschlafen \\\\\n      ich hab-e schlaf-en \\\\\n      \\lpzg{1sg} have-\\lpzg{1sg} sleep-\\lpzg{ptcp} \\\\\n      `I slept.'",
       "line": 12
@@ -86,16 +90,18 @@
       "custom_label": "",
       "body": {
         "judgment": "",
-        "text": "As Cicero puts it,",
+        "text": "",
         "tiers": [
           {
             "cells": [
+              "As Cicero puts it,",
               "magnam",
               "facultatem"
             ]
           },
           {
             "cells": [
+              "",
               "great.\\textsc{acc}",
               "ability.\\textsc{acc}"
             ]
@@ -104,12 +110,12 @@
         "translation": "`great skill'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
-      "warnings": [
-        "line 19: text before the gloss kept as body text: 'As Cicero puts it,'"
-      ],
+      "head": "",
+      "warnings": [],
       "src": "\\ex. As Cicero puts it, \\gll magnam facultatem \\\\\n     great.\\textsc{acc} ability.\\textsc{acc} \\\\\n     `great skill'",
       "line": 19
     },
@@ -138,9 +144,11 @@
         "translation": "`great skill'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. *\\gll magnam facultatem \\\\\n     great.\\textsc{acc} ability.\\textsc{acc} \\\\\n     `great skill'",
       "line": 26
@@ -170,9 +178,11 @@
         "translation": "`great skill' (Cicero, \\emph{De inventione})",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [
         "line 33: trailing line after the gloss and \\glt both present; joined into one translation line"
       ],
@@ -182,7 +192,6 @@
   ],
   "labels": {},
   "warnings": [
-    "line 19: text before the gloss kept as body text: 'As Cicero puts it,'",
     "line 33: trailing line after the gloss and \\glt both present; joined into one translation line"
   ]
 }

@@ -27,9 +27,11 @@
         "translation": "`The dog barked.'",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\exg. Der Hund bellte.\\\\\nthe dog barked\\\\\n\\glt `The dog barked.'\n",
       "line": 18

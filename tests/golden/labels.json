@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\\label{ex:one} A labelled example.",
       "line": 3
@@ -37,7 +39,8 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": "ex:a"
+            "label": "ex:a",
+            "more_labels": []
           }
         },
         {
@@ -51,7 +54,8 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         },
         {
@@ -65,10 +69,12 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": "ex:c"
+            "label": "ex:c",
+            "more_labels": []
           }
         }
       ],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\\label{ex:para}\n\\a.\\sublabel{ex:a} Premier.\n\\b. Deuxi\\`eme.\n\\c.\\sublabel{ex:c} Troisi\\`eme.",
       "line": 5

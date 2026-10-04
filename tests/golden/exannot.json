@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "[XP]",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. A plain example\\exannot{[XP]}",
       "line": 22
@@ -48,9 +50,11 @@
         "translation": "`that Pierre is tired'",
         "source": "",
         "annot": "[CP]",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. \\gll que Pierre est fatigu\\'e \\exannot{[CP]}\\\\\n     that Pierre is tired\\\\\n\\glt `that Pierre is tired'",
       "line": 24
@@ -73,7 +77,8 @@
             "translation": "",
             "source": "",
             "annot": "[CP]",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         },
         {
@@ -87,10 +92,12 @@
             "translation": "",
             "source": "",
             "annot": "[TP]",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         }
       ],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\n\\a. que Pierre est fatigu\\'e\\exannot{[CP]}\n\\b. Pierre est fatigu\\'e\\exannot[spoken form]{[TP]}\n",
       "line": 28

@@ -18,7 +18,8 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         },
         {
@@ -32,10 +33,12 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": "sub"
+            "label": "sub",
+            "more_labels": []
           }
         }
       ],
+      "head": "Square brackets around the number.",
       "warnings": [],
       "src": "\\ex.\\label{top} Square brackets around the number.\n\\a. sub one\n\\b.\\label{sub} sub two, whose letter is closed by a parenthesis",
       "line": 21

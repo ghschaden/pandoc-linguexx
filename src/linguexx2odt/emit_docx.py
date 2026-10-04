@@ -222,8 +222,18 @@ class DocxEmitter(BaseEmitter):
         grid_cols = "".join(f'<w:gridCol w:w="{dxa(w)}"/>' for w in widths)
 
         rows: list[str] = []
+        head = bool(ex.head and ex.items)
+        if head:
+            # The text before the first sub-example, as in the ODT target:
+            # the number's row, from the marker column to the block's edge.
+            rows.append(
+                "<w:tr>" + cell(widths[0], self._number(ex))
+                + cell(sum(widths[1:]), self._runs(ex.head),
+                       span=len(widths) - 1)
+                + "</w:tr>")
         for k, (marker, body) in enumerate(p.bodies):
-            rows += self._body_rows(ex, marker, body, k == 0, p, k)
+            rows += self._body_rows(ex, marker, body, k == 0 and not head,
+                                    p, k)
 
         # Spacer rows rather than w:spacing on the first and last
         # paragraphs, which the plan asked to weigh.  Both make the gap a

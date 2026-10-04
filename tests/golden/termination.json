@@ -12,9 +12,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. AAA ends by blank line.",
       "line": 3
@@ -31,9 +33,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. BBB ends by z. ",
       "line": 5
@@ -50,9 +54,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. DDD after no blank line.",
       "line": 6
@@ -69,9 +75,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. EEE ends at the environment boundary.",
       "line": 9
@@ -88,9 +96,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [
         "line 11: nested tabular inside the example is not aligned: the .odt hands it to pandoc, the .docx prints its LaTeX source; neither .odt nor .docx can represent it, so do not use it in a document you mean to convert"
       ],
@@ -109,9 +119,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. GGG ends at a group close.",
       "line": 13
@@ -134,10 +146,12 @@
             "translation": "",
             "source": "",
             "annot": "",
-            "label": ""
+            "label": "",
+            "more_labels": []
           }
         }
       ],
+      "head": "",
       "warnings": [],
       "src": "\\ex.\n\\a. HHH sub-item, then a forgotten blank line:\n",
       "line": 15
@@ -154,9 +168,11 @@
         "translation": "",
         "source": "",
         "annot": "",
-        "label": ""
+        "label": "",
+        "more_labels": []
       },
       "items": [],
+      "head": "",
       "warnings": [],
       "src": "\\ex. III must be set at top level.\n",
       "line": 17
