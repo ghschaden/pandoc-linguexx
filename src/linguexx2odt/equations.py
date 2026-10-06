@@ -59,6 +59,8 @@ class Row:
     number: str | None = None
     r"""What \ref prints, "1" or a tag's text; None for no number."""
     labels: list[str] = field(default_factory=list)
+    tagged: bool = False
+    """Numbered by \\tag, which no counter touches."""
 
 
 def _clean(tex: str) -> str:
@@ -97,7 +99,19 @@ def _rows(body: str) -> list[str]:
     return [r for r in rows if r.strip()]
 
 
+#: Marks a number that came from \tag, until number_rows hands it back.
+TAGGED = "\x00"
+
+
 def number_rows(tex: str, counter: list[int]) -> list[Row]:
+    rows = _number_rows(tex, counter)
+    for r in rows:
+        if r.number is not None and r.number.startswith(TAGGED):
+            r.number, r.tagged = r.number[len(TAGGED):], True
+    return rows
+
+
+def _number_rows(tex: str, counter: list[int]) -> list[Row]:
     """The rows of display math *tex*, numbered from *counter* (a one-item
     list, stepped in place).  One row unless several are numbered: those
     are split, so that each number stands beside its own row."""
@@ -108,13 +122,13 @@ def number_rows(tex: str, counter: list[int]) -> list[Row]:
     if star or (env not in ONCE and env not in PER_ROW):
         tag = _TAG.search(body)
         return [Row(_clean(tex),
-                    _tag_text(tag.group(1)) if tag else None,
+                    TAGGED + _tag_text(tag.group(1)) if tag else None,
                     _LABEL.findall(body))]
 
     def number(part: str) -> str | None:
         tag = _TAG.search(part)
         if tag:
-            return _tag_text(tag.group(1))
+            return TAGGED + _tag_text(tag.group(1))
         if _NONUMBER.search(part):
             return None
         counter[0] += 1
@@ -141,15 +155,30 @@ def number_rows(tex: str, counter: list[int]) -> list[Row]:
 class Equation:
     ident: str
     number: str
-    r"""What \ref prints: "1", or a \tag's text."""
+    r"""What \ref prints: "1", "1.2" under \numberwithin, or a \tag's text."""
     serial: int
     section: Any
     r"""The heading before it, whose title \nameref prints."""
+    key: tuple | None = None
+    r"""Its number to sort by, for \cref: (1,) or (0, 1, 2); None for a tag."""
 
     @property
     def bookmark(self) -> str:
         """Around the number beside the equation, for \\pageref."""
         return f"_Reflxeq{self.serial}"
+
+
+def within(src: str) -> int | None:
+    r"""The heading level \numberwithin{equation}{x} (or \counterwithin)
+    numbers equations within, from the preamble: pandoc makes \chapter
+    level 1 where a document has one, \section otherwise."""
+    m = re.search(r"\\(?:numberwithin|counterwithin)\s*\{equation\}\s*\{(\w+)\}", src)
+    if m is None:
+        return None
+    levels = ["section", "subsection", "subsubsection"]
+    if re.search(r"\\chapter\b", src):
+        levels = ["chapter"] + levels
+    return levels.index(m.group(1)) + 1 if m.group(1) in levels else None
 
 
 #: Where equations' serials start (sections.targets): above every other
@@ -167,8 +196,12 @@ class EquationTargets:
     """id(Row) -> its serial, for every numbered row."""
 
 
-def equation_targets(blocks: Any, heads: dict[int, Any]) -> EquationTargets:
+def equation_targets(blocks: Any, heads: dict[int, Any],
+                     within: int | None = None) -> EquationTargets:
+    r"""*within*: the heading level \numberwithin{equation}{...} names --
+    the counter restarts there and the number is that heading's, "1.2"."""
     counter = [0]
+    prefix: list[Any] = [None]
     serial = [SERIAL_BASE]
     rows: dict[int, list[Row]] = {}
     equations: list[Equation] = []
@@ -185,6 +218,10 @@ def equation_targets(blocks: Any, heads: dict[int, Any]) -> EquationTargets:
         t = node.get("t")
         if t == "Header" and id(node) in heads:
             section[0] = heads[id(node)]
+            sec = heads[id(node)]
+            if within is not None and sec.number and sec.level <= within:
+                counter[0] = 0
+                prefix[0] = sec
         if t == "Math":
             kind, tex = node["c"]
             if kind.get("t") != "DisplayMath":
@@ -195,10 +232,17 @@ def equation_targets(blocks: Any, heads: dict[int, Any]) -> EquationTargets:
                 for r in numbered:
                     if r.number is None:
                         continue
+                    key = None if r.tagged else (int(r.number),)
+                    if within is not None and not r.tagged:
+                        # "1.2": the heading's number at that level, then its own
+                        sec = prefix[0]
+                        parts = sec.shown.split(".")[:within] if sec else ["0"]
+                        key = ((int(sec.appendix),) + sec.numbers[:within] if sec else (0,)) + key
+                        r.number = ".".join(parts + [r.number])
                     row_serials[id(r)] = serial[0]
                     for label in r.labels:
                         equations.append(Equation(label, r.number, serial[0],
-                                                  section[0]))
+                                                  section[0], key))
                     serial[0] += 1
             return
         if t in ("RawInline", "RawBlock", "Str", "Code", "CodeBlock"):

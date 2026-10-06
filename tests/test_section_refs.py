@@ -66,9 +66,9 @@ E \nameref{s:i} F \pageref{s:t} G \cpageref{e1} H \ref{e1}.
 LATEX = "REFS: A 1.1 B section 1.1.1 C Section 2 D subsection 1.1 E Intro F 1 G page 1 H (1)."
 
 #: What a reader that never updates a field shows (OnlyOffice, for a
-#: .docx): the cache.  Right for everything but a page, which cannot be
-#: known before layout and says so rather than guess.
-CACHED = "REFS: A 1.1 B section 1.1.1 C Section 2 D subsection 1.1 E Intro F ? G page ? H (1)."
+#: .docx): the cache, which is LaTeX's -- the pages too, LibreOffice's
+#: layout read back (pages.py).
+CACHED = LATEX
 
 
 def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
@@ -129,6 +129,7 @@ def test_a_reference_to_a_section_prints_what_latex_prints(
 
 
 @pandoc
+@soffice
 def test_a_docx_caches_what_latex_prints(tmp_path: Path) -> None:
     xml = postprocess.read(_convert(tmp_path, "docx"), "word/document.xml")
     para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "REFS" in p)
@@ -155,3 +156,20 @@ def test_a_reference_to_a_section_is_no_warning(tmp_path: Path, capsys) -> None:
     _convert(tmp_path, "odt", quiet=False)
     err = capsys.readouterr().err
     assert "deleted from the output" not in err, err
+
+
+@pandoc
+def test_autoref_to_an_unnumbered_heading_says_section(tmp_path: Path) -> None:
+    r"""hyperref names a \section* or a \paragraph "section", with the last
+    number set before it (measured: "section 1.1.1"); it was "paragraph"
+    for a \paragraph."""
+    tex = tmp_path / "doc.tex"
+    tex.write_text(SOURCE.replace(
+        r"E \nameref{s:i}", r"E \autoref{s:star} \autoref{s:dd}"), encoding="utf-8")
+    out = tmp_path / "doc.docx"
+    assert main([str(tex), "-o", str(out), "--to", "docx", "-q"]) == 0
+    xml = postprocess.read(out, "word/document.xml")
+    para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "REFS" in p)
+    shown = " ".join("".join(re.findall(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>", para))
+                     .replace(" ", " ").split())
+    assert "E section 1.1.1 subsubsection 1.1.1 F" in shown, shown

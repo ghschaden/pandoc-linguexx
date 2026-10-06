@@ -29,12 +29,14 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import headings, postprocess, postprocess_docx, styles_docx
+from . import headings, pages, postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
 from .includes import expand_includes
 from .inject import inject, report_dropped_latex
 from .latexutil import live_mask, scan_bibliography
+from .equations import within as equations_within
+from .names import detect as detect_names
 from .styles import Layout, named_styles
 
 MIN_PANDOC = (3, 0)
@@ -320,7 +322,9 @@ def main(argv: list[str] | None = None) -> int:
             _degrade_citations(ast, warnings.append)
 
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
-                          emitter=emitter, custom_labels=parsed.custom_labels)
+                          emitter=emitter, custom_labels=parsed.custom_labels,
+                          names=detect_names(source, warnings.append),
+                          equations_within=equations_within(source))
         report_dropped_latex(doc, warnings.append)
 
         ast_path = tmp / "ast.json"
@@ -358,14 +362,17 @@ def main(argv: list[str] | None = None) -> int:
                 # answered.  The columns may then be a little off.
                 "" if args.reference_doc
                 else styles_docx.default_font(layout.font_pt,
-                                              layout.font_name))
+                                              layout.font_name),
+                footnotes=emitter.footnotes)
         else:
             content = postprocess.read(raw_odt, "content.xml")
             content = postprocess.inject_sequence_decls(content)
             content = postprocess.inject_automatic_styles(
                 content, emitter.styles_fragment())
             content = headings.unnumber_odt_headings(content)
+            content = headings.letter_odt_appendix(content)
             content = headings.declare_caption_sequences(content)
+            content = headings.unique_odt_note_ids(content)
             content = headings.name_odt_note_refs(content)
             content = headings.start_odt_lists(content)
 
@@ -383,6 +390,9 @@ def main(argv: list[str] | None = None) -> int:
 
             postprocess.rewrite(raw_odt, out_path,
                                 {"content.xml": content, "styles.xml": styles})
+
+        # A page is known only once the file is laid out (pages.py).
+        pages.fill(out_path, warnings.append)
 
         if args.keep_intermediates:
             keep = args.keep_intermediates

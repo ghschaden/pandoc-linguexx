@@ -46,12 +46,12 @@ says so rather than coming out wrong.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from .emit_base import BaseEmitter, register
 from .sections import CAPTION_NAMES
-from .inline import esc
+from .inline import esc, note_name
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA,
@@ -76,6 +76,10 @@ def bookmark_id(serial: int, slot: int = 0) -> int:
     """Two ids per target (sections.targets): a float's number and its
     title, a footnote's marker and the mark in the text."""
     return BOOKMARK_IDS + 2 * serial + slot
+
+
+#: Where the ids of the footnotes in examples start, above pandoc's own.
+FOOTNOTE_IDS = 700000
 
 
 def bookmark_name(index: int) -> str:
@@ -179,6 +183,10 @@ class DocxEmitter(BaseEmitter):
 
     RAW_FORMAT: ClassVar[str] = "openxml"
 
+    footnotes: list[tuple[int, str]] = field(default_factory=list)
+    """(id, <w:footnote> XML) for each footnote in an example, for the
+    postprocess to add to word/footnotes.xml (headings.add_docx_footnotes)."""
+
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:
         return sequence_ref(index, letter, self.brackets, bare=bare)
@@ -261,9 +269,25 @@ class DocxEmitter(BaseEmitter):
         a Word user can edit is Phase 4, with the rest of the styles.
         """
         return "".join(
-            self.reference(ref[0], ref[1], bare=ref[2]) if ref
+            self._footnote(ref[1]) if ref and ref[0] == "note"
+            else self.reference(ref[0], ref[1], bare=ref[2]) if ref
             else run(text, sc)
             for text, sc, ref in self.inline.segments(latex))
+
+    def _footnote(self, n: int) -> str:
+        """The mark of footnote *n* of the examples, bookmarked with its name
+        (inline.note_name) for a reference to find, and its note kept for
+        word/footnotes.xml."""
+        ident = FOOTNOTE_IDS + n
+        body = self._runs(self.inline.notes[n])
+        self.footnotes.append((ident, (
+            f'<w:footnote w:id="{ident}"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/>'
+            '</w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+            '<w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>'
+            f"{body}</w:p></w:footnote>")))
+        start, end = self.marks(note_name(n), FOOTNOTE_IDS + n, slot=0)
+        return (start + '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+                f'<w:footnoteReference w:id="{ident}"/></w:r>' + end)
 
     def _judgment(self, body: Body) -> str:
         return self._runs(body.judgment) if body.judgment else ""

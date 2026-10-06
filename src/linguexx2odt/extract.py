@@ -125,6 +125,10 @@ def _scan_unsupported(src: str, warn) -> None:
 
 PLACEHOLDER = "\u27e8\u27e8LINGUEXX-{n:04d}\u27e9\u27e9"
 PLACEHOLDER_RE = re.compile("\u27e8\u27e8LINGUEXX-(\\d{4})\u27e9\u27e9")
+#: Where \appendix was: pandoc deletes it without a trace, and the sections
+#: after it are lettered (sections.py).  A paragraph of its own, which the
+#: inject pass reads and removes.
+APPENDIX_MARK = "\u27e8\u27e8LINGUEXX-APPENDIX\u27e9\u27e9"
 
 EX_CMDS = ("ex", "exg")
 SUB_RE = re.compile(r"\\([a-y])(g?)\.")
@@ -304,10 +308,26 @@ def _find_end(src: str, live: list[bool], i: int) -> tuple[int, str, int]:
 # body parsing
 # --------------------------------------------------------------------------
 
+def _footnote_spans(chunk: str) -> list[tuple[int, int]]:
+    """Where the arguments of the ``\\footnote`` commands in *chunk* are."""
+    spans = []
+    for m in re.finditer(r"\\footnote(?![a-zA-Z])\s*(?:\[[^\]]*\])?", chunk):
+        grp = find_group(chunk, m.end())
+        if grp is not None:
+            spans.append((m.end(), grp[1]))
+    return spans
+
+
 def _pull_command(chunk: str, name: str) -> tuple[str, str]:
-    """Remove the first ``\\name{…}`` from *chunk*; return (arg, rest)."""
+    """Remove the first ``\\name{…}`` from *chunk*; return (arg, rest).
+
+    Not one inside a footnote: a ``\\label`` there is the note's, as in
+    LaTeX, and taking it for the example's made ``\\ref`` to the note
+    print the example's number."""
     pat = re.compile(r"\\" + name + r"(?![a-zA-Z])")
-    m = pat.search(chunk)
+    notes = _footnote_spans(chunk)
+    m = next((m for m in pat.finditer(chunk)
+              if not any(a <= m.start() < b for a, b in notes)), None)
     if not m:
         return "", chunk
     grp = find_group(chunk, m.end())
@@ -652,9 +672,11 @@ def parse(src: str) -> ParseResult:
     examples = _references_in_examples(
         examples, _located(spans), labels, sublabels, warnings)
 
+    marks = [(m.start(), m.end(), APPENDIX_MARK)
+             for m in re.finditer(r"\\appendix(?![a-zA-Z@])", src) if live[m.start()]]
     return ParseResult(
         custom_labels=custom_labels,
-        residue=_build_residue(src, spans, rel_spans),
+        residue=_build_residue(src, sorted(spans + marks[:1]), rel_spans),
         examples=examples,
         warnings=warnings,
         labels=labels,

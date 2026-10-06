@@ -82,7 +82,7 @@ LISTS = ["1. First.", "2. Second.", "(a) Inner a.", "(b) Inner b.", "i. Deep.",
 #: LaTeX prints "REFS: A 1 B 2b C item 3 D Item 2b E item 1 F Intro G 1
 #: H 2(b)i I 5."; the converter keeps the second level's parentheses.
 REFS = "REFS: A 1 B 2(b) C item 3 D Item 2(b) E item 1 F Intro G 1 H 2(b)i I 5."
-CACHED = "REFS: A 1 B 2(b) C item 3 D Item 2(b) E item 1 F Intro G ? H 2(b)i I 5."
+CACHED = REFS
 
 
 def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
@@ -121,6 +121,7 @@ def test_a_reference_to_an_item_is_live(tmp_path: Path, target: str) -> None:
 
 
 @pandoc
+@soffice
 def test_a_docx_caches_what_the_field_shows(tmp_path: Path) -> None:
     xml = postprocess.read(_convert(tmp_path, "docx"), "word/document.xml")
     para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "REFS" in p)

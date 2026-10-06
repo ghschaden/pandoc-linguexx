@@ -92,13 +92,8 @@ LATEX = [
 ]
 
 #: What a .docx reader that never updates a field shows: the cache, which is
-#: LaTeX's but for a page.
-CACHED = [
-    "Table 1: A table.",
-    "REFS: A 2 B footnote 1 C 2 D table 1 E Figure 1 F Table 2 G Figure 1"
-    " H A table I ? J footnote 1.",
-    "MORE: A fig. 1 B Footnote 1 C A figure D E page ? F Table 1 G footnote 2.",
-]
+#: LaTeX's, pages included (pages.py).
+CACHED = LATEX
 
 
 def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
@@ -130,6 +125,7 @@ def test_captions_and_references_print_what_latex_prints(
 
 
 @pandoc
+@soffice
 def test_a_docx_caches_what_latex_prints(tmp_path: Path) -> None:
     xml = postprocess.read(_convert(tmp_path, "docx"), "word/document.xml")
     paras = [" ".join("".join(re.findall(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>", p))

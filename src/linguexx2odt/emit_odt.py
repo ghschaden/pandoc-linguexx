@@ -138,9 +138,12 @@ class Emitter(BaseEmitter):
             return (f'<text:bookmark-ref text:reference-format="text"'
                     f' text:ref-name="{flt.title_bookmark}">{esc(flt.title)}'
                     '</text:bookmark-ref>')
-        fmt, cached = ("page", "?") if form == "page" else ("value", flt.number)
-        return (f'<text:sequence-ref text:reference-format="{fmt}"'
-                f' text:ref-name="{flt.bookmark}">{cached}</text:sequence-ref>')
+        if form == "page":
+            # on the title's bookmark, not the sequence: a bookmark is what
+            # pages.py can find a page for
+            return self.bookmark_page(flt.title_bookmark)
+        return (f'<text:sequence-ref text:reference-format="value"'
+                f' text:ref-name="{flt.bookmark}">{flt.number}</text:sequence-ref>')
 
     def item_reference(self, name: str, shown: str) -> str:
         return (f'<text:bookmark-ref text:reference-format="number-no-superior"'

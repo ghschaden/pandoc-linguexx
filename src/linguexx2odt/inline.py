@@ -118,6 +118,20 @@ REF_MARK = re.compile(
     re.S)
 
 
+#: A footnote in an example, until an emitter says what it becomes: its
+#: content is ``InlineRenderer.notes[n]``.  It was not rendered at all --
+#: the .odt fell back to a separate pandoc run, whose note took an id the
+#: document already had, and the .docx printed "\footnote{...}".
+NOTE_MARK = re.compile(r'<lx:note n="(\d+)"/>')
+
+
+def note_name(n: int) -> str:
+    """Footnote *n* of the examples' name: its text:id in ODF, the bookmark
+    around its mark in OOXML.  Both formats accept it, and a reference to
+    the note names it directly."""
+    return f"lxftn{n}"
+
+
 #: A reference as written, found again when the renderer has given up on
 #: the text around it.
 REF_SOURCE = re.compile(r"\\(p?ref)\s*\{[^}]*\}")
@@ -178,6 +192,11 @@ class InlineRenderer:
         """The document's \\ExLBr/\\ExRBr, for the number a reference shows."""
         self.macros: dict[str, _macros.Macro] = {}
         """The document's own macros, expanded before anything is rendered."""
+        self.notes: list[str] = []
+        self._measuring = False
+        """The content of each footnote in an example, LaTeX, by number."""
+        self.note_labels: dict[str, int] = {}
+        r"""label -> the footnote in an example it was set in (\label)."""
         self.ref_markup: Callable[..., str] | None = None
         """(index, letter, bare=) -> the target's reference markup, for
         render().  None leaves the number as text."""
@@ -196,11 +215,18 @@ class InlineRenderer:
             if str(exc) not in {f"unhandled command \\{v}" for v in INLINE_VERBATIM}:
                 self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
             xml = self._pandoc_keeping_references(verbatim_for_pandoc(latex))
+        xml = NOTE_MARK.sub(lambda m: self._odf_note(int(m.group(1))), xml)
         if self.ref_markup is None:
             return REF_MARK.sub(lambda m: m.group(4), xml)
         return REF_MARK.sub(
             lambda m: self.ref_markup(int(m.group(1)), _unesc(m.group(2)),
                                       bare=m.group(3) == "1"), xml)
+
+    def _odf_note(self, n: int) -> str:
+        return (f'<text:note text:id="{note_name(n)}" text:note-class="footnote">'
+                f"<text:note-citation>{n + 1}</text:note-citation><text:note-body>"
+                f'<text:p text:style-name="Footnote">{self.render(self.notes[n])}'
+                "</text:p></text:note-body></text:note>")
 
     #: character styles that draw their text as small capitals
     SMALLCAPS_STYLES = frozenset({LEIPZIG, SMALLCAPS})
@@ -218,7 +244,11 @@ class InlineRenderer:
         lowercase letter it replaces, so a ``\\lpzg`` gloss measured as
         lowercase comes out too narrow for what is put in it.
         """
-        return [(text, sc) for text, sc, _ref in self.segments(latex)]
+        self._measuring = True
+        try:
+            return [(text, sc) for text, sc, _ref in self.segments(latex)]
+        finally:
+            self._measuring = False
 
     def segments(self, latex: str) -> list[tuple[str, bool, tuple | None]]:
         """``runs()``, with each reference kept apart as its own segment and
@@ -247,6 +277,12 @@ class InlineRenderer:
 
         i = 0
         while i < len(xml):
+            note = NOTE_MARK.match(xml, i) if xml[i] == "<" else None
+            if note:
+                flush()
+                runs.append(("", False, ("note", int(note.group(1)))))
+                i = note.end()
+                continue
             ref = REF_MARK.match(xml, i) if xml[i] == "<" else None
             if ref:
                 flush()
@@ -272,6 +308,20 @@ class InlineRenderer:
         flush()
 
         return [(_unesc(t), sc, ref) for t, sc, ref in runs]
+
+    def _note_number(self, content: str) -> int:
+        """A new footnote's number, its \\label taken out and recorded.
+
+        Only when drawing: a cell is rendered to be measured too, and a
+        note counted then was a note twice.  Measured, it is nothing,
+        which is about what its mark measures."""
+        if self._measuring:
+            return -1
+        labels = re.findall(r"\\label\s*\{([^}]*)\}", content)
+        self.notes.append(re.sub(r"\\label\s*\{[^}]*\}", "", content))
+        for label in labels:
+            self.note_labels[label.strip()] = len(self.notes) - 1
+        return len(self.notes) - 1
 
     def _verbatim_as_text(self, latex: str) -> str | None:
         r"""The fragment rendered with its inline verbatim as plain text, or
@@ -365,6 +415,20 @@ class InlineRenderer:
             j += 1
         if not name:  # single-character control sequence
             name, j = s[i + 1], i + 2
+
+        if name == "footnote":
+            k = j
+            opt = re.match(r"\s*\[[^\]]*\]", s[k:])     # \footnote[3]{...}
+            if opt:
+                k += opt.end()
+            grp = find_group(s, k)
+            if grp is None:
+                raise Unsupported("\\footnote without a braced argument")
+            content = grp[0]
+            n = self._note_number(content)
+            if n >= 0:
+                out.append(f'<lx:note n="{n}"/>')
+            return grp[1]
 
         if name in WRAPPERS:
             grp = find_group(s, j)

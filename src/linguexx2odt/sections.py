@@ -39,13 +39,12 @@ from typing import Any
 #: (secnumdepth 3); pandoc makes them header levels 1-3.
 NUMBERED_LEVELS = 3
 
-#: hyperref's \autoref names, by header level (\sectionautorefname & co.).
-AUTOREF_NAMES = {1: "section", 2: "subsection", 3: "subsubsection",
-                 4: "paragraph", 5: "subparagraph"}
-
 #: The prefix of the bookmark the converter puts in an unnumbered heading;
 #: the postprocess keeps the outline numbering off that heading by it.
 UNNUMBERED = "_Reflxnon"
+#: The prefix of a numbered appendix heading's bookmark: the postprocess
+#: letters those headings' numbers by it.
+APPENDIX = "_Reflxapx"
 
 #: A footnote's bookmarks: around its mark in the text, and where its
 #: \label was inside it.  The postprocess pairs them by the serial after.
@@ -66,13 +65,19 @@ class Section:
     last number set before it, as LaTeX's \@currentlabel has it."""
     serial: int
     """Its place among the document's headings, from 0."""
+    appendix: bool = False
+    r"""After \appendix: lettered, "A", "A.1"."""
+    numbers: tuple[int, ...] = ()
+    r"""Its number's parts, (1, 1) for "A.1": what \cref sorts by."""
 
     @property
     def bookmark(self) -> str:
         """A bookmark name a .docx can hold (letters, digits, underscores):
         pandoc's own is the label, "sec:intro", which Word does not accept.
         It also says whether the heading is numbered (UNNUMBERED)."""
-        return f"{'_Reflxsec' if self.number else UNNUMBERED}{self.serial}"
+        if not self.number:
+            return f"{UNNUMBERED}{self.serial}"
+        return f"{APPENDIX if self.appendix else '_Reflxsec'}{self.serial}"
 
 
 def _text(inlines: Any) -> str:
@@ -99,33 +104,63 @@ def _text(inlines: Any) -> str:
     return "".join(out)
 
 
+def is_appendix_mark(block: Any) -> bool:
+    """The paragraph extract.APPENDIX_MARK became."""
+    from .extract import APPENDIX_MARK
+
+    return (isinstance(block, dict) and block.get("t") in ("Para", "Plain")
+            and _text(block["c"]).strip() == APPENDIX_MARK)
+
+
 def _headers(blocks: Any):
-    """Every Header, in document order, also inside a Div."""
+    """Every Header, in document order, also inside a Div -- and None where
+    \\appendix was."""
     for b in blocks or []:
         if not isinstance(b, dict):
             continue
         if b.get("t") == "Header":
             yield b
+        elif is_appendix_mark(b):
+            yield None
         elif b.get("t") == "Div":
             yield from _headers(b["c"][1])
+
+
+def _letter(n: int) -> str:
+    """\\Alph: 1 -> "A"."""
+    return chr(ord("A") + n - 1) if 1 <= n <= 26 else str(n)
 
 
 def sections(blocks: Any) -> list[tuple[dict, Section]]:
     """Every heading with its Section, numbered as LaTeX numbers them."""
     counters = [0] * (NUMBERED_LEVELS + 1)
     last = ""
+    appendix = False
     out: list[tuple[dict, Section]] = []
-    for n, h in enumerate(_headers(blocks)):
+    n = 0
+    for h in _headers(blocks):
+        if h is None:
+            # \appendix: the sections start again, lettered
+            appendix = True
+            counters = [0] * (NUMBERED_LEVELS + 1)
+            continue
         level, (ident, classes, _kv), inlines = h["c"]
         number = None
+        numbers: tuple[int, ...] = ()
         if level <= NUMBERED_LEVELS and "unnumbered" not in classes:
             counters[level] += 1
             for deeper in range(level + 1, NUMBERED_LEVELS + 1):
                 counters[deeper] = 0
-            number = ".".join(str(counters[k]) for k in range(1, level + 1))
+            numbers = tuple(counters[k] for k in range(1, level + 1))
+            parts = [str(c) for c in numbers]
+            if appendix:
+                parts[0] = _letter(numbers[0])
+            number = ".".join(parts)
             last = number
         out.append((h, Section(ident, level, _text(inlines).strip(),
-                               number, number or last, n)))
+                               number, number or last, n,
+                               appendix and number is not None, numbers)))
+        n += 1
     return out
 
 
@@ -136,17 +171,8 @@ def section_table(blocks: Any) -> dict[str, Section]:
 
 # -- tables, figures and footnotes ------------------------------------------
 
-#: What cleveref and hyperref print before the number (measured,
-#: plan-crossrefs.md).  \nameref to a footnote prints nothing at all.
-WORDS = {
-    "table": {"cref": "table", "Cref": "Table", "autoref": "Table"},
-    "figure": {"cref": "fig.", "Cref": "Figure", "autoref": "Figure"},
-    "footnote": {"cref": "footnote", "Cref": "Footnote", "autoref": "footnote"},
-    "item": {"cref": "item", "Cref": "Item", "autoref": "item"},
-    "equation": {"cref": "eq.", "Cref": "Equation", "autoref": "Equation"},
-}
-
-#: The caption's name, "Table 1: ...", and the word processor's sequence.
+#: The word processor's sequence a caption's number counts in.  Not what
+#: the caption prints, which is the document's language's (names.py).
 CAPTION_NAMES = {"table": "Table", "figure": "Figure"}
 
 
@@ -176,13 +202,17 @@ class Footnote:
     ident: str
     number: int
     serial: int
+    name: str = ""
+    """The name of a footnote in an example, which the renderer gave it
+    (inline.note_name); empty for one pandoc wrote."""
 
     @property
     def bookmark(self) -> str:
         """Around the note's mark in the text, which is what a reference to
         a note points at -- put there by the postprocess, which finds the
-        mark by the note holding `marker`."""
-        return f"{FOOTNOTE_MARK}{self.serial}"
+        mark by the note holding `marker`.  A note in an example has its
+        name already, in both formats."""
+        return self.name or f"{FOOTNOTE_MARK}{self.serial}"
 
     @property
     def marker(self) -> str:
@@ -282,6 +312,8 @@ class Item:
     section: Section | None
     r"""The heading before it: what \nameref to an item prints is that
     section's title (LaTeX's \@currenttitle)."""
+    numbers: tuple[int, ...] = ()
+    r"""Its number and its parents', outermost first: what \cref sorts by."""
 
 
 def item_bookmark(serial: int) -> str:
@@ -356,11 +388,12 @@ def list_targets(blocks: Any, heads: dict[int, Section], serial: int) -> ListTar
             (start, style, delim), entries = node["c"]
             style, delim = list_style(depth, style["t"], delim["t"])
             for k, entry in enumerate(entries):
-                here = ancestors + [(entry, item_label(style, delim, start + k))]
+                here = ancestors + [(entry, item_label(style, delim, start + k),
+                                     start + k)]
                 label = _own_label(entry)
                 if label:
-                    items.append(Item(label, tuple((mark(b), shown) for b, shown in here),
-                                      section[0]))
+                    items.append(Item(label, tuple((mark(b), shown) for b, shown, _n in here),
+                                      section[0], tuple(n for _b, _s, n in here)))
                 walk(entry, here)
             return
         if t in ("RawInline", "RawBlock", "Str"):
@@ -391,7 +424,12 @@ class Targets:
         return table
 
 
-def targets(blocks: Any) -> Targets:
+def targets(blocks: Any, example_notes: Any = None,
+            note_labels: dict[str, int] | None = None,
+            equations_within: int | None = None) -> Targets:
+    """*example_notes*(node) -> the numbers of the footnotes in the example
+    a placeholder stands for (the renderer's, inline.notes), which LaTeX
+    counts with the rest; *note_labels* their labels."""
     heads = sections(blocks)
     serial = len(heads)
     counts = {"table": 0, "figure": 0}
@@ -411,6 +449,16 @@ def targets(blocks: Any) -> Targets:
                                        title[:-1] if title.endswith(".") else title,
                                        serial)))
             serial += 1
+        elif example_notes is not None and example_notes(node):
+            from .inline import note_name
+
+            by_note = {k: lab for lab, k in (note_labels or {}).items()}
+            for k in example_notes(node):
+                note_number += 1
+                if k in by_note:
+                    notes.append(Footnote(by_note[k], note_number, serial,
+                                          note_name(k)))
+                    serial += 1
         elif t == "Note":
             note_number += 1
             label = _label_in(node)
@@ -421,4 +469,4 @@ def targets(blocks: Any) -> Targets:
 
     by_node = {id(h): s for h, s in heads}
     return Targets(heads, floats, notes, list_targets(blocks, by_node, serial),
-                   equation_targets(blocks, by_node))
+                   equation_targets(blocks, by_node, equations_within))

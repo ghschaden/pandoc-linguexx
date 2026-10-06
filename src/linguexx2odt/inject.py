@@ -37,10 +37,12 @@ from typing import Any
 from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
+from .cleveref import Entry, phrase
 from .equations import Equation
 from .latexutil import Brackets
 from .styles import EQUATION_PARA
-from .sections import AUTOREF_NAMES, CAPTION_NAMES, WORDS, Float, Footnote, Item, \
+from .names import ENGLISH, Names
+from .sections import Float, Footnote, Item, is_appendix_mark, \
     caption_inlines, list_style, targets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
@@ -49,29 +51,50 @@ REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 ANY_REF = re.compile(
     r"\\(ref|pref|eqref|cref|Cref|autoref|nameref|pageref|cpageref|Cpageref)"
     r"\s*\{([^}]*)\}")
-#: What each prints before the field: cleveref's and hyperref's names, as
-#: LaTeX sets them (measured, plan-crossrefs.md), with their unbreakable
-#: space.  None is the target's own: \cref, \Cref and \autoref name what
-#: they point at (sections.WORDS, AUTOREF_NAMES).
+#: What each prints before the field: nothing (""), or a name (None) --
+#: cleveref's and hyperref's, in the document's language (names.py), with
+#: their unbreakable space.
 _FORMS = {
     "ref": ("", "number"), "pref": ("", "number"), "eqref": ("", "number"),
     "cref": (None, "number"), "Cref": (None, "number"),
     "autoref": (None, "number"), "nameref": ("", "title"),
-    "pageref": ("", "page"), "cpageref": ("page", "page"),
-    "Cpageref": ("Page", "page"),
+    "pageref": ("", "page"), "cpageref": (None, "page"),
+    "Cpageref": (None, "page"),
 }
 _LABEL = re.compile(r"\s*\\label\s*\{([^}]*)\}\s*")
+#: cleveref's commands that take a list, or a range: what cleveref.phrase
+#: sets.  \cref to an example is here too, alone -- it was deleted.
+_CLEVEREF = re.compile(
+    r"\\(cref|Cref|cpageref|Cpageref|crefrange|Crefrange)\s*\{([^}]*)\}"
+    r"(?:\s*\{([^}]*)\})?")
+#: A footnote in an example, by its name (inline.note_name): the text:id
+#: of an ODF note, the bookmark around an OOXML one's mark.
+_EXAMPLE_NOTE = re.compile(r'"lxftn(\d+)"')
 
 
-def _word(target, cmd: str) -> str:
+#: hyperref's \autoref names a heading by its level; an unnumbered one --
+#: \section*, \paragraph -- is "section" (measured: "section 1.1.1").
+_HEADING_LEVELS = {1: "section", 2: "subsection", 3: "subsubsection"}
+
+
+def _word(names: Names, target, cmd: str) -> str:
+    """The name \\cref, \\Cref, \\autoref or \\cpageref prints before *target*."""
+    if cmd.lower() == "cpageref":
+        return names.cref("page", capital=cmd[0] == "C")
     if isinstance(target, (Float, Footnote, Item, Equation)):
         kind = (target.kind if isinstance(target, Float)
                 else "footnote" if isinstance(target, Footnote)
                 else "equation" if isinstance(target, Equation) else "item")
-        return WORDS[kind][cmd]
+    elif cmd == "autoref":
+        if target.appendix and target.level == 1:
+            return names.autoref("appendix")     # "Appendix A"
+        return names.autoref(_HEADING_LEVELS.get(target.level, "section")
+                             if target.number else "section")
+    else:
+        kind = "section"
     if cmd == "autoref":
-        return AUTOREF_NAMES.get(target.level, "section")
-    return "Section" if cmd == "Cref" else "section"
+        return names.autoref(kind)
+    return names.cref(kind, capital=cmd == "Cref")
 
 
 def _text_of(inlines: Any) -> str:
@@ -196,6 +219,8 @@ class Injector:
         warn: Callable[[str], None] | None = None,
         emitter=None,
         custom_labels: dict[str, tuple[str, str]] | None = None,
+        names: Names | None = None,
+        equations_within: int | None = None,
     ) -> None:
         self.blocks = blocks_by_index
         self.labels = labels
@@ -203,6 +228,10 @@ class Injector:
         # (linguexx 1.4): plain text, the same in every format, and no field,
         # since a custom label is not a counter and nothing renumbers it.
         self.custom_labels = custom_labels or {}
+        # the names a reference prints, in the document's language
+        self.names = names or ENGLISH
+        # \numberwithin{equation}{...}: the heading level, or None
+        self.equations_within = equations_within
         self.warn = warn or (lambda _m: None)
         # The emitter decides what a reference and a raw block ARE; this
         # pass only decides where they go.
@@ -229,7 +258,17 @@ class Injector:
         doc = dict(doc)
         blocks = _free_trapped_placeholders(doc.get("blocks", []), self.warn)
         if self.emitter is not None:
-            found = targets(blocks)
+            inline = getattr(self.emitter, "inline", None)
+
+            def example_notes(node: dict) -> list[int]:
+                idx = _placeholder_index(node)
+                if idx is None or idx not in self.blocks:
+                    return []
+                return [int(k) for k in _EXAMPLE_NOTE.findall(self.blocks[idx])]
+
+            found = targets(blocks, example_notes,
+                            getattr(inline, "note_labels", None),
+                            self.equations_within)
             self._headings = {id(h): sec for h, sec in found.headings}
             self._floats = {id(n): f for n, f in found.floats}
             self._notes = {n.ident: n for n in found.footnotes}
@@ -268,6 +307,10 @@ class Injector:
                 self._examples.add(id(block))
                 return block
             self.warn(f"placeholder {idx} survived into the AST with no example to put back")
+
+        if is_appendix_mark(node):
+            # read by targets(), and nothing on the page
+            return []
 
         replaced = self._reference(node)
         if replaced is not None:
@@ -346,6 +389,11 @@ class Injector:
                 m = REF_CMD.fullmatch(str(text).strip())
                 if m and m.group(2) in self.custom_labels:
                     return self._custom_reference(m.group(2), bare=m.group(1) == "pref")
+                many = _CLEVEREF.fullmatch(str(text).strip())
+                if many and (many.group(3) is not None or "," in many.group(2)
+                             or many.group(2).strip() in self.labels
+                             or many.group(2).strip() in self.custom_labels):
+                    return self._cleveref(*many.groups())
                 any_ref = ANY_REF.fullmatch(str(text).strip())
                 if any_ref and any_ref.group(2) in self.targets:
                     return self._target_reference(*any_ref.groups())
@@ -367,7 +415,7 @@ class Injector:
         target = self.targets[label]
         word, form = _FORMS[cmd]
         if word is None:
-            word = _word(target, cmd)
+            word = _word(self.names, target, cmd)
         self.refs_rewritten += 1
         if isinstance(target, Footnote):
             if form == "title":
@@ -486,6 +534,75 @@ class Injector:
                       + [_raw_inline(self.fmt, end)])
         return [first] + blocks[1:]
 
+    def _cleveref(self, cmd: str, first: str, second: str | None) -> dict:
+        r"""\cref and its kin with a list of labels, or a range, as cleveref
+        prints them (cleveref.py): "sections 1 to 3 and 5", "(1) and (2)",
+        "section 1, table 1, and eq. (1)" -- each number its own field."""
+        pages = cmd.lower().endswith("pageref")
+        labels = [first] if second is not None else first.split(",")
+        entries = [self._entry(label.strip(), pages) for label in labels if label.strip()]
+        if second is not None:
+            entries.append(self._entry(second.strip(), pages))
+        self.refs_rewritten += 1
+        capital = cmd[0] == "C"
+        if second is not None:
+            kind = entries[0].kind
+            word = "" if kind == "example" else self.names.cref(kind, True, capital)
+            before, between = self.names.range
+            parts = (([word + "\u00a0"] if word else []) + ([before] if before else [])
+                     + [entries[0], between, entries[1]])
+        else:
+            parts = phrase(entries, capital, self.names)
+        out = [{"t": "Str", "c": p} if isinstance(p, str) else p.target for p in parts]
+        return {"t": "Span", "c": [["", [], []], out]}
+
+    def _entry(self, label: str, page: bool) -> Entry:
+        r"""One label of a \cref list: its kind, its number to sort by, and
+        the field that shows it -- or its page, for \cpageref."""
+        raw = lambda xml: _raw_inline(self.fmt, xml)  # noqa: E731
+        if label in self.custom_labels:
+            custom, letter = self.custom_labels[label]
+            br = getattr(self.emitter, "brackets", None) or Brackets()
+            return Entry("example", None,
+                         {"t": "Str", "c": br.custom_reference(custom, letter, False)})
+        if label in self.labels:
+            index, letter = self.labels[label]
+            if page:
+                return Entry("page", None, raw(self.emitter.page_reference(index)))
+            return Entry("example", (index, letter) if letter else (index,),
+                         raw(self.emitter.reference(index, letter)))
+        target = self.targets.get(label)
+        if target is None:
+            # as LaTeX prints a label it does not know
+            self.warn(f"\\cref to {label!r}, which nothing carries: printed as ??")
+            return Entry("example", None, {"t": "Str", "c": "??"})
+        if page:
+            if isinstance(target, Item):
+                xml = self.emitter.bookmark_page(target.path[-1][0])
+            elif isinstance(target, Equation):
+                xml = self.emitter.bookmark_page(target.bookmark)
+            elif isinstance(target, Footnote):
+                xml = self.emitter.note_reference(target, "page")
+            elif isinstance(target, Float):
+                xml = self.emitter.float_reference(target, "page")
+            else:
+                xml = self.emitter.section_reference(target, "page")
+            return Entry("page", None, raw(xml))
+        if isinstance(target, Item):
+            return Entry("item", target.numbers, raw("".join(
+                self.emitter.item_reference(name, shown) for name, shown in target.path)))
+        if isinstance(target, Equation):
+            return Entry("equation", target.key, {"t": "Str", "c": f"({target.number})"})
+        if isinstance(target, Footnote):
+            return Entry("footnote", (target.number,),
+                         raw(self.emitter.note_reference(target, "number")))
+        if isinstance(target, Float):
+            return Entry(target.kind, (target.number,),
+                         raw(self.emitter.float_reference(target, "number")))
+        # the appendix's after the rest: "sections 1 and A"
+        key = ((int(target.appendix),) + target.numbers) if target.number else None
+        return Entry("section", key, raw(self.emitter.section_reference(target, "number")))
+
     def _numbered_caption(self, node: dict, flt: Float) -> dict:
         r"""The float, its caption numbered as LaTeX numbers it -- "Table 1:
         A table." -- by a live sequence, its title bookmarked for \nameref.
@@ -502,9 +619,10 @@ class Injector:
                                       if last["c"] != "." else [])
             stop = [{"t": "Str", "c": "."}]
         start, end = self.emitter.marks(flt.title_bookmark, flt.serial, slot=1)
-        numbered = ([{"t": "Str", "c": CAPTION_NAMES[flt.kind]}, {"t": "Space"},
+        name, sep = self.names.caption(flt.kind)
+        numbered = ([{"t": "Str", "c": name}, {"t": "Space"},
                      _raw_inline(self.fmt, self.emitter.caption_number(flt)),
-                     {"t": "Str", "c": ":"}, {"t": "Space"},
+                     {"t": "Str", "c": sep}] + ([] if sep.endswith(" ") else [{"t": "Space"}]) + [
                      _raw_inline(self.fmt, start)] + inlines
                     + [_raw_inline(self.fmt, end)] + stop)
         caption = node["c"][1]
@@ -517,8 +635,9 @@ class Injector:
     def _page_reference(self, cmd: str, label: str) -> dict:
         index, _letter = self.labels[label]
         self.refs_rewritten += 1
-        return _with_word(_FORMS[cmd][0], _raw_inline(
-            self.fmt, self.emitter.page_reference(index)))
+        word = _FORMS[cmd][0]
+        return _with_word(_word(self.names, None, cmd) if word is None else word,
+                          _raw_inline(self.fmt, self.emitter.page_reference(index)))
 
     def _custom_reference(self, label: str, bare: bool) -> dict:
         custom, letter = self.custom_labels[label]
@@ -528,9 +647,11 @@ class Injector:
 
 
 def inject(doc: dict, blocks_by_index, labels, warn=None,
-           emitter=None, custom_labels=None) -> tuple[dict, Injector]:
+           emitter=None, custom_labels=None, names=None,
+           equations_within=None) -> tuple[dict, Injector]:
     inj = Injector(blocks_by_index, labels, warn, emitter=emitter,
-                   custom_labels=custom_labels)
+                   custom_labels=custom_labels, names=names,
+                   equations_within=equations_within)
     return inj.run(doc), inj
 
 

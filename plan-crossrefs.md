@@ -50,9 +50,8 @@ from the output" warning. The full corpus against linguexx 1.4 passes (521).
 
 ## Known limits of step 1
 
-- `\appendix` numbering (A, B) is not reproduced: the outline keeps
-  counting in arabic numerals.
-- `\cref{a,b}` with several labels is deleted with a warning, as before.
+- ~~`\appendix` numbering~~ and ~~`\cref` with several labels~~: resolved,
+  see "The remaining issues" below.
 - A `book` or `report` document: pandoc makes `\chapter` level 1, which
   numbers right ("1.1" for a section), but such classes number only to
   `\subsection`, and level 3 is numbered here regardless.
@@ -90,16 +89,8 @@ Tests: `tests/test_float_refs.py`; the conversions fail on the code of step 1.
 
 ### Known limits of step 2
 
-- The names are English ("Table", "Figure", "footnote"). A French
-  document's LaTeX prints "Tableau"; the converter does not read babel's
-  language for this.
-- A footnote inside an example is not counted (the example is rendered on
-  its own, its note is not in the document's AST), so the cached number of
-  a reference to a later note is one short: "2" where LaTeX prints "3". The
-  field resolves to the right note and LibreOffice shows "3"; a .docx
-  reader that does not update fields shows "2". Older than this step, and
-  found by it: that note gets pandoc's id `ftn0` a second time, which a
-  note reference to the first note of the document would find twice.
+- ~~English names~~ and ~~a footnote inside an example~~: resolved, see
+  "The remaining issues" below.
 - Subfigures and `\caption` outside a float are not handled.
 
 ## Step 3: list items — done (35c6656)
@@ -141,7 +132,7 @@ Tests: `tests/test_list_refs.py`; they fail on the code of step 2.
 - A list deeper than four levels is numbered as the fourth (LaTeX refuses
   it).
 
-## Step 4: equations — done
+## Step 4: equations — done (6e05d4e)
 
 Decided at the start: references to equations are text. Measured first:
 pandoc writes a display equation **with no number**, so a reference as
@@ -180,12 +171,76 @@ step 3.
 - The numbers and references are text: inserting an equation does not
   renumber the ones after it, nor the references.
 - A split `align` loses its column alignment.
-- `\numberwithin{equation}{section}` ("1.1") is not read: the numbering is
-  article's default, one counter through the document.
+- ~~`\numberwithin{equation}{section}`~~: resolved, see below.
 - An equation inside an example is not numbered: the example is rendered on
   its own, outside the AST this reads.
 
+## The remaining issues — resolved
+
+Asked for after step 4: "Resolve remaining issues". Each was measured
+against LaTeX first, and each has its tests.
+
+- **A footnote inside an example** (`tests/test_example_footnotes.py`).
+  Worse than recorded: the `.odt` resolved a reference to the document's
+  first note to the example's (two notes called `ftn0`), a `\label` in the
+  note was taken for the example's ("(1)" for "2"), and the `.docx` printed
+  `\footnote{...}` in the cell. The example renderer knows `\footnote` now:
+  each such note is named `lxftn<n>` -- its `text:id`, and in OOXML a
+  bookmark around its mark -- so a reference names it directly; the
+  extractor leaves a `\label` inside a note to the note; footnote numbering
+  counts them where their example stands. Found on the way: LibreOffice
+  pairs a `.docx` note with its mark by the *order of the ids*, not by id
+  (measured: an appended note with a high id showed the next note's text),
+  so every note is renumbered in text order.
+- **Several labels in `\cref`, `\crefrange`, and `\cref` to an example**
+  (`cleveref.py`, `tests/test_cleveref.py`). Measured: grouped by kind in
+  first-come order, sorted, repeats dropped, runs of three or more as a
+  range, "a and b" / "a, b and c" within a group, "A, B, and C" between
+  groups, plural names, `\Cref` capitalising the first group only. A
+  single `\cref` to an example was deleted too; linguexx prints "(1)".
+- **Pages in a `.docx` cache** (`pages.py`, `tests/test_pages.py`). When
+  LibreOffice and pdfinfo are there, the finished file is exported to PDF
+  with its bookmarks as named destinations, and each page field's "?"
+  becomes the page its bookmark is on. Without them, "?" stays and the run
+  says so. In the `.odt` a page reference to an *example* stays "?" (its
+  number is a sequence, not a bookmark); LibreOffice computes it on
+  loading, and no other `.odt` reader was tried.
+- **The document's language** (`names.py`, `tools/measure_names.py`,
+  `tests/test_names.py`). Measured per language and per way of loading:
+  cleveref's names follow a language given to cleveref or to the class,
+  *not* babel's option alone (then they stay English, in LaTeX too);
+  hyperref's `\autoref` names and the captions follow babel; under
+  polyglossia `\autoref` stays English and the captions are polyglossia's
+  own ("Tab. 1 : " in French, "Table 1 – " under babel). English, French,
+  German, Spanish, Italian, Portuguese, Dutch; another language prints
+  English, with a warning.
+- **`\appendix`** (`tests/test_appendix.py`). Pandoc drops it without a
+  trace, so the extractor leaves a marker paragraph; the sections after it
+  are "A", "A.1", their headings take a lettered numbering of their own (a
+  list in ODF, a second numbering in OOXML), and `\autoref` says "Appendix
+  A" in the document's language. The references are fields on those
+  numbers and followed them even before the converter knew (spiked).
+- **`\numberwithin{equation}{section}`** (and `\counterwithin`): "(1.2)",
+  "(A.1)", restarting at each section.
+- Found and fixed on the way: `\autoref` to an unnumbered heading is
+  "section", with the last number before it (it said "paragraph").
+
+### What remains, and why
+
+- **"2(b)" for LaTeX's "2b"**, and "(ii)" for "ii": a reference to a list
+  item whose label has parentheses keeps them. Spiked in both formats: no
+  reference format of either drops them. Hidden counter fields could, but
+  would drift as soon as an item is added in the word processor.
+- **`\cpageref` with several labels on one page** prints "pages 1 and 1"
+  where cleveref merges them into "page 1": the pages are known only after
+  layout, when the phrase is already written.
+- **A `table` with no `tabular`** (an image in a table float): pandoc drops
+  the environment, caption and label with it, before the converter sees it.
+  Older than this work; a reference to it prints "??" and warns.
+- French typography of the prose itself -- "REFS :" with a space before
+  the colon, the footnote mark "1." -- is babel's on every line, not a
+  reference's.
+
 ## Next
 
-Nothing planned. `\appendix` lettering, several labels in one `\cref`,
-and non-English names are the limits that remain across the steps.
+Nothing planned; see "What remains, and why".

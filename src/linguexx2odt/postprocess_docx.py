@@ -112,7 +112,8 @@ def end_with_paragraph(document_xml: str) -> str:
 
 
 def apply_styles(raw: Path, out: Path, fragment: str,
-                 default_run_props: str = "") -> None:
+                 default_run_props: str = "",
+                 footnotes: list[tuple[int, str]] | None = None) -> None:
     """Write *raw* to *out* with the styles added, the face declared, the
     headings numbered, and the body ending in a paragraph."""
     from . import headings
@@ -133,8 +134,16 @@ def apply_styles(raw: Path, out: Path, fragment: str,
     if default_run_props:
         styles = set_default_font(styles, default_run_props)
     members["word/styles.xml"] = styles
-    members["word/numbering.xml"] = headings.number_docx_numbering(
-        read(raw, "word/numbering.xml"))
+    ended, numbering = headings.letter_docx_appendix(
+        ended, headings.number_docx_numbering(read(raw, "word/numbering.xml")))
+    members["word/numbering.xml"] = numbering
+    if ended != document:
+        members["word/document.xml"] = ended
+    if footnotes:
+        # the notes of footnotes in examples, which pandoc never saw
+        members["word/footnotes.xml"], ended = headings.add_docx_footnotes(
+            read(raw, "word/footnotes.xml"), footnotes, ended)
+        members["word/document.xml"] = ended
     if not members:
         shutil.copy2(raw, out)
         return

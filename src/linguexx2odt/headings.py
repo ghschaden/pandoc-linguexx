@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import re
 
-from .sections import (CAPTION_NAMES, FOOTNOTE_MARK, FOOTNOTE_MARKER,
+from .sections import (APPENDIX, CAPTION_NAMES, FOOTNOTE_MARK, FOOTNOTE_MARKER,
                        NUMBERED_LEVELS, UNNUMBERED)
 
 # -- ODF ------------------------------------------------------------------
@@ -231,3 +231,141 @@ def start_odt_lists(content_xml: str) -> str:
     where LaTeX prints "5.", and a reference to the item said "1" with it.
     """
     return _LIST_START.sub(r'\1\3 text:start-value="\2"', content_xml)
+
+
+def add_docx_footnotes(footnotes_xml: str, notes: list[tuple[int, str]],
+                       document_xml: str) -> tuple[str, str]:
+    """Add the footnotes of the examples (DocxEmitter.footnotes); return
+    (footnotes.xml, document.xml) with every note numbered in the order its
+    mark comes in the text.
+
+    Word pairs a mark with its note by id; LibreOffice pairs them by the
+    ids' order (measured): with the ids out of text order, a note in an
+    example showed the next note's text under its number, and so did the
+    notes in footnotes.xml put in text order.  Ids that rise with the text
+    satisfy both.  The separators (no mark refers to them) keep theirs.
+    """
+    xml = footnotes_xml.replace(
+        "</w:footnotes>", "".join(x for _id, x in notes) + "</w:footnotes>", 1)
+    marks = re.findall(r'<w:footnoteReference\b[^>]*\bw:id="(-?\d+)"', document_xml)
+    new = {old: str(k + 1) for k, old in enumerate(dict.fromkeys(marks))}
+
+    def renumber(m: re.Match[str]) -> str:
+        return f'{m.group(1)}{new.get(m.group(2), m.group(2))}"'
+    entries = list(re.finditer(r'<w:footnote\b[^>]*\bw:id="(-?\d+)"[^>]*>.*?</w:footnote>',
+                               xml, re.S))
+    fixed = [e.group(0) for e in entries if e.group(1) not in new]
+    marked = sorted((e for e in entries if e.group(1) in new),
+                    key=lambda e: int(new[e.group(1)]))
+    body = "".join(fixed + [re.sub(r'(<w:footnote\b[^>]*\bw:id=")(-?\d+)"', renumber,
+                                   e.group(0), count=1) for e in marked])
+    if entries:
+        xml = xml[:entries[0].start()] + body + xml[entries[-1].end():]
+    document_xml = re.sub(r'(<w:footnoteReference\b[^>]*\bw:id=")(-?\d+)"',
+                          renumber, document_xml)
+    return xml, document_xml
+
+
+def unique_odt_note_ids(content_xml: str) -> str:
+    """Give every text:note an id of its own.
+
+    An example pandoc renders on its own (something in it the renderer does
+    not handle) numbers its notes from ftn0 again, and a note reference
+    found the first of two notes called ftn0 -- the wrong one.  A repeat is
+    renamed; a reference never names one of those, whose \\label pandoc
+    dropped.
+    """
+    seen: set[str] = set()
+    n = [0]
+
+    def fix(m: re.Match[str]) -> str:
+        ident = m.group(2)
+        if ident in seen:
+            n[0] += 1
+            ident = f"{ident}_{n[0]}"
+        seen.add(ident)
+        return f"{m.group(1)}{ident}{m.group(3)}"
+    return re.sub(r'(<text:note\b[^>]*\btext:id=")([^"]+)(")', fix, content_xml)
+
+
+# -- the appendix -----------------------------------------------------------
+#
+# After \appendix the sections are lettered, "A", "A.1".  One outline
+# numbering cannot change its format mid-document, so the appendix's
+# headings take a numbering of their own: in ODF a list around each, in
+# OOXML a second numbering.  The references to them are fields on those
+# numbers already, and follow them (spiked: LibreOffice recomputes "A.1").
+
+APPENDIX_LIST = "LxAppendix"
+
+
+def _appendix_list_style() -> str:
+    levels = "".join(
+        f'<text:list-level-style-number text:level="{n}"'
+        f' style:num-format="{"A" if n == 1 else "1"}" text:display-levels="{n}">'
+        '<style:list-level-properties text:list-level-position-and-space-mode='
+        '"label-alignment"><style:list-level-label-alignment '
+        'text:label-followed-by="space"/></style:list-level-properties>'
+        "</text:list-level-style-number>"
+        for n in range(1, NUMBERED_LEVELS + 1))
+    return f'<text:list-style style:name="{APPENDIX_LIST}">{levels}</text:list-style>'
+
+
+_ODF_APPENDIX_HEADING = re.compile(
+    r'<text:h\b[^>]*\btext:outline-level="(\d+)"[^>]*>(?:(?!</text:h>).)*?'
+    rf'text:name="{APPENDIX}\d+".*?</text:h>', re.S)
+
+
+def letter_odt_appendix(content_xml: str) -> str:
+    """Each appendix heading in a list of the lettered style, nested to its
+    level, continuing the one before."""
+    if f'text:name="{APPENDIX}' not in content_xml:
+        return content_xml
+
+    def wrap(m: re.Match[str]) -> str:
+        inner = m.group(0)
+        for _ in range(int(m.group(1)) - 1):
+            inner = f"<text:list><text:list-item>{inner}</text:list-item></text:list>"
+        return (f'<text:list text:style-name="{APPENDIX_LIST}" text:continue-numbering="true">'
+                f"<text:list-item>{inner}</text:list-item></text:list>")
+    content_xml = _ODF_APPENDIX_HEADING.sub(wrap, content_xml)
+    return content_xml.replace("</office:automatic-styles>",
+                               _appendix_list_style() + "</office:automatic-styles>", 1)
+
+
+APPENDIX_ABSTRACT_ID = 9110
+APPENDIX_NUM_ID = 9111
+
+
+def letter_docx_appendix(document_xml: str, numbering_xml: str) -> tuple[str, str]:
+    """The appendix's heading paragraphs numbered by a lettered numbering."""
+    if f'w:name="{APPENDIX}' not in document_xml:
+        return document_xml, numbering_xml
+
+    def level(i: int) -> str:
+        return (_level(i).replace('<w:numFmt w:val="decimal"/>', '<w:numFmt w:val="upperLetter"/>')
+                if i == 0 else _level(i))
+    abstract = (f'<w:abstractNum w:abstractNumId="{APPENDIX_ABSTRACT_ID}">'
+                '<w:multiLevelType w:val="multilevel"/>'
+                + "".join(level(i) for i in range(NUMBERED_LEVELS)) + "</w:abstractNum>")
+    m = re.search(r"<w:num\b", numbering_xml) or re.search(r"</w:numbering>", numbering_xml)
+    numbering_xml = numbering_xml[:m.start()] + abstract + numbering_xml[m.start():]
+    numbering_xml = numbering_xml.replace(
+        "</w:numbering>", f'<w:num w:numId="{APPENDIX_NUM_ID}"><w:abstractNumId'
+        f' w:val="{APPENDIX_ABSTRACT_ID}"/></w:num></w:numbering>', 1)
+
+    def fix(m: re.Match[str]) -> str:
+        para = m.group(0)
+        if f'w:name="{APPENDIX}' not in para:
+            return para
+        style = re.search(r'<w:pStyle w:val="Heading(\d)"', para)
+        ilvl = int(style.group(1)) - 1 if style else 0
+        numpr = (f'<w:numPr><w:ilvl w:val="{ilvl}"/>'
+                 f'<w:numId w:val="{APPENDIX_NUM_ID}"/></w:numPr>')
+        ppr = re.search(r"<w:pPr\s*/>|<w:pPr>(.*?)</w:pPr>", para, re.S)
+        if ppr is None:
+            at = para.index(">") + 1
+            return para[:at] + f"<w:pPr>{numpr}</w:pPr>" + para[at:]
+        return (para[:ppr.start()] + f"<w:pPr>{_with_numpr(ppr.group(1) or '', numpr)}</w:pPr>"
+                + para[ppr.end():])
+    return _DOCX_PARA.sub(fix, document_xml), numbering_xml
