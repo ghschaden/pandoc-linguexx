@@ -116,7 +116,11 @@ def test_the_prose_stays_and_a_reference_prints_what_latex_prints(
         tmp_path: Path, target: str) -> None:
     text = _text(_convert(tmp_path, target))
     assert "Before the math" in text and "and prose after it." in text, text
-    assert LATEX_REFS in text, text
+    # Any page for G: it is the layout's, which an older LibreOffice's
+    # taller formulas push to page 2 (CI).  test_pages holds a page to the
+    # one LibreOffice's own PDF shows.
+    refs = re.escape(LATEX_REFS).replace(r"G\ 1", r"G\ \d+")
+    assert re.search(refs, text), text
 
 
 @pandoc
