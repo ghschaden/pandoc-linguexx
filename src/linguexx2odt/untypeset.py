@@ -49,7 +49,7 @@ from dataclasses import dataclass, field
 
 from .inline import WRAPPERS
 from .ir import Body, Example, Item, Tier
-from .latexutil import Brackets
+from .latexutil import Brackets, count_as
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA, SPACE_ABOVE_PARA,
     SPACE_BELOW_PARA, TRANSLATION_PARA,
@@ -404,6 +404,9 @@ class Context:
 
     warnings: list[str] = field(default_factory=list)
 
+    packages: set[str] = field(default_factory=set)
+    """What the examples need loaded: "forest", "forest-linguistics"."""
+
     def ref_token(self, target: str) -> str:
         self.refs.append(target)
         return REF_TOKEN.format(n=len(self.refs) - 1)
@@ -495,7 +498,8 @@ def _lead(rows: list[list[Cell]]) -> tuple[int, int | None]:
     gloss with no translation and no mark, or sub-examples without
     either) says nothing.  If it is one row, its cells do; otherwise, and
     only there, a cell's content is read: column 1 is a marker column when
-    it holds "a." on the first row and the next marker on a later one.  A
+    it holds "a." (or "i.") on the first row and a next marker on a later
+    one.  A
     glossed example of one sub-example with no translation and no mark is
     read as no sub-example at all.
     """
@@ -516,8 +520,10 @@ def _lead(rows: list[list[Cell]]) -> tuple[int, int | None]:
         # unglossed text is one cell across the body: whatever precedes it
         # leads.
         return len([c for c in body[0] if c.style != ANNOT_PARA]) - 1, None
-    if body and len(body[0]) > 2 and marker_core(body[0][1].plain) == "a":
-        if any(len(r) > 1 and marker_core(r[1].plain) in ("b", "i")
+    # "a." and then "b." -- or "i." and "ii.", in a document counting its
+    # first level in roman; "i." after "a." is the level below.
+    if body and len(body[0]) > 2 and marker_core(body[0][1].plain) in ("a", "i"):
+        if any(len(r) > 1 and marker_core(r[1].plain) in ("b", "i", "ii")
                for r in body[1:]):
             return 2, None
     return 1, None
@@ -570,7 +576,7 @@ class _Building:
 
 
 def read_example(rows: list[list[Cell]], index: int, ctx: Context,
-                 example_bookmarks: set[str]
+                 example_bookmarks: set[str], first: str = "alph"
                  ) -> tuple[Example, Brackets | None, list[str]]:
     """One example table -> (Example, the brackets around its number, the
     bookmarks on its number).  The Example's labels are left empty: which
@@ -625,7 +631,7 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
         elif number_cell.plain:
             custom = latex(number_cell)
     if has_marker:
-        levels = _levels([b.marker for b in bodies], ctx, index)
+        levels = _levels([b.marker for b in bodies], ctx, index, first)
         items = tuple(Item(level=lv, ordinal=o, marker=b.marker, body=body)
                       for b, body, (lv, o) in zip(bodies, built, levels))
         ex = Example(index=index, placeholder="", custom_label=custom,
@@ -640,10 +646,19 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
 def _body(b: _Building, latex, ctx: Context, index: int) -> Body:
     translation = " ".join(b.translation)
     if b.tree is not None:
-        ctx.warnings.append(
-            f"example {index + 1} holds a drawn tree; its bracket notation is "
-            f"kept as a comment in the example, to be set with forest by hand")
         lines = [ln.strip() for ln in b.tree.splitlines() if ln.strip()]
+        forest = macro_tree_to_forest(lines)
+        if forest is not None:
+            source, roof = forest
+            ctx.packages.add("forest")
+            if roof:
+                ctx.packages.add("forest-linguistics")
+            return Body(judgment=b.judgment, text=source, translation=translation,
+                        annot=b.annot)
+        ctx.warnings.append(
+            f"example {index + 1} holds a drawn tree whose bracket notation does "
+            f"not parse; it is kept as a comment in the example, to be set "
+            f"with forest by hand")
         text = "% LinguExx tree, as it was typed:\n" + "\n".join(
             f"% {ln}" for ln in lines) + "\n"
         return Body(judgment=b.judgment, text=text, translation=translation,
@@ -687,25 +702,28 @@ def _number_brackets(cell: Cell) -> Brackets:
     return Brackets(ex_l="".join(before).strip(), ex_r="".join(after).strip())
 
 
-def _levels(markers: list[str], ctx: Context, index: int) -> list[tuple[int, int]]:
+def _levels(markers: list[str], ctx: Context, index: int,
+            first: str = "alph", second: str = "roman") -> list[tuple[int, int]]:
     """(level, ordinal) of each sub-example, from its marker.
 
     The table does not say which level a sub-example is at -- both sit in
     one marker column -- so the letters and numerals do, read as linguexx
-    writes them: a., b., ... at the first level, i., ii., ... below it.
-    "i." after "h." is read as the ninth letter, not as a deeper level.
+    counts them: *first* at the first level (``\\Exalph``: a., b., ... or,
+    in a document that set it to \\roman, i., ii., ...), *second* below it.
+    A marker that continues the level it is at stays there; "i." after
+    "h." is the ninth letter, not a deeper level.
     """
     out: list[tuple[int, int]] = []
     level, counts = 0, {1: 0, 2: 0}
     for m in markers:
         core = marker_core(m)
-        if level == 2 and counts[2] < len(_ROMAN) and core == _ROMAN[counts[2]]:
+        if level == 2 and core == count_as(second, counts[2] + 1):
             counts[2] += 1
-        elif core == _alph(counts[1] + 1):
+        elif core == count_as(first, counts[1] + 1):
             level = 1
             counts[1] += 1
             counts[2] = 0
-        elif core == "i" and level >= 1:
+        elif level >= 1 and core == count_as(second, 1):
             level, counts[2] = 2, 1
         else:
             ctx.warnings.append(
@@ -715,3 +733,157 @@ def _levels(markers: list[str], ctx: Context, index: int) -> list[tuple[int, int
             counts[level] += 1
         out.append((level, counts[level]))
     return out
+
+
+def first_marker(rows: list[list[Cell]]) -> str | None:
+    """The core of an example's first sub-example marker -- "a", or "i" in
+    a document counting its first level in roman -- or None without any."""
+    lead, jcol = _lead(rows)
+    if (lead - (1 if jcol is not None else 0)) < 2:
+        return None
+    head = head_row(rows)
+    for row in rows:
+        if (not row or is_spacer(row) or row is head or len(row) < 2
+                or any(c.style == TRANSLATION_PARA for c in row)):
+            continue
+        core = marker_core(row[1].plain)
+        if core:
+            return core
+    return None
+
+
+# -- trees -----------------------------------------------------------------
+
+@dataclass
+class _Node:
+    label: str
+    options: list[str] = field(default_factory=list)
+    kids: list[_Node] = field(default_factory=list)
+
+
+class _TreeReader:
+    """The macro's bracket notation (LxTreeParse; addin/core/tree.js), as
+    much of it as writing forest needs: a label is a bare word or {braced},
+    with forest's roof and name= after a comma, and a bare word among the
+    children is a leaf of its own -- where forest would read "[NP the tree]"
+    as one node labelled "NP the tree"."""
+
+    def __init__(self, src: str):
+        self.src, self.pos = src, 0
+
+    def skip(self) -> None:
+        while self.pos < len(self.src) and self.src[self.pos].isspace():
+            self.pos += 1
+
+    def token(self) -> str:
+        if self.src[self.pos:self.pos + 1] == "{":
+            depth, start = 0, self.pos + 1
+            while self.pos < len(self.src):
+                c = self.src[self.pos]
+                depth += (c == "{") - (c == "}")
+                self.pos += 1
+                if depth == 0:
+                    return self.src[start:self.pos - 1]
+            raise ValueError("a { is never closed")
+        start = self.pos
+        while self.pos < len(self.src) and self.src[self.pos] not in "[]{}" \
+                and not self.src[self.pos].isspace():
+            self.pos += 1
+        return self.src[start:self.pos]
+
+    @staticmethod
+    def labelled(raw: str) -> _Node:
+        head, *opts = raw.split(",")
+        options = []
+        for opt in (o.strip() for o in opts):
+            if opt.lower() == "roof":
+                options.append("roof")
+            elif opt.lower().startswith("name="):
+                options.append("name=" + opt[5:].strip())
+            elif opt:
+                raise ValueError(f"node option {opt!r}")
+        return _Node(head.strip(), options)
+
+    def node(self) -> _Node:
+        self.pos += 1                                   # the [
+        self.skip()
+        n = self.labelled(self.token())
+        while True:
+            self.skip()
+            if self.pos >= len(self.src):
+                raise ValueError("a bracket is never closed")
+            c = self.src[self.pos]
+            if c == "]":
+                self.pos += 1
+                return n
+            if c == "[":
+                n.kids.append(self.node())
+            elif c == ",":
+                raise ValueError("a comma on its own")
+            else:
+                n.kids.append(self.labelled(self.token()))
+
+
+def _forest_label(label: str) -> str:
+    text = latex_escape(label)
+    return "{" + text + "}" if (not text or re.search(r"[\s,=\[\]]", label)) else text
+
+
+def _forest(n: _Node, root: bool = False) -> str:
+    # No space after the comma: forest reads either, and the Writer macro --
+    # which a converted forest tree is handed to again -- reads "DP, name=x"
+    # as a label and a leaf "name=x".
+    opts = n.options + (["baseline"] if root else [])
+    out = "[" + _forest_label(n.label) + "".join("," + o for o in opts)
+    if n.kids:
+        out += " " + " ".join(_forest(k) for k in n.kids)
+    return out + "]"
+
+
+_MOVE = re.compile(r"^move\s+(\S+)\s*->\s*(\S+)\s*$", re.I)
+
+
+def macro_tree_to_forest(lines: list[str]) -> tuple[str, bool] | None:
+    """A drawn tree's lines -- the bracket notation and any "move a -> b"
+    under it -- as a forest environment, and whether it uses roof (forest's
+    linguistics library).  None if the notation does not parse.
+
+    The root carries baseline, so the example number stands level with it
+    rather than under the tree's last row (measured, pdflatex).  A movement
+    is an arrow from the base to the landing site, below the tree.
+    """
+    moves, tree = [], []
+    for ln in lines:
+        m = _MOVE.match(ln.strip())
+        if m:
+            moves.append(m.groups())
+        elif ln.strip().lower().startswith("move"):
+            return None
+        else:
+            tree.append(ln)
+    reader = _TreeReader(" ".join(tree))
+    try:
+        reader.skip()
+        if reader.src[reader.pos:reader.pos + 1] != "[":
+            return None
+        root = reader.node()
+        reader.skip()
+        if reader.pos < len(reader.src):
+            return None
+    except (ValueError, IndexError):
+        return None
+    names: set[str] = set()
+
+    def collect(n: _Node) -> None:
+        names.update(o[5:] for o in n.options if o.startswith("name="))
+        for k in n.kids:
+            collect(k)
+    collect(root)
+    # The macro refuses a move to or from a node no one named, and LaTeX
+    # would stop on the coordinate: the tree is not translated.
+    if any(a not in names or b not in names for a, b in moves):
+        return None
+    body = [_forest(root, root=True)]
+    body += [f"\\draw[->] ({a}) to[out=south west, in=south] ({b});" for a, b in moves]
+    roof = "roof" in _forest(root)
+    return "\\begin{forest}\n" + "\n".join(body) + "\n\\end{forest}", roof

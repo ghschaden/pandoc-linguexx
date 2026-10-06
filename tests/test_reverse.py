@@ -31,6 +31,7 @@ reason, rather than taken out of the run.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import zipfile
@@ -49,6 +50,16 @@ CASES = sorted((HERE / "cases").glob("*.tex"))
 CORPUS_DIR = Path(__file__).resolve().parents[2] / "linguexx" / "tests"
 # The underscore files are preambles \input by the others, not documents.
 CORPUS = sorted(p for p in CORPUS_DIR.glob("*.tex") if not p.name.startswith("_"))
+
+#: Every corpus document in CI, every fourth in a local run.  A round trip
+#: is about a second -- three pandoc runs -- and the 110 documents took a
+#: local `make test` from 75 s to three and a half minutes, where CI does
+#: them in under a minute.  The sample is fixed, so a local failure is
+#: reproducible; LINGUEXX_FULL_CORPUS=1 runs them all.  GitHub Actions sets
+#: CI=true, and test_ci_round_trips_the_whole_corpus holds CI to it.
+FULL_CORPUS = (os.environ.get("CI") == "true"
+               or os.environ.get("LINGUEXX_FULL_CORPUS") == "1")
+CORPUS_ROUND_TRIPS = CORPUS if FULL_CORPUS else CORPUS[::4]
 
 pandoc = pytest.mark.skipif(shutil.which("pandoc") is None,
                             reason="pandoc not installed")
@@ -131,7 +142,7 @@ def check(tex: Path, tmp_path: Path, kind: str) -> None:
 
 
 @pandoc
-@pytest.mark.parametrize("tex", CASES + CORPUS, ids=lambda p: p.stem)
+@pytest.mark.parametrize("tex", CASES + CORPUS_ROUND_TRIPS, ids=lambda p: p.stem)
 def test_round_trip_through_docx(tex: Path, tmp_path: Path) -> None:
     check(tex, tmp_path, "docx")
 
@@ -148,6 +159,13 @@ ODT_CASES = [HERE / "cases" / f"{n}.tex" for n in
 @pytest.mark.parametrize("tex", ODT_CASES, ids=lambda p: p.stem)
 def test_round_trip_through_odt(tex: Path, tmp_path: Path) -> None:
     check(tex, tmp_path, "odt")
+
+
+def test_ci_round_trips_the_whole_corpus() -> None:
+    """The local sample is a convenience; CI is where every document runs."""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        assert FULL_CORPUS and CORPUS_ROUND_TRIPS == CORPUS
+    assert CORPUS_ROUND_TRIPS == CORPUS or len(CORPUS_ROUND_TRIPS) == len(CORPUS[::4])
 
 
 @pandoc
@@ -207,6 +225,33 @@ def test_redefined_brackets_come_back(tmp_path: Path) -> None:
     assert r"\renewcommand{\SubExLBr}" not in back
     # [1] reached pandoc's LaTeX as {[}...{]}, and is a \ref all the same
     assert r"Refs: \ref{ex:1}, \pref{ex:1}, \ref{ex:1b}." in back
+
+
+@pandoc
+def test_a_first_level_counted_in_roman_comes_back(tmp_path: Path) -> None:
+    r"""\let\Exalph\roman: the sub-examples are i., ii. in the document, and
+    a LaTeX that lettered them would number them otherwise.  Every paradigm
+    starting at "i." says the document counted that way."""
+    back, warnings = convert(tmp_path, r"""\documentclass{article}
+\usepackage[lazy]{linguexx}
+\let\Exalph\roman
+\begin{document}
+\ex.\label{top}
+\a.\label{one} First.
+\b. Second.
+\a. Deeper.
+\z.
+\c. Third.
+
+See \ref{one}.
+\end{document}
+""")
+    assert r"\let\Exalph\roman" in back
+    assert not any("does not follow" in w for w in warnings), warnings
+    res = parse(back)
+    assert [(i.level, i.marker) for i in res.examples[0].items] == [
+        (1, "i."), (1, "ii."), (2, "i."), (1, "iii.")]
+    assert r"See \ref{ex:1i}." in back
 
 
 @pandoc
@@ -378,11 +423,9 @@ def test_a_small_capitals_style_of_the_author_s_own(tmp_path: Path) -> None:
     assert r"the dog sleep-\lpzg{pst}.3\lpzg{sg}\\" in back
 
 
-@pandoc
-def test_a_drawn_tree_is_kept_and_said(tmp_path: Path) -> None:
-    """An add-in's tree is a drawing whose alt text is the bracket notation
-    it was typed as.  It is not LaTeX, and is not guessed into forest: it
-    comes back as a comment, and the run says so."""
+def _tree_docx(tmp_path: Path, descr: str) -> Path:
+    """A converted example whose cell holds an add-in's drawn tree: a drawing
+    titled LinguExx tree, its alt text the lines it was typed as."""
     docx = _docx(tmp_path, r"""\begin{document}
 \ex. TREEHERE
 
@@ -390,13 +433,37 @@ def test_a_drawn_tree_is_kept_and_said(tmp_path: Path) -> None:
     drawing = (
         '<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/'
         'drawingml/2006/wordprocessingDrawing"><wp:docPr id="7" name="t" '
-        'title="LinguExx tree" descr="[S [NP Kim] [VP sleeps]]&#10;move a -&gt; b"/>'
-        '</wp:inline></w:drawing></w:r>')
+        f'title="LinguExx tree" descr="{descr}"/></wp:inline></w:drawing></w:r>')
     _edit(docx, lambda doc: doc.replace(
         '<w:r><w:t xml:space="preserve">TREEHERE</w:t></w:r>', drawing))
+    return docx
+
+
+@pandoc
+def test_a_drawn_tree_comes_back_as_forest(tmp_path: Path) -> None:
+    """The macro's notation is nearly forest's.  Where it is not: a bare word
+    among the children is a leaf of its own, which forest would read as part
+    of the label; a movement line is a \\draw between named nodes; and the
+    root carries baseline, so the number stands level with it."""
+    docx = _tree_docx(tmp_path, "[CP [DP,name=wh what] [C&apos; [C did] [VP [V see] "
+                                "[DP,name=t __] [{the big tree, roof}]]]]&#10;move t -&gt; wh")
+    back, warnings = _back(tmp_path, docx)
+    assert ("[CP,baseline [DP,name=wh [what]] [C' [C [did]] [VP [V [see]] "
+            "[DP,name=t [\\_\\_]] [{the big tree},roof]]]]") in back
+    assert "\\draw[->] (t) to[out=south west, in=south] (wh);" in back
+    assert "\\usepackage{forest}" in back and "\\useforestlibrary{linguistics}" in back
+    assert not warnings, warnings
+
+
+@pandoc
+def test_a_tree_that_does_not_parse_is_kept_and_said(tmp_path: Path) -> None:
+    """Not guessed at: a movement from a node no one named would stop LaTeX,
+    and the macro refuses it too."""
+    docx = _tree_docx(tmp_path, "[S [NP Kim] [VP sleeps]]&#10;move a -&gt; b")
     back, warnings = _back(tmp_path, docx)
     assert "% [S [NP Kim] [VP sleeps]]\n% move a -> b\n" in back
-    assert any("drawn tree" in w for w in warnings)
+    assert any("does not parse" in w for w in warnings)
+    assert "forest" not in back.split("\\begin{document}")[0]
 
 
 # -- the commands --------------------------------------------------------

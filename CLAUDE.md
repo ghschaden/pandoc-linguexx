@@ -33,7 +33,9 @@ pandoc's ODT reader drops the text of references. Its oracle is the
 forward path: `parse(tex)` must equal the parse of the round trip, over
 `tests/cases` and the linguexx corpus (`tests/test_reverse.py`). A
 document the forward path loses text from is listed in
-`KNOWN_FORWARD_LOSSES` with the reason, not dropped from the run.
+`KNOWN_FORWARD_LOSSES` with the reason, not dropped from the run. A
+local run round-trips every fourth corpus document; CI (`CI=true`) runs
+them all, and so does `LINGUEXX_FULL_CORPUS=1` locally.
 
 ## Environment
 - Python ≥ 3.10, standard library only. `pandoc ≥ 3.0` (the JSON AST is a

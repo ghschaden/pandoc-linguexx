@@ -264,15 +264,49 @@ class Brackets:
     sub_r: str = "."
     subsub_l: str = ""
     subsub_r: str = "."
+    sub_num: str = "alph"
+    """How the first sub-example level counts: ``\\Exalph``, which a document
+    may \\let to \\roman (or \\Alph, \\Roman, \\arabic) -- linguex's name,
+    honoured by linguexx for the whole document (measured: i., ii., iii.;
+    references (1i))."""
+    subsub_num: str = "roman"
+    """The second level's: ``\\Exroman``."""
 
     def wrap_example(self, inner: str) -> str:
         return f"{self.ex_l}{inner}{self.ex_r}"
+
+    def ordinal(self, level: int, n: int) -> str:
+        """The sub-example letter or numeral itself, as this document counts."""
+        return count_as(self.sub_num if level == 1 else self.subsub_num, n)
 
     def wrap_sub(self, level: int, inner: str) -> str:
         if level >= 2:
             return f"{self.subsub_l}{inner}{self.subsub_r}"
         return f"{self.sub_l}{inner}{self.sub_r}"
 
+
+_ROMAN_NUMERALS = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii"]
+
+
+def count_as(style: str, n: int) -> str:
+    """*n* written the way a LaTeX counter command writes it."""
+    if style == "arabic":
+        return str(n)
+    if style in ("roman", "Roman"):
+        r = _ROMAN_NUMERALS[n - 1] if 1 <= n <= len(_ROMAN_NUMERALS) else f"({n})"
+        return r.upper() if style == "Roman" else r
+    a = chr(ord("a") + (n - 1) % 26)
+    return a.upper() if style == "Alph" else a
+
+
+#: The counter commands a numbering switch may be set to.
+_COUNTER_STYLES = {"alph", "Alph", "roman", "Roman", "arabic"}
+
+#: \Exalph and \Exroman, and which field of Brackets each one sets.
+_NUMBERING_FIELDS = {"Exalph": "sub_num", "Exroman": "subsub_num"}
+
+_NUMBERING_LET = re.compile(
+    r"\\let\s*\\(Exalph|Exroman)\s*=?\s*\\([a-zA-Z]+)(?![a-zA-Z])")
 
 #: The six names, and which field of Brackets each one sets.
 _BRACKET_FIELDS = {
@@ -320,6 +354,31 @@ def scan_brackets(src: str, warn=None) -> Brackets:
                      f"once per example and cannot change partway through")
             continue
         values[field_name] = group[0].strip()
+
+    # \Exalph and \Exroman: \let to a counter command, or defined as one.
+    def numbering(name: str, value: str, at: int) -> None:
+        style = value.strip().lstrip("\\")
+        if style not in _COUNTER_STYLES:
+            if warn:
+                warn(f"\\{name} is set to {value.strip()!r}, which is not a "
+                     f"counter command; the sub-examples are counted as before")
+            return
+        if at > body_at:
+            if warn:
+                warn(f"\\{name} is set after \\begin{{document}}; ignored -- a "
+                     f"sub-example's letter is set once per document here")
+            return
+        values[_NUMBERING_FIELDS[name]] = style
+
+    for m in _NUMBERING_LET.finditer(src):
+        if live[m.start()]:
+            numbering(m.group(1), "\\" + m.group(2), m.start())
+    for m in _BRACKET_DEF.finditer(src):
+        name = m.group(1) or m.group(2) or m.group(3)
+        if name in _NUMBERING_FIELDS and live[m.start()]:
+            group = find_group(src, m.end())
+            if group is not None:
+                numbering(name, group[0], m.start())
 
     return Brackets(**values)
 

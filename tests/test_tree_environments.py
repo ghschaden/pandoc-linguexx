@@ -87,3 +87,15 @@ def test_a_tree_environment_warns_and_names_the_command(tmp_path: Path) -> None:
     renderer.render(FOREST)
     assert warnings, "a kept-as-text tree said nothing"
     assert "Typeset unnumbered tree" in warnings[0], warnings[0]
+
+
+def test_a_forest_tree_from_the_way_back_is_one_the_macro_reads() -> None:
+    r"""docx2linguexx writes a drawn tree as forest with baseline on the
+    root, and the gap escaped for LaTeX.  Converted to Writer again, the
+    macro would refuse both -- an option it does not know, and anything
+    with a backslash -- so they are what forest needs and the macro is
+    not handed."""
+    got = InlineRenderer().plain(
+        r"\begin{forest} [CP,baseline [DP,name=wh [what]] "
+        r"[VP [V [see]] [DP,name=t [\_\_]]]] \end{forest}")
+    assert got == "[CP [DP,name=wh [what]] [VP [V [see]] [DP,name=t [__]]]]"

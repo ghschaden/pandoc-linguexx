@@ -216,25 +216,15 @@ class ParseResult:
     """What the preamble asked an example number to be wrapped in."""
 
 
-def _alph(n: int) -> str:
-    return chr(ord("a") + (n - 1) % 26)
-
-
-_ROMAN = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii"]
-
-
-def _roman(n: int) -> str:
-    return _ROMAN[n - 1] if 1 <= n <= len(_ROMAN) else f"({n})"
-
-
-def _ordinal_text(level: int, ordinal: int) -> str:
-    """``a`` / ``i`` -- the letter itself, with nothing around it."""
-    return _alph(ordinal) if level == 1 else _roman(ordinal)
+def _ordinal_text(level: int, ordinal: int, brackets: Brackets | None = None) -> str:
+    """``a`` / ``i`` -- the letter itself, with nothing around it, counted as
+    the document's \\Exalph and \\Exroman count."""
+    return (brackets or Brackets()).ordinal(level, ordinal)
 
 
 def _marker(level: int, ordinal: int, brackets: Brackets | None = None) -> str:
     br = brackets or Brackets()
-    return br.wrap_sub(level, _ordinal_text(level, ordinal))
+    return br.wrap_sub(level, _ordinal_text(level, ordinal, br))
 
 
 # --------------------------------------------------------------------------
@@ -643,7 +633,7 @@ def parse(src: str) -> ParseResult:
     if brackets != Brackets():
         examples = [_redecorate(ex, brackets) for ex in examples]
 
-    labels = _collect_labels(examples)
+    labels = _collect_labels(examples, brackets)
     sublabels = _sublabels(src, live)
     macros = collect_macros(src, live, KNOWN_COMMANDS | LINGUEXX_COMMANDS,
                             warnings.append)
@@ -981,7 +971,8 @@ def _build_residue(
     return "".join(out)
 
 
-def _collect_labels(examples: list[Example]) -> dict[str, tuple[int, str]]:
+def _collect_labels(examples: list[Example],
+                    brackets: Brackets | None = None) -> dict[str, tuple[int, str]]:
     labels: dict[str, tuple[int, str]] = {}
     for ex in examples:
         if ex.label:
@@ -993,5 +984,5 @@ def _collect_labels(examples: list[Example]) -> dict[str, tuple[int, str]]:
         for it in ex.items:
             for name in (it.body.label, *it.body.more_labels):
                 if name:
-                    labels[name] = (ex.index, _ordinal_text(it.level, it.ordinal))
+                    labels[name] = (ex.index, _ordinal_text(it.level, it.ordinal, brackets))
     return labels

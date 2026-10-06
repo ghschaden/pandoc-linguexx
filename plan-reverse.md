@@ -237,6 +237,8 @@ in.docx ──────────┴→ pandoc -f docx+styles -t json
   in the same package shares the IR without renaming anything.
 
 **Decided, 2026-10-04 (the user):**
+- **Small capitals in running text** stay pandoc's `\textsc`: only small
+  capitals in an example are gloss labels and become `\lpzg`.
 - **D1:** tier A only, for now.
 - **D2:** labels are generated (`ex:1`, `ex:2a`). The names do not matter
   as long as they are distinct, so the forward path is unchanged.
@@ -364,12 +366,10 @@ typed-line fixture in Writer and saves it through LibreOffice's Word
 export, the exporter `odt2linguexx` runs. It reads the result back and
 requires the macro's own recorded parse of the lines, field for field.
 
-- 38 of 39 match.
-- The exception is listed in `REVERSE_KNOWN`: `SUB_CASES/sub_roman`,
-  whose sub-examples are typed `i.`, `ii.` at the first level. linguexx
-  letters the first level (`\Exalph` is document-wide, and the converter
-  does not read it), so they come back as `a.`, `b.`, with a warning.
-- The check fails if a known exception starts matching, or stops warning.
+- All 39 match. `SUB_CASES/sub_roman` (sub-examples typed `i.`, `ii.`
+  at the first level) was a listed exception until the converter learnt
+  `\Exalph` (below). `REVERSE_KNOWN` is now empty, and the check fails if
+  a listed exception starts matching or stops warning.
 - CI runs it in the macro job, which already has pandoc.
 
 ### Typeset into a converted paper, in OnlyOffice (2026-10-04)
@@ -403,10 +403,50 @@ references as 2, 2, 3, 3. `docx2linguexx` read it back with four
 examples and every reference on its example. So the stale numbers are
 Document Builder's, which the suite runs, and not the editor's.
 
+### `\Exalph` (2026-10-04)
+
+linguexx counts the first sub-example level with `\Exalph` and the
+second with `\Exroman`, for the whole document. With
+`\let\Exalph\roman`, it prints i., ii., then a level below as i., ii.,
+then iii.; `\ref` gives (1i) and `\pref` 1ii (measured). The converter
+lettered them regardless. It now reads either switch, set by `\let`,
+`\renewcommand` or `\def` to a counter command, into `Brackets.sub_num`
+and `subsub_num`; markers and reference letters follow it. On the way
+back, a document whose every paradigm starts at "i." is read that way
+and gets `\let\Exalph\roman`.
+
+### Trees (2026-10-04)
+
+A drawn tree comes back as forest (`untypeset.macro_tree_to_forest`). The
+macro's notation is nearly forest's, but not quite:
+
+- **Bare words.** A bare word among a node's children is a leaf of its
+  own, which forest would read as part of the label: `[NP the tree]`
+  becomes `[NP [the] [tree]]`.
+- **Movement.** A `move a -> b` line becomes
+  `\draw[->] (a) to[out=south west, in=south] (b);`.
+- **The number.** `baseline` on the root puts the example number level
+  with the root, instead of under the tree's last row (measured,
+  pdflatex).
+- **Packages.** `roof` needs `\useforestlibrary{linguistics}` (measured),
+  which is added only when a roof is used.
+
+The output builds with pdflatex.
+
+Options are written without a space after the comma. Forest reads both
+spellings, and the macro, which a converted forest tree is handed to
+again, reads `DP, name=x` as a label plus a leaf "name=x". The forward
+converter now drops `baseline` and unescapes `\_ \& \# \% \$` before
+handing a tree over. Two things still don't make the trip back to the
+macro, which refuses them and says why:
+
+- a braced label with a roof: forest needs `{…},roof`, the macro
+  `{…,roof}`;
+- the `\draw` arrows.
+
+Not parsed (a move between unnamed nodes, unbalanced brackets): kept as
+a comment, with a warning, as before.
+
 ### Not done
 
-- **Trees** come back as a comment holding the macro's bracket notation,
-  with a warning. Translating that notation to forest is a question of
-  its own: bare leaves and `,name=` options look as if they read
-  differently in the two [inferred; not checked against forest].
 - **Tier B.**

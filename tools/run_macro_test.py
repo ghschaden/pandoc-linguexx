@@ -2155,12 +2155,7 @@ def _reverse_view_of_tex(tex: str) -> dict | None:
 #: Typed examples the way back cannot give back as typed, and why.  Each must
 #: still differ, and the run must have said so: an exception that outlives
 #: its cause hides the next difference.
-REVERSE_KNOWN = {
-    "SUB_CASES/sub_roman":
-        "sub-examples typed i., ii. at the first level: linguexx letters the "
-        "first level (\\Exalph, document-wide, which the converter does not "
-        "read), so they come back as a., b., with a warning",
-}
+REVERSE_KNOWN: dict[str, str] = {}
 
 
 def check_reverse(ctx, out: Path) -> int:

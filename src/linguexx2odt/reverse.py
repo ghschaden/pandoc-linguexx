@@ -181,9 +181,15 @@ def read_docx(path: Path) -> Read:
             out.marks.setdefault(name, k)
     marks = set(out.marks)
 
+    # linguexx counts the first sub-example level one way for the whole
+    # document (\Exalph).  Roman only if every paradigm starts at "i.": a
+    # document mixing the two cannot say so, and keeps the letters.
+    starts = {U.first_marker(rows) for _tbl, rows in tables} - {None}
+    first = "roman" if starts == {"i"} else "alph"
+
     found_brackets = None
     for k, (tbl, rows) in enumerate(tables):
-        ex, br, _ = U.read_example(rows, k, ctx, marks)
+        ex, br, _ = U.read_example(rows, k, ctx, marks, first)
         out.examples.append(ex)
         if br is not None and found_brackets is None:
             found_brackets = br
@@ -200,6 +206,8 @@ def read_docx(path: Path) -> Read:
     if found_brackets is not None:
         out.brackets = found_brackets
     out.brackets = _sub_brackets(out.examples, out.brackets)
+    if first != "alph":
+        out.brackets = Brackets(**{**out.brackets.__dict__, "sub_num": first})
 
     # The 1 pt paragraph that keeps two .docx examples apart in Word.
     for p in list(root.iter(U.w("p"))):
@@ -379,9 +387,16 @@ class References:
 
 # -- the document --------------------------------------------------------
 
-def _preamble(br: Brackets) -> str:
+def _preamble(br: Brackets, packages: set[str] = frozenset()) -> str:
     lines = [PACKAGE]
+    # A drawn tree comes back as forest; roof is its linguistics library's.
+    if "forest" in packages:
+        lines.append(r"\usepackage{forest}")
+    if "forest-linguistics" in packages:
+        lines.append(r"\useforestlibrary{linguistics}")
     default = Brackets()
+    if br.sub_num != default.sub_num:
+        lines.append(f"\\let\\Exalph\\{br.sub_num}")
     for field_name, macro in (("ex_l", "ExLBr"), ("ex_r", "ExRBr"),
                               ("sub_l", "SubExLBr"), ("sub_r", "SubExRBr"),
                               ("subsub_l", "SubSubExLBr"),
@@ -411,7 +426,7 @@ def convert(docx: Path, out: Path, warn) -> int:
         media = out.with_name(out.stem + "-media")
         latex = _pandoc(["-f", "docx", "-t", "latex", "-s",
                          "--extract-media", str(media),
-                         "-V", "header-includes=" + _preamble(read.brackets),
+                         "-V", "header-includes=" + _preamble(read.brackets, read.ctx.packages),
                          str(tmp)], cwd=out.parent).stdout
     if media.is_dir() and not any(media.rglob("*")):
         media.rmdir()

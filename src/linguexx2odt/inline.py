@@ -462,6 +462,13 @@ class InlineRenderer:
             raise Unsupported(f"\\begin{{{env}}} is never closed")
 
         body = " ".join(s[grp[1]:stop].split())
+        # baseline only places the example number level with the root --
+        # docx2linguexx writes it -- and the macro, which draws its own
+        # number, refuses a node option it does not know.
+        body = re.sub(r"\s*,\s*baseline(?=[\s,\]\[])", "", body)
+        # The characters forest needs escaped (a gap "\_\_") are plain text
+        # to the macro, which refuses anything with a backslash.
+        body = re.sub(r"\\([_&#%$])", r"\1", body)
         self.warn(
             f"{env} tree kept as bracket notation; open the file in Writer, select it and "
             f"run LinguExx > Typeset unnumbered tree (the example already "

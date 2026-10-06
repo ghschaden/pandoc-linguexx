@@ -142,3 +142,37 @@ def test_a_judgment_keeps_the_gloss_braces(head: str) -> None:
                  "xxx zzz yyy\\\\\n\n\\end{document}").examples[0].body
     assert body.judgment
     assert body.tiers[0].cells == ("aaa", "ccc ddd", "bbb")
+
+
+EXALPH = r"""\documentclass{article}
+\usepackage[lazy]{linguexx}
+%s
+\begin{document}
+\ex.\label{top}
+\a.\label{one} First.
+\b.\label{two} Second.
+\a. Deeper.
+\b. Deeper two.
+\z.
+\c. Third.
+
+\end{document}"""
+
+
+@pytest.mark.parametrize("setting", [r"\let\Exalph\roman", r"\let\Exalph=\roman",
+                                     r"\renewcommand{\Exalph}{\roman}", r"\def\Exalph{\roman}"])
+def test_exalph_counts_the_first_level(setting: str) -> None:
+    r"""linguexx counts the first sub-example level with \Exalph, which a
+    document may set to \roman.  Measured off its PDF: i., ii., the level
+    below i., ii., then iii.; \ref gives (1i), \pref 1ii.  The converter
+    lettered them a., b., c. regardless."""
+    res = parse(EXALPH % setting)
+    assert [(i.level, i.marker) for i in res.examples[0].items] == [
+        (1, "i."), (1, "ii."), (2, "i."), (2, "ii."), (1, "iii.")]
+    assert res.labels["one"] == (0, "i") and res.labels["two"] == (0, "ii")
+
+
+def test_exalph_set_to_something_else_is_said() -> None:
+    res = parse(EXALPH % r"\let\Exalph\fnsymbol")
+    assert [i.marker for i in res.examples[0].items][:2] == ["a.", "b."]
+    assert any(r"\Exalph is set to" in w for w in res.warnings)

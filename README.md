@@ -171,7 +171,8 @@ The **lazy** syntax:
 shorthands · `{braced groups}` as single columns · unequal tiers ·
 judgments · `\label` / `\sublabel` / `\ref` / `\pref` · `\lpzg{…}` ·
 `\ExLBr` / `\ExRBr` and the sub-example pairs, so a document that asks for
-`[1]` gets `[1]` · `\exannot{…}` structural labels, in a column at
+`[1]` gets `[1]` · `\Exalph` / `\Exroman` set to `\roman`, `\alph` & co., so
+sub-examples counted i., ii. are counted i., ii. · `\exannot{…}` structural labels, in a column at
 `.75` of the text block — where `\ExAnnotColumn` puts them.
 
 The Writer macro knows the construct too: it builds the same column from
@@ -565,8 +566,8 @@ cases are checked through `.odt` too.
 | `\exsource` | comes back as part of the translation (`\glt`): the converter set it in the same row |
 | text before a `\gll` | comes back as a braced first word with nothing beneath it, `\gll {As Cicero puts it,} magnam …`: the converter set it as that column. linguexx sets the gloss 1.65 pt further right than after free text (measured) |
 | LaTeX the converter printed as source (a `tabular` inside an example, `\altg` in a `.docx`) | comes back as that text, escaped, which is what the document shows |
-| a drawn tree (Writer macro, add-ins) | kept as a LaTeX comment holding the bracket notation it was typed as, and the run says so; the notation is the macro's, not forest's, and is not translated |
-| sub-examples typed `i.`, `ii.` at the first level (the Writer macro and the add-ins accept them) | come back lettered, `a.`, `b.`, with a warning: linguexx letters the first level, and its `\Exalph` switch is document-wide |
+| a drawn tree (Writer macro, add-ins) | a `forest` tree, with `\usepackage{forest}` (and its linguistics library for a `roof`): every bare word becomes a leaf of its own, `name=` and `roof` stay, a `move a -> b` line becomes a `\draw` arrow, and `baseline` on the root puts the number level with it (measured). A notation that does not parse, or a move between nodes no one named, stays a LaTeX comment, with a warning. Converted to Writer again, the macro reads it, except a braced label with a roof (`{…},roof` for forest, `{…,roof}` for the macro) and the arrows, which it refuses and says why |
+| sub-examples typed `i.`, `ii.` at the first level (the Writer macro and the add-ins accept them) | come back as typed, with `\let\Exalph\roman` in the preamble, when every paradigm in the document counts that way. linguexx's switch is document-wide, so a document mixing letters and numerals at the first level keeps the letters, with a warning |
 | a sub-example marker "i." after "h." | read as the ninth letter, not as a deeper level: the table does not say which, and linguexx would print both the same |
 | a glossed example with one sub-example, no translation and no judgment | read as no sub-example: nothing in the table tells the marker column from a first gloss word |
 | tracked changes | read as accepted, as pandoc reads the prose |
