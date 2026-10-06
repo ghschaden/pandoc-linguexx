@@ -40,11 +40,9 @@ linguexx `main`: 456 passed.
 ## Not done
 
 - **A `\ref` or `\cref` to a label that is not an example's** (a section, a
-  `\label` in the prose) is deleted, with a warning: "REFS: `\ref{s}` and
-  `\cref{s}`." comes out "REFS: and .", where linguexx prints "1 and
-  section 1". This is older than 1.4 -- 1.4 only fixed which label `\cref`
-  takes -- and it is a question of its own: the converter would need
-  pandoc's section numbering, which the reference document decides.
+  `\label` in the prose) was deleted, with a warning. Older than 1.4, and a
+  question of its own: `plan-crossrefs.md`, which has made references to
+  sections and pages live fields; the other kinds follow it.
 - **Typewriter face in a `.docx`** for inline verbatim: the text is right,
   the face is the cell's. A code character style would have to exist in the
   three places the constants live (`make macro`), for one construct.

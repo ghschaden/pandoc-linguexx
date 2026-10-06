@@ -118,6 +118,28 @@ class BaseEmitter:
         raise NotImplementedError(
             f"{type(self).__name__} does not know how to write a reference")
 
+    def section_reference(self, sec, form: str) -> str:  # pragma: no cover - abstract
+        r"""A field that shows section *sec*'s number, title or page.
+
+        *form* is "number" (\ref), "title" (\nameref) or "page" (\pageref);
+        the words before it -- "section", "page" -- are the inject pass's.
+        The cached value is the one LaTeX prints, except for a page, which
+        nothing here can know.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not know how to refer to a section")
+
+    def page_reference(self, index: int) -> str:  # pragma: no cover - abstract
+        r"""A field that shows the page example *index* is on (\pageref)."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not know how to refer to a page")
+
+    def heading_marks(self, sec) -> tuple[str, str]:  # pragma: no cover - abstract
+        """The markup that opens and closes the bookmark a section
+        reference points at, around the heading's title."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not know how to mark a heading")
+
     def prepare(self, examples) -> None:
         r"""Document-level decisions, taken before the first example is emitted.
 

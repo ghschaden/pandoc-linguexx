@@ -29,7 +29,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import postprocess, postprocess_docx, styles_docx
+from . import headings, postprocess, postprocess_docx, styles_docx
 from .emit_base import emitter_for
 from .extract import parse
 from .includes import expand_includes
@@ -362,10 +362,12 @@ def main(argv: list[str] | None = None) -> int:
             content = postprocess.inject_sequence_decls(content)
             content = postprocess.inject_automatic_styles(
                 content, emitter.styles_fragment())
+            content = headings.unnumber_odt_headings(content)
 
             styles = postprocess.read(raw_odt, "styles.xml")
             styles = postprocess.inject_named_styles(styles, named_styles(layout))
             styles = postprocess.set_page_geometry(styles, args.page)
+            styles = headings.number_outline(styles)
             if not args.reference_doc:
                 # Same rule as the .docx target: the document must be
                 # set in the face its columns were measured for, unless

@@ -66,6 +66,10 @@ def dxa(cm: float) -> int:
     return int(round(cm * DXA))
 
 
+#: Where the ids of the bookmarks in headings start (DocxEmitter.heading_marks).
+HEADING_BOOKMARK_IDS = 900000
+
+
 def bookmark_name(index: int) -> str:
     """Word bookmark names are restricted; an example's index is safe."""
     return f"NumEx{index}"
@@ -170,6 +174,27 @@ class DocxEmitter(BaseEmitter):
     def reference(self, index: int, letter: str = "",
                   bare: bool = False) -> str:
         return sequence_ref(index, letter, self.brackets, bare=bare)
+
+    def section_reference(self, sec, form: str) -> str:
+        # \w is the number in full context, "1.1"; without it, the text the
+        # bookmark holds, which is the title.  A page cannot be known here,
+        # and a reader that does not update fields (OnlyOffice) shows the
+        # cache: "?" says so, where a guess would be a wrong page.
+        if form == "number":
+            return field_run(f"REF {sec.bookmark} \\w \\h", sec.shown)
+        if form == "title":
+            return field_run(f"REF {sec.bookmark} \\h", sec.title)
+        return field_run(f"PAGEREF {sec.bookmark} \\h", "?")
+
+    def page_reference(self, index: int) -> str:
+        return field_run(f"PAGEREF {bookmark_name(index)} \\h", "?")
+
+    def heading_marks(self, sec) -> tuple[str, str]:
+        # Ids above any example's (index + 1) and pandoc's own, which count
+        # up from a handful.
+        ident = HEADING_BOOKMARK_IDS + sec.serial
+        return (f'<w:bookmarkStart w:id="{ident}" w:name="{sec.bookmark}"/>',
+                f'<w:bookmarkEnd w:id="{ident}"/>')
 
     def between_examples(self) -> str:
         """A 1 pt paragraph: Word joins tables that touch (see GAP_PARA)."""

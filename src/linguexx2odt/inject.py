@@ -38,8 +38,24 @@ from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
 from .latexutil import Brackets
+from .sections import AUTOREF_NAMES, sections
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
+#: Every reference command a section label can be given to, and \pageref,
+#: which an example's can.
+ANY_REF = re.compile(
+    r"\\(ref|pref|cref|Cref|autoref|nameref|pageref|cpageref|Cpageref)"
+    r"\s*\{([^}]*)\}")
+#: What each prints before the field: cleveref's and hyperref's names, as
+#: LaTeX sets them (measured, plan-crossrefs.md), with their unbreakable
+#: space.  None is \autoref's, whose name depends on the heading's level.
+_SECTION_FORMS = {
+    "ref": ("", "number"), "pref": ("", "number"),
+    "cref": ("section", "number"), "Cref": ("Section", "number"),
+    "autoref": (None, "number"), "nameref": ("", "title"),
+    "pageref": ("", "page"), "cpageref": ("page", "page"),
+    "Cpageref": ("Page", "page"),
+}
 
 
 def _text_of(inlines: Any) -> str:
@@ -148,6 +164,14 @@ def _link_reference(node: dict) -> str | None:
     return kv.get("reference")
 
 
+def _with_word(word: str, field: dict) -> dict:
+    """*field* after *word* and an unbreakable space, as cleveref's ~."""
+    if not word:
+        return field
+    return {"t": "Span", "c": [["", [], []],
+                               [{"t": "Str", "c": word + "\u00a0"}, field]]}
+
+
 class Injector:
     def __init__(
         self,
@@ -174,10 +198,17 @@ class Injector:
         # between two of THESE, never between an example and raw markup the
         # document itself carried
         self._examples: set[int] = set()
+        # headings, by identity and by label; filled by run()
+        self._headings: dict[int, Any] = {}
+        self.sections: dict[str, Any] = {}
 
     def run(self, doc: dict) -> dict:
         doc = dict(doc)
         blocks = _free_trapped_placeholders(doc.get("blocks", []), self.warn)
+        if self.emitter is not None:
+            found = sections(blocks)
+            self._headings = {id(h): sec for h, sec in found}
+            self.sections = {sec.ident: sec for _h, sec in found if sec.ident}
         # the body is a block list like any other: through _node, so that
         # _separate sees it -- mapping it item by item here skipped exactly
         # the list consecutive examples almost always sit in
@@ -205,6 +236,17 @@ class Injector:
         replaced = self._reference(node)
         if replaced is not None:
             return replaced
+
+        sec = self._headings.get(id(node))
+        if sec is not None:
+            # A bookmark of the converter's own around the title: the one a
+            # reference points at, and in an unnumbered heading the sign the
+            # postprocess keeps the outline number off it by.
+            level, attr, inlines = node["c"]
+            start, end = self.emitter.heading_marks(sec)
+            return {"t": "Header", "c": [level, attr,
+                    [_raw_inline(self.fmt, start)] + self._node(inlines)
+                    + [_raw_inline(self.fmt, end)]]}
 
         if node.get("c") is not None:
             node = dict(node)
@@ -250,6 +292,12 @@ class Injector:
                 m = REF_CMD.fullmatch(str(text).strip())
                 if m and m.group(2) in self.custom_labels:
                     return self._custom_reference(m.group(2), bare=m.group(1) == "pref")
+                any_ref = ANY_REF.fullmatch(str(text).strip())
+                if any_ref and any_ref.group(2) in self.sections:
+                    return self._section_reference(*any_ref.groups())
+                if (any_ref and any_ref.group(1).lower().endswith("pageref")
+                        and any_ref.group(2) in self.labels):
+                    return self._page_reference(*any_ref.groups())
                 if m and m.group(2) in self.labels:
                     index, letter = self.labels[m.group(2)]
                     self.refs_rewritten += 1
@@ -260,6 +308,21 @@ class Injector:
                         index, letter, bare=m.group(1) == "pref")
                     return _raw_inline(self.fmt, xml)
         return None
+
+    def _section_reference(self, cmd: str, label: str) -> dict:
+        sec = self.sections[label]
+        word, form = _SECTION_FORMS[cmd]
+        if word is None:
+            word = AUTOREF_NAMES.get(sec.level, "section")
+        self.refs_rewritten += 1
+        return _with_word(word, _raw_inline(
+            self.fmt, self.emitter.section_reference(sec, form)))
+
+    def _page_reference(self, cmd: str, label: str) -> dict:
+        index, _letter = self.labels[label]
+        self.refs_rewritten += 1
+        return _with_word(_SECTION_FORMS[cmd][0], _raw_inline(
+            self.fmt, self.emitter.page_reference(index)))
 
     def _custom_reference(self, label: str, bare: bool) -> dict:
         custom, letter = self.custom_labels[label]

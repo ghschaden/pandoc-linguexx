@@ -107,6 +107,22 @@ class Emitter(BaseEmitter):
                   bare: bool = False) -> str:
         return sequence_ref(index, letter, self.brackets, bare=bare)
 
+    def section_reference(self, sec, form: str) -> str:
+        # "chapter" is the heading's number as the outline numbers it,
+        # "1.1" -- the whole of it, not only the chapter's.
+        fmt = {"number": "chapter", "title": "text", "page": "page"}[form]
+        cached = {"number": sec.shown, "title": sec.title, "page": "?"}[form]
+        return (f'<text:bookmark-ref text:reference-format="{fmt}"'
+                f' text:ref-name="{sec.bookmark}">{esc(cached)}</text:bookmark-ref>')
+
+    def page_reference(self, index: int) -> str:
+        return (f'<text:sequence-ref text:reference-format="page"'
+                f' text:ref-name="{ref_name(index)}">?</text:sequence-ref>')
+
+    def heading_marks(self, sec) -> tuple[str, str]:
+        return (f'<text:bookmark-start text:name="{sec.bookmark}"/>',
+                f'<text:bookmark-end text:name="{sec.bookmark}"/>')
+
     # -- entry point ------------------------------------------------------
     def example(self, ex: Example) -> str:
         def warn(msg: str) -> None:

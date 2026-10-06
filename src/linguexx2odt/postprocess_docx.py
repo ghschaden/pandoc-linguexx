@@ -113,20 +113,25 @@ def end_with_paragraph(document_xml: str) -> str:
 
 def apply_styles(raw: Path, out: Path, fragment: str,
                  default_run_props: str = "") -> None:
-    """Write *raw* to *out* with the styles added, the face declared, and
-    the body ending in a paragraph."""
+    """Write *raw* to *out* with the styles added, the face declared, the
+    headings numbered, and the body ending in a paragraph."""
+    from . import headings
     from .styles_docx import inject_styles
 
     members = {}
     document = read(raw, "word/document.xml")
-    ended = end_with_paragraph(document)
+    ended = headings.unnumber_docx_headings(end_with_paragraph(document))
     if ended != document:
         members["word/document.xml"] = ended
-    if fragment or default_run_props:
-        styles = inject_styles(read(raw, "word/styles.xml"), fragment)
-        if default_run_props:
-            styles = set_default_font(styles, default_run_props)
-        members["word/styles.xml"] = styles
+    # Headings numbered as LaTeX numbers them, which a reference to a
+    # section shows (headings.py).
+    styles = headings.number_docx_styles(
+        inject_styles(read(raw, "word/styles.xml"), fragment))
+    if default_run_props:
+        styles = set_default_font(styles, default_run_props)
+    members["word/styles.xml"] = styles
+    members["word/numbering.xml"] = headings.number_docx_numbering(
+        read(raw, "word/numbering.xml"))
     if not members:
         shutil.copy2(raw, out)
         return
