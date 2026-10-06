@@ -142,6 +142,7 @@ WORDS = {
     "table": {"cref": "table", "Cref": "Table", "autoref": "Table"},
     "figure": {"cref": "fig.", "Cref": "Figure", "autoref": "Figure"},
     "footnote": {"cref": "footnote", "Cref": "Footnote", "autoref": "footnote"},
+    "item": {"cref": "item", "Cref": "Item", "autoref": "item"},
 }
 
 #: The caption's name, "Table 1: ...", and the word processor's sequence.
@@ -218,17 +219,170 @@ def _label_in(note: dict) -> str | None:
     return None
 
 
+# -- list items ---------------------------------------------------------
+
+#: article's enumerate, level by level: pandoc's list style and delimiter,
+#: and what a word processor's field for the item's own number shows --
+#: its label without a final full stop, "2", "(b)", "i", "A".
+ENUM_LEVELS = [("Decimal", "Period"), ("LowerAlpha", "TwoParens"),
+               ("LowerRoman", "Period"), ("UpperAlpha", "Period")]
+
+
+def _roman(n: int) -> str:
+    out = ""
+    for value, digits in ((1000, "m"), (900, "cm"), (500, "d"), (400, "cd"),
+                          (100, "c"), (90, "xc"), (50, "l"), (40, "xl"),
+                          (10, "x"), (9, "ix"), (5, "v"), (4, "iv"), (1, "i")):
+        while n >= value:
+            out += digits
+            n -= value
+    return out
+
+
+def _alpha(n: int) -> str:
+    return chr(ord("a") + (n - 1) % 26) if n > 0 else str(n)
+
+
+def list_style(depth: int, style: str, delim: str) -> tuple[str, str]:
+    """The style and delimiter a list at enumerate *depth* is numbered in:
+    its own, or article's for its depth if it is in pandoc's default."""
+    if style == "DefaultStyle":
+        return ENUM_LEVELS[min(depth, len(ENUM_LEVELS) - 1)]
+    return style, delim
+
+
+def item_label(style: str, delim: str, n: int) -> str:
+    """What a field on item *n* of a list so numbered shows: its label, a
+    final full stop dropped (measured, in both formats)."""
+    number = {"LowerAlpha": _alpha(n), "UpperAlpha": _alpha(n).upper(),
+              "LowerRoman": _roman(n), "UpperRoman": _roman(n).upper()
+              }.get(style, str(n))
+    if delim == "TwoParens":
+        return f"({number})"
+    if delim == "OneParen":
+        return f"{number})"
+    return number
+
+
+@dataclass(frozen=True)
+class Item:
+    r"""An item of an enumerate with a \label in it.
+
+    LaTeX's \ref prints its number with its parents', "2b", "2(b)i".  A
+    reference is a field per level, each on that level's item: pandoc
+    writes a nested list as a list of its own, so no word processor's
+    "number in context" knows the parents.  The second level's field
+    shows the label, "(b)", where LaTeX's \ref prints "b" -- there is no
+    field that drops the parentheses.
+    """
+    ident: str
+    path: tuple[tuple[str, str], ...]
+    """(bookmark, what its field shows), outermost first."""
+    section: Section | None
+    r"""The heading before it: what \nameref to an item prints is that
+    section's title (LaTeX's \@currenttitle)."""
+
+
+def item_bookmark(serial: int) -> str:
+    return f"_Reflxitm{serial}"
+
+
+def _own_label(blocks: Any) -> str | None:
+    """The \\label in an item, not in a list nested in it."""
+    for node in blocks or []:
+        if not isinstance(node, dict):
+            continue
+        if node.get("t") == "OrderedList":
+            continue
+        if node.get("t") == "RawInline" and node["c"][0] in ("latex", "tex"):
+            m = re.fullmatch(r"\s*\\label\s*\{([^}]*)\}\s*", node["c"][1])
+            if m:
+                return m.group(1)
+        c = node.get("c")
+        if isinstance(c, list):
+            found = _own_label(_flatten(c))
+            if found:
+                return found
+    return None
+
+
+def _flatten(c: list) -> list:
+    out: list = []
+    for x in c:
+        if isinstance(x, list):
+            out.extend(_flatten(x))
+        elif isinstance(x, dict):
+            out.append(x)
+    return out
+
+
+@dataclass
+class ListTargets:
+    items: list[Item]
+    marks: dict[int, tuple[str, int]]
+    """id(item's block list) -> (bookmark, serial), for every item a
+    reference needs: a labelled one and its ancestors."""
+    depths: dict[int, int]
+    """id(OrderedList) -> its enumerate depth, from 0."""
+
+
+def list_targets(blocks: Any, heads: dict[int, Section], serial: int) -> ListTargets:
+    items: list[Item] = []
+    marks: dict[int, tuple[str, int]] = {}
+    depths: dict[int, int] = {}
+    section: list[Section | None] = [None]
+    counter = [serial]
+
+    def mark(item_blocks: list) -> str:
+        if id(item_blocks) not in marks:
+            marks[id(item_blocks)] = (item_bookmark(counter[0]), counter[0])
+            counter[0] += 1
+        return marks[id(item_blocks)][0]
+
+    def walk(node: Any, ancestors: list) -> None:
+        if isinstance(node, list):
+            for x in node:
+                walk(x, ancestors)
+            return
+        if not isinstance(node, dict):
+            return
+        t = node.get("t")
+        if t == "Header" and id(node) in heads:
+            section[0] = heads[id(node)]
+        if t == "OrderedList":
+            depth = len(ancestors)
+            depths[id(node)] = depth
+            (start, style, delim), entries = node["c"]
+            style, delim = list_style(depth, style["t"], delim["t"])
+            for k, entry in enumerate(entries):
+                here = ancestors + [(entry, item_label(style, delim, start + k))]
+                label = _own_label(entry)
+                if label:
+                    items.append(Item(label, tuple((mark(b), shown) for b, shown in here),
+                                      section[0]))
+                walk(entry, here)
+            return
+        if t in ("RawInline", "RawBlock", "Str"):
+            return
+        walk(node.get("c"), ancestors)
+
+    walk(blocks, [])
+    return ListTargets(items, marks, depths)
+
+
 @dataclass
 class Targets:
     """Everything a reference can point at that is not an example."""
     headings: list[tuple[dict, Section]]
     floats: list[tuple[dict, Float]]
     footnotes: list[Footnote]
+    lists: ListTargets
 
     def by_label(self) -> dict[str, Any]:
         table: dict[str, Any] = {s.ident: s for _h, s in self.headings if s.ident}
         table.update({f.ident: f for _n, f in self.floats if f.ident})
         table.update({n.ident: n for n in self.footnotes})
+        table.update({i.ident: i for i in self.lists.items})
         return table
 
 
@@ -258,4 +412,5 @@ def targets(blocks: Any) -> Targets:
             if label:
                 notes.append(Footnote(label, note_number, serial))
                 serial += 1
-    return Targets(heads, floats, notes)
+    lists = list_targets(blocks, {id(h): s for h, s in heads}, serial)
+    return Targets(heads, floats, notes, lists)

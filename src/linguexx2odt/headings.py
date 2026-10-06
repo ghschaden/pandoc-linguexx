@@ -217,3 +217,17 @@ def bookmark_docx_note_marks(document_xml: str, footnotes_xml: str) -> str:
                     f'{m.group(0)}<w:bookmarkEnd w:id="{i}"/>'),
                 document_xml, count=1)
     return document_xml
+
+
+_LIST_START = re.compile(
+    r'(<text:list\b[^>]*?)\s+text:start-value="(\d+)"([^>]*>\s*<text:list-item)\b')
+
+
+def start_odt_lists(content_xml: str) -> str:
+    r"""Put a list's start number where ODF reads it, on its first item.
+
+    Pandoc writes it on text:list, which has no such attribute, and
+    LibreOffice numbers the list from 1: \setcounter{enumi}{4} gave "1."
+    where LaTeX prints "5.", and a reference to the item said "1" with it.
+    """
+    return _LIST_START.sub(r'\1\3 text:start-value="\2"', content_xml)

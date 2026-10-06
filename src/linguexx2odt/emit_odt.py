@@ -142,6 +142,14 @@ class Emitter(BaseEmitter):
         return (f'<text:sequence-ref text:reference-format="{fmt}"'
                 f' text:ref-name="{flt.bookmark}">{cached}</text:sequence-ref>')
 
+    def item_reference(self, name: str, shown: str) -> str:
+        return (f'<text:bookmark-ref text:reference-format="number-no-superior"'
+                f' text:ref-name="{name}">{esc(shown)}</text:bookmark-ref>')
+
+    def bookmark_page(self, name: str) -> str:
+        return (f'<text:bookmark-ref text:reference-format="page"'
+                f' text:ref-name="{name}">?</text:bookmark-ref>')
+
     def note_reference(self, note, form: str) -> str:
         # The ref-name is a placeholder: ODF names a note by its text:id,
         # which pandoc chooses; the postprocess puts it in (headings.py).

@@ -61,7 +61,7 @@ from the output" warning. The full corpus against linguexx 1.4 passes (521).
   from the outline, which has no number there; LaTeX's "last number set" is
   only the cache.
 
-## Step 2: tables, figures and footnotes — done
+## Step 2: tables, figures and footnotes — done (756f86b)
 
 Measured the same way (2026-10-06).
 
@@ -102,6 +102,45 @@ Tests: `tests/test_float_refs.py`; the conversions fail on the code of step 1.
   note reference to the first note of the document would find twice.
 - Subfigures and `\caption` outside a float are not handled.
 
+## Step 3: list items — done
+
+Decided with the user: the lists are made LaTeX's first, since a live
+reference shows the item's number as the word processor displays it.
+
+| | LaTeX | `.odt` before | `.docx` before |
+|---|---|---|---|
+| level 1 / 2 / 3 | 1. / (a) / i. | 1. / 1. / 1. | 1. / a. / i. |
+| `\setcounter{enumi}{4}` | 5. | 1. | 5. |
+
+- The injector gives each `enumerate` in pandoc's DefaultStyle the style
+  and delimiter of its depth (`sections.ENUM_LEVELS`); a list with a style
+  of its own keeps it. Pandoc writes a list's start on `text:list`, which
+  has no such attribute; the postprocess moves it to the first item.
+- Spiked: pandoc writes a nested list as a list of its own, so "number in
+  context" (`number`, `number-all-superior`, Word's `\w`, `\r`) gives
+  "(b)(b)" or "ii.ii.i". The item's own number (`number-no-superior`, `\n`)
+  is right, "(b)" and "i" -- the final full stop dropped in both formats.
+  So a reference is a field per level, on bookmarks in the item and in
+  each parent: "2" "(b)" "i" is LaTeX's "2(b)i".
+- **The one difference from LaTeX**: the second level's reference keeps its
+  parentheses, "2(b)" for LaTeX's "2b". No field drops them; text would
+  have printed "2b" and stopped following the list. Decided for the live
+  field, as for everything else here.
+- `\nameref` to an item prints the title of the section it is in, as LaTeX
+  does; it is that section's title field.
+
+Tests: `tests/test_list_refs.py`; they fail on the code of step 2.
+
+### Known limits of step 3
+
+- `enumitem` labels (`label=(\roman*)`) are not read (pandoc gives the list
+  its default style): such a list is numbered as article's default.
+- The `enumerate` package's `[(i)]` reaches pandoc as a style of its own,
+  which is kept, and a reference's cache follows it. Its reference keeps
+  the parentheses too: "(ii)" where LaTeX prints "ii".
+- A list deeper than four levels is numbered as the fourth (LaTeX refuses
+  it).
+
 ## Next
 
-List items, then equations (text).
+Equations, as text.

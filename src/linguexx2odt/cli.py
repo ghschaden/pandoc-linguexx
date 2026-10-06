@@ -365,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
             content = headings.unnumber_odt_headings(content)
             content = headings.declare_caption_sequences(content)
             content = headings.name_odt_note_refs(content)
+            content = headings.start_odt_lists(content)
 
             styles = postprocess.read(raw_odt, "styles.xml")
             styles = postprocess.inject_named_styles(styles, named_styles(layout))

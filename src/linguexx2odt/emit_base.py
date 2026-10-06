@@ -155,6 +155,15 @@ class BaseEmitter:
         """As section_reference, for a table or figure."""
         raise NotImplementedError
 
+    def item_reference(self, name: str, shown: str) -> str:  # pragma: no cover - abstract
+        """The number of the list item bookmark *name* is in, without its
+        parents' (sections.Item says why); *shown* is what it prints."""
+        raise NotImplementedError
+
+    def bookmark_page(self, name: str) -> str:  # pragma: no cover - abstract
+        """The page bookmark *name* is on."""
+        raise NotImplementedError
+
     def note_reference(self, note, form: str) -> str:  # pragma: no cover - abstract
         """As section_reference, for a footnote: its number, or its page."""
         raise NotImplementedError

@@ -217,6 +217,12 @@ class DocxEmitter(BaseEmitter):
             return field_run(f"PAGEREF {flt.bookmark} \\h", "?")
         return field_run(f"REF {flt.bookmark} \\h", str(flt.number))
 
+    def item_reference(self, name: str, shown: str) -> str:
+        return field_run(f"REF {name} \\n \\h", shown)
+
+    def bookmark_page(self, name: str) -> str:
+        return field_run(f"PAGEREF {name} \\h", "?")
+
     def note_reference(self, note, form: str) -> str:
         if form == "page":
             return field_run(f"PAGEREF {note.bookmark} \\h", "?")

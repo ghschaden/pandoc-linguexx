@@ -38,8 +38,8 @@ from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
 from .latexutil import Brackets
-from .sections import AUTOREF_NAMES, CAPTION_NAMES, WORDS, Float, Footnote, \
-    caption_inlines, targets
+from .sections import AUTOREF_NAMES, CAPTION_NAMES, WORDS, Float, Footnote, Item, \
+    caption_inlines, list_style, targets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 #: Every reference command a section's, a table's, a figure's or a
@@ -62,8 +62,9 @@ _LABEL = re.compile(r"\s*\\label\s*\{([^}]*)\}\s*")
 
 
 def _word(target, cmd: str) -> str:
-    if isinstance(target, (Float, Footnote)):
-        kind = target.kind if isinstance(target, Float) else "footnote"
+    if isinstance(target, (Float, Footnote, Item)):
+        kind = (target.kind if isinstance(target, Float)
+                else "footnote" if isinstance(target, Footnote) else "item")
         return WORDS[kind][cmd]
     if cmd == "autoref":
         return AUTOREF_NAMES.get(target.level, "section")
@@ -216,6 +217,8 @@ class Injector:
         self._headings: dict[int, Any] = {}
         self._floats: dict[int, Float] = {}
         self._notes: dict[str, Footnote] = {}
+        self._item_marks: dict[int, tuple[str, int]] = {}
+        self._list_depths: dict[int, int] = {}
         self.targets: dict[str, Any] = {}
 
     def run(self, doc: dict) -> dict:
@@ -226,6 +229,8 @@ class Injector:
             self._headings = {id(h): sec for h, sec in found.headings}
             self._floats = {id(n): f for n, f in found.floats}
             self._notes = {n.ident: n for n in found.footnotes}
+            self._item_marks = found.lists.marks
+            self._list_depths = found.lists.depths
             self.targets = found.by_label()
         # the body is a block list like any other: through _node, so that
         # _separate sees it -- mapping it item by item here skipped exactly
@@ -269,6 +274,9 @@ class Injector:
         flt = self._floats.get(id(node))
         if flt is not None:
             return self._numbered_caption(node, flt)
+
+        if id(node) in self._list_depths:
+            return self._enumerate(node)
 
         if node.get("c") is not None:
             node = dict(node)
@@ -350,9 +358,56 @@ class Injector:
             xml = self.emitter.note_reference(target, form)
         elif isinstance(target, Float):
             xml = self.emitter.float_reference(target, form)
+        elif isinstance(target, Item):
+            return self._item_reference(target, form, word)
         else:
             xml = self.emitter.section_reference(target, form)
         return _with_word(word, _raw_inline(self.fmt, xml))
+
+    def _item_reference(self, item: Item, form: str, word: str) -> dict:
+        if form == "title":
+            # \nameref to an item prints the section's title it is in
+            if item.section is None:
+                return {"t": "Str", "c": ""}
+            return _raw_inline(self.fmt, self.emitter.section_reference(
+                item.section, "title"))
+        if form == "page":
+            return _with_word(word, _raw_inline(
+                self.fmt, self.emitter.bookmark_page(item.path[-1][0])))
+        fields = "".join(self.emitter.item_reference(name, shown)
+                         for name, shown in item.path)
+        return _with_word(word, _raw_inline(self.fmt, fields))
+
+    def _enumerate(self, node: dict) -> dict:
+        """An ordered list numbered as article's enumerate numbers it, 1. /
+        (a) / i. / A., and its items bookmarked where a reference needs them.
+
+        Only a list in pandoc's DefaultStyle is restyled: one that names its
+        own style got it from the document."""
+        depth = self._list_depths[id(node)]
+        (start, style, delim), entries = node["c"]
+        name, punct = list_style(depth, style["t"], delim["t"])
+        style, delim = {"t": name}, {"t": punct}
+        out = []
+        for entry in entries:
+            mark = self._item_marks.get(id(entry))
+            entry = self._node(entry)
+            if mark is not None:
+                entry = self._bookmark_item(entry, *mark)
+            out.append(entry)
+        return {"t": "OrderedList", "c": [[start, style, delim], out]}
+
+    def _bookmark_item(self, blocks: list, name: str, serial: int) -> list:
+        """The bookmark around the text of the item's first paragraph, which
+        is the paragraph that carries its number."""
+        if not blocks or blocks[0].get("t") not in ("Plain", "Para"):
+            return [{"t": "Plain", "c": [_raw_inline(
+                self.fmt, self.emitter.point_mark(name, serial))]}] + blocks
+        start, end = self.emitter.marks(name, serial)
+        first = dict(blocks[0])
+        first["c"] = ([_raw_inline(self.fmt, start)] + first["c"]
+                      + [_raw_inline(self.fmt, end)])
+        return [first] + blocks[1:]
 
     def _numbered_caption(self, node: dict, flt: Float) -> dict:
         r"""The float, its caption numbered as LaTeX numbers it -- "Table 1:
