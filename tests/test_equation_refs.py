@@ -1,0 +1,160 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Gerhard Schaden
+#
+# This file is part of pandoc-linguexx.
+#
+# pandoc-linguexx is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the
+# Free Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# pandoc-linguexx is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program.  If not, see <https://www.gnu.org/licenses/>.
+r"""Numbered equations, and references to them (plan-crossrefs.md, step 4).
+
+Pandoc wrote display equations with no number, and a reference to one was
+deleted with a warning.  The numbers are written now, beside each equation
+as LaTeX sets them, and a reference prints what LaTeX prints -- as text,
+the user's decision for equations; only a page is a field.
+
+The expected text is not reasoned out: it is what LaTeX prints for SOURCE
+(article, amsmath, hyperref, cleveref), read off ``pdflatex`` and
+``pdftotext``.
+"""
+
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from linguexx2odt import postprocess
+from linguexx2odt.cli import main
+
+pandoc = pytest.mark.skipif(shutil.which("pandoc") is None,
+                            reason="pandoc not installed")
+soffice = pytest.mark.skipif(shutil.which("soffice") is None
+                             or shutil.which("pdftotext") is None,
+                             reason="libreoffice or pdftotext not installed")
+
+SOURCE = r"""\documentclass{article}
+\usepackage{amsmath}
+\usepackage{linguexx}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\begin{document}
+\section{Intro}
+Before the math
+\begin{equation}\label{eq:a} a = b \end{equation}
+\begin{equation*} c = d \end{equation*}
+and prose after it.
+\begin{align}
+x &= y \label{eq:x}\\
+z &= w \nonumber\\
+u &= v \label{eq:u}
+\end{align}
+\[ e = f \]
+\begin{equation}\label{eq:g} g = h \end{equation}
+
+REFS: A \ref{eq:a} B \eqref{eq:x} C \cref{eq:u} D \Cref{eq:g} E \autoref{eq:a}
+F \nameref{eq:a} G \pageref{eq:g} H \eqref{t}.
+\begin{equation} k \tag{$*$}\label{t}\end{equation}
+\end{document}
+"""
+
+#: LaTeX's rendering of SOURCE: each numbered row with its number, the
+#: unnumbered ones with none, and the references.
+LATEX_ROWS = ["a=b (1)", "x=y (2)", "u=v (3)", "g=h (4)", "k (∗)"]
+LATEX_REFS = ("REFS: A 1 B (2) C eq. (3) D Equation (4) E Equation 1 F Intro"
+              " G 1 H (∗).")
+UNNUMBERED = ["c=d", "z=w", "e=f"]
+
+
+def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
+    tex = tmp_path / "doc.tex"
+    tex.write_text(SOURCE, encoding="utf-8")
+    out = tmp_path / f"doc.{target}"
+    args = [str(tex), "-o", str(out), "--to", target] + (["-q"] if quiet else [])
+    assert main(args) == 0
+    return out
+
+
+def _lines(doc: Path) -> list[str]:
+    """The laid-out page, line by line, spaces collapsed and those around
+    "=" dropped (the formula objects space it their own way)."""
+    subprocess.run(["soffice", "--headless", "--convert-to", "pdf",
+                    "--outdir", str(doc.parent), str(doc)],
+                   check=True, capture_output=True, timeout=120)
+    txt = subprocess.run(["pdftotext", "-layout", str(doc.with_suffix(".pdf")), "-"],
+                         check=True, capture_output=True, text=True).stdout
+    return [re.sub(r"\s*=\s*", "=", " ".join(line.split()))
+            for line in txt.splitlines() if line.strip()]
+
+
+@pandoc
+@soffice
+@pytest.mark.parametrize("target", ["odt", "docx"])
+def test_equations_are_numbered_as_latex_numbers_them(tmp_path: Path, target: str) -> None:
+    lines = _lines(_convert(tmp_path, target))
+    for row in LATEX_ROWS:
+        assert row in lines, f"{row!r} not a line of:\n{lines}"
+    for row in UNNUMBERED:
+        assert row in lines, f"{row!r} (no number) not a line of:\n{lines}"
+    assert "Before the math" in lines and "and prose after it." in lines, lines
+
+
+@pandoc
+@soffice
+@pytest.mark.parametrize("target", ["odt", "docx"])
+def test_a_reference_to_an_equation_prints_what_latex_prints(
+        tmp_path: Path, target: str) -> None:
+    lines = _lines(_convert(tmp_path, target))
+    assert LATEX_REFS in lines, lines
+
+
+@pandoc
+def test_a_reference_to_an_equation_is_text_but_its_page(tmp_path: Path) -> None:
+    xml = postprocess.read(_convert(tmp_path, "docx"), "word/document.xml")
+    para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "REFS" in p)
+    fields = re.findall(r"<w:instrText[^>]*> (\w+) ", para)
+    # \nameref's section title and \pageref's page; the rest is text
+    assert sorted(fields) == ["PAGEREF", "REF"], fields
+
+
+@pandoc
+def test_a_reference_to_an_equation_is_no_warning(tmp_path: Path, capsys) -> None:
+    _convert(tmp_path, "odt", quiet=False)
+    err = capsys.readouterr().err
+    assert "deleted from the output" not in err, err
+
+
+def test_amsmath_numbering() -> None:
+    from linguexx2odt.equations import number_rows
+
+    counter = [0]
+
+    def rows(tex: str) -> list[tuple[str, str | None]]:
+        return [(r.math, r.number) for r in number_rows(tex, counter)]
+
+    assert rows(r"\begin{equation}\label{a} a = b\end{equation}") == [("a = b", "1")]
+    assert rows(r"\begin{equation*} c\end{equation*}")[0][1] is None
+    assert rows(r"e = f") == [("e = f", None)]
+    # several numbers: a row each, the alignment marks gone
+    assert rows(r"\begin{align}x &= y \\ z &= w \nonumber\\[2pt] u &= v\end{align}") \
+        == [("x = y", "2"), ("z = w", None), ("u = v", "3")]
+    # one number: kept whole, so the alignment stays
+    whole = rows(r"\begin{align}x &= y \\ z &= w \notag\end{align}")
+    assert len(whole) == 1 and whole[0][1] == "4" and "&" in whole[0][0]
+    # a \\ inside an environment of the row is not a row
+    assert len(rows(r"\begin{gather} p = \begin{cases} 1 \\ 2 \end{cases} \\ q\end{gather}")) == 2
+    # \tag prints its text and steps nothing
+    assert rows(r"\begin{equation} k \tag{A}\end{equation}") == [("k", "A")]
+    assert rows(r"\begin{equation} m \end{equation}") == [("m", "7")]

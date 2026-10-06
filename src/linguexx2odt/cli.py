@@ -349,7 +349,9 @@ def main(argv: list[str] | None = None) -> int:
             # declares itself by being used, and a column's width lives in
             # the cell.
             postprocess_docx.apply_styles(
-                raw_odt, out_path, styles_docx.styles_fragment(layout),
+                raw_odt, out_path,
+                styles_docx.styles_fragment(layout)
+                + styles_docx.prose_styles_fragment(layout),
                 # Not when the user supplied a reference document: their
                 # typeface is a choice, and overriding it to keep the
                 # columns exact would be answering a question they already

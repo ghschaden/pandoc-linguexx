@@ -143,6 +143,7 @@ WORDS = {
     "figure": {"cref": "fig.", "Cref": "Figure", "autoref": "Figure"},
     "footnote": {"cref": "footnote", "Cref": "Footnote", "autoref": "footnote"},
     "item": {"cref": "item", "Cref": "Item", "autoref": "item"},
+    "equation": {"cref": "eq.", "Cref": "Equation", "autoref": "Equation"},
 }
 
 #: The caption's name, "Table 1: ...", and the word processor's sequence.
@@ -377,12 +378,16 @@ class Targets:
     floats: list[tuple[dict, Float]]
     footnotes: list[Footnote]
     lists: ListTargets
+    equations: Any = None
+    """equations.EquationTargets"""
 
     def by_label(self) -> dict[str, Any]:
         table: dict[str, Any] = {s.ident: s for _h, s in self.headings if s.ident}
         table.update({f.ident: f for _n, f in self.floats if f.ident})
         table.update({n.ident: n for n in self.footnotes})
         table.update({i.ident: i for i in self.lists.items})
+        if self.equations is not None:
+            table.update({e.ident: e for e in self.equations.equations})
         return table
 
 
@@ -412,5 +417,8 @@ def targets(blocks: Any) -> Targets:
             if label:
                 notes.append(Footnote(label, note_number, serial))
                 serial += 1
-    lists = list_targets(blocks, {id(h): s for h, s in heads}, serial)
-    return Targets(heads, floats, notes, lists)
+    from .equations import equation_targets
+
+    by_node = {id(h): s for h, s in heads}
+    return Targets(heads, floats, notes, list_targets(blocks, by_node, serial),
+                   equation_targets(blocks, by_node))

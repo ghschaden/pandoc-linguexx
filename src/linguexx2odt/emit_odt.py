@@ -146,6 +146,9 @@ class Emitter(BaseEmitter):
         return (f'<text:bookmark-ref text:reference-format="number-no-superior"'
                 f' text:ref-name="{name}">{esc(shown)}</text:bookmark-ref>')
 
+    def tab(self) -> str:
+        return "<text:tab/>"
+
     def bookmark_page(self, name: str) -> str:
         return (f'<text:bookmark-ref text:reference-format="page"'
                 f' text:ref-name="{name}">?</text:bookmark-ref>')

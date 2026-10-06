@@ -41,10 +41,13 @@ nothing at all rather than like a failure.
 
 from __future__ import annotations
 
+import re
+
 from .styles import (
     ANNOT_PARA,
     BAND_PARA,
     CELL_PARA,
+    EQUATION_PARA,
     JUDGMENT_PARA,
     Layout,
     SPACE_ABOVE_PARA,
@@ -154,6 +157,18 @@ def styles_fragment(layout: Layout) -> str:
     return "".join(styles)
 
 
+def prose_styles_fragment(layout: Layout) -> str:
+    """The styles the converter gives the prose, not an example: a numbered
+    equation's.  Apart from styles_fragment because that one is the Word
+    add-in's too (make macro), and the add-in never writes an equation."""
+    return _para(
+        EQUATION_PARA, None,
+        '<w:tabs>'
+        f'<w:tab w:val="center" w:pos="{int(round(layout.text_width_cm * 567 / 2))}"/>'
+        f'<w:tab w:val="right" w:pos="{int(round(layout.text_width_cm * 567))}"/>'
+        '</w:tabs><w:spacing w:before="113" w:after="113"/><w:ind w:firstLine="0"/>')
+
+
 def inject_styles(styles_xml: str, fragment: str) -> str:
     """Put the fragment inside ``<w:styles>``."""
     if not fragment:
@@ -161,4 +176,11 @@ def inject_styles(styles_xml: str, fragment: str) -> str:
     tag = "</w:styles>"
     if tag not in styles_xml:
         raise ValueError("word/styles.xml has no <w:styles> element")
+    # Ours win over one of the same id already there: pandoc defines a
+    # custom-style it is given (LxEquation) as a bare child of BodyText,
+    # and two definitions of one style make the file invalid.
+    for ident in re.findall(r'w:styleId="([^"]+)"', fragment):
+        styles_xml = re.sub(
+            r'<w:style\b[^>]*\bw:styleId="%s"[^>]*>.*?</w:style>\s*' % re.escape(ident),
+            "", styles_xml, flags=re.S)
     return styles_xml.replace(tag, fragment + tag, 1)

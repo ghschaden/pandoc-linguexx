@@ -102,7 +102,7 @@ Tests: `tests/test_float_refs.py`; the conversions fail on the code of step 1.
   note reference to the first note of the document would find twice.
 - Subfigures and `\caption` outside a float are not handled.
 
-## Step 3: list items — done
+## Step 3: list items — done (35c6656)
 
 Decided with the user: the lists are made LaTeX's first, since a live
 reference shows the item's number as the word processor displays it.
@@ -141,6 +141,51 @@ Tests: `tests/test_list_refs.py`; they fail on the code of step 2.
 - A list deeper than four levels is numbered as the fourth (LaTeX refuses
   it).
 
+## Step 4: equations — done
+
+Decided at the start: references to equations are text. Measured first:
+pandoc writes a display equation **with no number**, so a reference as
+text would have named a number the page does not show. The numbers came
+first, as captions' did.
+
+- `equations.number_rows` reads the number off the source as amsmath
+  assigns it: `equation`, `multline` once; `align`, `gather`, `alignat`,
+  `flalign`, `eqnarray` per row (`\\` at the top level only, not inside a
+  `cases` or `aligned`), none for `\nonumber`/`\notag`; `\tag{x}` prints
+  "(x)" and steps nothing, `\tag{$*$}` "(∗)"; starred, `\[ \]` and
+  `displaymath` none.
+- Set as Writer and Word number their own equations: a paragraph
+  (`LxEquation`, centre tab at half the text width, right tab at its end)
+  with tab, the equation inline with `\displaystyle`, tab, "(n)". Spiked
+  first: text after display math drops to its own line at the left.
+  pandoc also puts consecutive display equations in one paragraph; the
+  injector splits it, the prose around them into paragraphs of their own.
+- An `align` with several numbers is split into a row per paragraph, its
+  `&` removed, so each number stands beside its row. One with a single
+  number stays whole, alignment and all. An equation without a number is
+  left as pandoc writes it.
+- References: "1", `\eqref` "(1)", "eq. (1)", "Equation (1)", `\autoref`
+  "Equation 1" -- text. `\nameref` prints the section's title, as for an
+  item; `\pageref` is a page field on a bookmark around the number, since
+  no text could know a page.
+- In the `.docx` pandoc defines a custom style it is given as a bare child
+  of BodyText; `styles_docx.inject_styles` now drops a definition the
+  converter's own replaces, where it used to add a second (invalid).
+
+Tests: `tests/test_equation_refs.py`; the conversions fail on the code of
+step 3.
+
+### Known limits of step 4
+
+- The numbers and references are text: inserting an equation does not
+  renumber the ones after it, nor the references.
+- A split `align` loses its column alignment.
+- `\numberwithin{equation}{section}` ("1.1") is not read: the numbering is
+  article's default, one counter through the document.
+- An equation inside an example is not numbered: the example is rendered on
+  its own, outside the AST this reads.
+
 ## Next
 
-Equations, as text.
+Nothing planned. `\appendix` lettering, several labels in one `\cref`,
+and non-English names are the limits that remain across the steps.

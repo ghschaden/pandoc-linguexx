@@ -37,7 +37,9 @@ from typing import Any
 from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
+from .equations import Equation
 from .latexutil import Brackets
+from .styles import EQUATION_PARA
 from .sections import AUTOREF_NAMES, CAPTION_NAMES, WORDS, Float, Footnote, Item, \
     caption_inlines, list_style, targets
 
@@ -45,14 +47,14 @@ REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 #: Every reference command a section's, a table's, a figure's or a
 #: footnote's label can be given to, and \pageref, which an example's can.
 ANY_REF = re.compile(
-    r"\\(ref|pref|cref|Cref|autoref|nameref|pageref|cpageref|Cpageref)"
+    r"\\(ref|pref|eqref|cref|Cref|autoref|nameref|pageref|cpageref|Cpageref)"
     r"\s*\{([^}]*)\}")
 #: What each prints before the field: cleveref's and hyperref's names, as
 #: LaTeX sets them (measured, plan-crossrefs.md), with their unbreakable
 #: space.  None is the target's own: \cref, \Cref and \autoref name what
 #: they point at (sections.WORDS, AUTOREF_NAMES).
 _FORMS = {
-    "ref": ("", "number"), "pref": ("", "number"),
+    "ref": ("", "number"), "pref": ("", "number"), "eqref": ("", "number"),
     "cref": (None, "number"), "Cref": (None, "number"),
     "autoref": (None, "number"), "nameref": ("", "title"),
     "pageref": ("", "page"), "cpageref": ("page", "page"),
@@ -62,9 +64,10 @@ _LABEL = re.compile(r"\s*\\label\s*\{([^}]*)\}\s*")
 
 
 def _word(target, cmd: str) -> str:
-    if isinstance(target, (Float, Footnote, Item)):
+    if isinstance(target, (Float, Footnote, Item, Equation)):
         kind = (target.kind if isinstance(target, Float)
-                else "footnote" if isinstance(target, Footnote) else "item")
+                else "footnote" if isinstance(target, Footnote)
+                else "equation" if isinstance(target, Equation) else "item")
         return WORDS[kind][cmd]
     if cmd == "autoref":
         return AUTOREF_NAMES.get(target.level, "section")
@@ -219,6 +222,7 @@ class Injector:
         self._notes: dict[str, Footnote] = {}
         self._item_marks: dict[int, tuple[str, int]] = {}
         self._list_depths: dict[int, int] = {}
+        self._equations = None
         self.targets: dict[str, Any] = {}
 
     def run(self, doc: dict) -> dict:
@@ -231,6 +235,7 @@ class Injector:
             self._notes = {n.ident: n for n in found.footnotes}
             self._item_marks = found.lists.marks
             self._list_depths = found.lists.depths
+            self._equations = found.equations
             self.targets = found.by_label()
         # the body is a block list like any other: through _node, so that
         # _separate sees it -- mapping it item by item here skipped exactly
@@ -243,7 +248,15 @@ class Injector:
         the only things rewritten; everything else is copied through with
         its children transformed."""
         if isinstance(node, list):
-            return self._separate([self._node(x) for x in node])
+            out: list = []
+            for x in node:
+                done = self._node(x)
+                # a block that became several (_numbered_equations)
+                if isinstance(x, dict) and isinstance(done, list):
+                    out.extend(done)
+                else:
+                    out.append(done)
+            return self._separate(out)
         if not isinstance(node, dict):
             return node
 
@@ -277,6 +290,11 @@ class Injector:
 
         if id(node) in self._list_depths:
             return self._enumerate(node)
+
+        if (self._equations is not None and node.get("t") in ("Para", "Plain")
+                and any(isinstance(x, dict) and id(x) in self._equations.rows
+                        for x in node["c"])):
+            return self._numbered_equations(node)
 
         if node.get("c") is not None:
             node = dict(node)
@@ -360,9 +378,68 @@ class Injector:
             xml = self.emitter.float_reference(target, form)
         elif isinstance(target, Item):
             return self._item_reference(target, form, word)
+        elif isinstance(target, Equation):
+            return self._equation_reference(target, cmd, form, word)
         else:
             xml = self.emitter.section_reference(target, form)
         return _with_word(word, _raw_inline(self.fmt, xml))
+
+    def _equation_reference(self, eq: Equation, cmd: str, form: str,
+                            word: str) -> dict:
+        r"""Text, as decided: "1", "(1)" for \eqref, "eq. (1)", "Equation
+        (1)", "Equation 1" -- what LaTeX prints (measured).  The page is a
+        field: no text could know it."""
+        if form == "title":
+            if eq.section is None:
+                return {"t": "Str", "c": ""}
+            return _raw_inline(self.fmt, self.emitter.section_reference(
+                eq.section, "title"))
+        if form == "page":
+            return _with_word(word, _raw_inline(
+                self.fmt, self.emitter.bookmark_page(eq.bookmark)))
+        shown = f"({eq.number})" if cmd in ("eqref", "cref", "Cref") else eq.number
+        return {"t": "Str", "c": f"{word}\u00a0{shown}" if word else shown}
+
+    def _numbered_equations(self, node: dict) -> list | dict:
+        """A paragraph with a numbered display equation in it, as one
+        paragraph per row of each, its number flush right (EQUATION_PARA),
+        and the prose before and after as paragraphs of their own.  Pandoc
+        writes the equation with no number, which is all this is for.  An
+        equation without one stays as pandoc writes it."""
+        out: list = []
+        prose: list = []
+
+        def flush() -> None:
+            while prose and prose[0].get("t") in ("Space", "SoftBreak"):
+                prose.pop(0)
+            while prose and prose[-1].get("t") in ("Space", "SoftBreak"):
+                prose.pop()
+            if prose:
+                out.append({"t": node["t"], "c": self._node(list(prose))})
+            prose.clear()
+
+        for x in node["c"]:
+            rows = self._equations.rows.get(id(x)) if isinstance(x, dict) else None
+            if rows is None:
+                prose.append(x)
+                continue
+            flush()
+            for row in rows:
+                tab = _raw_inline(self.fmt, self.emitter.tab())
+                inl = [tab, {"t": "Math", "c": [{"t": "InlineMath"},
+                                                "\\displaystyle " + row.math]}]
+                if row.number is not None:
+                    serial = self._equations.row_serials[id(row)]
+                    start, end = self.emitter.marks(f"_Reflxeq{serial}", serial)
+                    inl += [_raw_inline(self.fmt, self.emitter.tab()),
+                            _raw_inline(self.fmt, start),
+                            {"t": "Str", "c": f"({row.number})"},
+                            _raw_inline(self.fmt, end)]
+                out.append({"t": "Div", "c": [
+                    ["", [], [["custom-style", EQUATION_PARA]]],
+                    [{"t": "Para", "c": inl}]]})
+        flush()
+        return out
 
     def _item_reference(self, item: Item, form: str, word: str) -> dict:
         if form == "title":

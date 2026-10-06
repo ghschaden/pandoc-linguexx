@@ -160,6 +160,10 @@ class BaseEmitter:
         parents' (sections.Item says why); *shown* is what it prints."""
         raise NotImplementedError
 
+    def tab(self) -> str:  # pragma: no cover - abstract
+        """A tab character, which pandoc's AST has no node for."""
+        raise NotImplementedError
+
     def bookmark_page(self, name: str) -> str:  # pragma: no cover - abstract
         """The page bookmark *name* is on."""
         raise NotImplementedError

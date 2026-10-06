@@ -220,6 +220,9 @@ class DocxEmitter(BaseEmitter):
     def item_reference(self, name: str, shown: str) -> str:
         return field_run(f"REF {name} \\n \\h", shown)
 
+    def tab(self) -> str:
+        return "<w:r><w:tab/></w:r>"
+
     def bookmark_page(self, name: str) -> str:
         return field_run(f"PAGEREF {name} \\h", "?")
 

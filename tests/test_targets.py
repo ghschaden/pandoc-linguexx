@@ -77,7 +77,7 @@ def test_an_unknown_target_says_what_it_knows() -> None:
 
 
 def test_the_shared_half_knows_nothing_about_odf() -> None:
-    """emit_base, measure and sections must not mention a markup vocabulary.
+    """emit_base, measure, sections and equations must not mention a markup vocabulary.
 
     This is the invariant the seam exists for. Geometry is arithmetic over
     centimetres; the moment a `table:` or a `w:` appears in it, the second
@@ -86,9 +86,9 @@ def test_the_shared_half_knows_nothing_about_odf() -> None:
     """
     import ast
 
-    from linguexx2odt import emit_base, measure, sections
+    from linguexx2odt import emit_base, equations, measure, sections
 
-    for mod in (emit_base, measure, sections):
+    for mod in (emit_base, measure, sections, equations):
         src = open(mod.__file__, encoding="utf-8").read()
         lines = src.splitlines()
         # Blank out comments AND docstrings.  Both modules discuss `table:`

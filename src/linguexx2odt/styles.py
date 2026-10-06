@@ -43,6 +43,10 @@ CELL_PARA = "LxExampleCell"
 TRANSLATION_PARA = "LxTranslation"
 JUDGMENT_PARA = "LxJudgmentCell"
 ANNOT_PARA = "LxAnnot"
+#: A numbered display equation: centred, its number flush right, as LaTeX
+#: sets it -- by a centre and a right tab stop, which is how Writer and
+#: Word number their own.
+EQUATION_PARA = "LxEquation"
 
 #: The first row of a *continuation* band, and nothing else.
 #:
@@ -135,12 +139,16 @@ MACRO_NOT_SHARED: dict[str, str] = {
 #: The same, for paragraph styles: a style the converter writes and the
 #: macro knows nothing about, with what that costs.
 #:
-#: Empty, and worth keeping so.  It held ANNOT_PARA for one commit, with
+#: Short, and worth keeping so.  It held ANNOT_PARA for one commit, with
 #: the measurement that justified it: the macro read a converted
 #: annotation back as a trailing word of the object tier, and re-typesetting
 #: gave an eight-column grid where linguexx's is seven.  The macro now
 #: knows the style, so the entry is gone rather than explained away.
-MACRO_STYLES_NOT_SHARED: dict[str, str] = {}
+MACRO_STYLES_NOT_SHARED: dict[str, str] = {
+    "EQUATION_PARA": (
+        "nothing: the macro reads examples, which are tables, and an "
+        "equation is a paragraph of the prose it never looks at"),
+}
 
 
 @dataclass(frozen=True)
@@ -325,6 +333,15 @@ def named_styles(layout: Layout) -> str:
             f"</style:style>",
             _space_side(SPACE_ABOVE_PARA, layout.space_above_cm),
             _space_side(SPACE_BELOW_PARA, layout.space_below_cm),
+            f'<style:style style:name="{EQUATION_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="Standard">'
+            f'<style:paragraph-properties fo:margin-top="0.2cm"'
+            f' fo:margin-bottom="0.2cm" fo:text-indent="0cm"><style:tab-stops>'
+            f'<style:tab-stop style:position="{layout.text_width_cm / 2:.3f}cm"'
+            f' style:type="center"/>'
+            f'<style:tab-stop style:position="{layout.text_width_cm:.3f}cm"'
+            f' style:type="right"/>'
+            f"</style:tab-stops></style:paragraph-properties></style:style>",
             char("LxLeipzig", 'fo:font-variant="small-caps"'),
             char("LxItalic", 'fo:font-style="italic"'),
             char("LxBold", 'fo:font-weight="bold"'),
