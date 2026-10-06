@@ -34,6 +34,64 @@ CMD = re.compile(r"\\(?:([a-zA-Z@]+)\*?|(.))")
 VERB_ENVS = ("verbatim", "Verbatim", "lstlisting", "minted", "alltt")
 
 
+def rewrite_inline_verbatim(s: str, fn) -> str:
+    r"""*s* with every inline verbatim replaced by ``fn(payload, starred)``.
+
+    The one place that finds them, by the commands' own rules
+    (``_inline_verbatim_end``): a payload may hold any character a scanner
+    looks for.  Options are skipped; ``starred`` is ``\verb*``'s and
+    ``\Verb*``'s visible-space switch.
+    """
+    out: list[str] = []
+    i, n = 0, len(s)
+    while i < n:
+        hit = cmd_at(s, i) if s[i] == "\\" else None
+        if hit is None:
+            out.append(s[i])
+            i += 1
+            continue
+        name, end = hit
+        close = _inline_verbatim_end(s, name, end) if name in INLINE_VERBATIM else None
+        if close is None:
+            out.append(s[i:end])
+            i = end
+            continue
+        j = end
+        if name != "verb" and s[j] == "[":
+            depth, k = 0, j + 1
+            while k < n and not (s[k] == "]" and depth == 0):
+                depth += {"{": 1, "}": -1}.get(s[k], 0)
+                k += 1
+            j = k + 1
+        payload = s[j + 1:close - 1] if close - 1 > j else s[j + 1:]
+        out.append(fn(payload, s[i:end].endswith("*")))
+        i = close
+    return "".join(out)
+
+
+def visible_spaces(payload: str, starred: bool) -> str:
+    """A starred verbatim's spaces, as the visible space linguexx prints."""
+    return payload.replace(" ", "\u2423") if starred else payload
+
+
+def verbatim_for_pandoc(s: str) -> str:
+    r"""Every inline verbatim in *s* as the plain ``\verb`` pandoc reads.
+
+    Pandoc knows ``\verb`` and ``\lstinline`` but not their options, and
+    ``\Verb[formatcom=...]`` made it fail outright, so the source landed on
+    the page.  Options are dropped (they set fonts and colours, which a
+    fragment of an example does not carry anyway), a starred one's spaces
+    become the visible space linguexx prints, and the delimiter is one the
+    payload does not contain.
+    """
+    def plain(payload: str, starred: bool) -> str:
+        text = visible_spaces(payload, starred)
+        delim = next(d for d in "|!+@=:;/~^" if d not in text)
+        return f"\\verb{delim}{text}{delim}"
+
+    return rewrite_inline_verbatim(s, plain)
+
+
 def cmd_at(s: str, i: int) -> tuple[str, int] | None:
     """If a control sequence starts at *i*, return (name, end index)."""
     m = CMD.match(s, i)
@@ -43,6 +101,45 @@ def cmd_at(s: str, i: int) -> tuple[str, int] | None:
 
 
 CODE, COMMENT, VERBATIM = 0, 1, 2
+
+#: Commands that read their argument verbatim, inline: \verb, fancyvrb's
+#: \Verb and listings' \lstinline -- the three linguexx 1.4 allows in a
+#: dot-syntax example.  Their payload may hold any character a scanner looks
+#: for, "%" "{" "}" "\\" among them (linguexx's tests/verb-dot.tex carries
+#: them all), so it must be found by the commands' own rules, not by braces.
+INLINE_VERBATIM = frozenset({"verb", "Verb", "lstinline"})
+
+
+def _inline_verbatim_end(s: str, name: str, end: int) -> int | None:
+    r"""Where the inline verbatim starting at *end* (past the name and any
+    star) stops, or None if it does not parse.
+
+    ``\verb<d>…<d>``.  ``\Verb`` and ``\lstinline`` may take ``[options]``
+    first, closed by a ``]`` at brace depth 0 (``formatcom={\def\x{]}}`` is
+    one option).  ``\lstinline`` may delimit with braces, and is closed at
+    the FIRST ``}``, as listings closes it: ``{a{b} c`` is ``a{b`` and then
+    " c" is text again.
+    """
+    n = len(s)
+    j = end
+    if name != "verb" and j < n and s[j] == "[":
+        depth, k = 0, j + 1
+        while k < n:
+            if s[k] == "{":
+                depth += 1
+            elif s[k] == "}":
+                depth -= 1
+            elif s[k] == "]" and depth == 0:
+                break
+            k += 1
+        if k >= n:
+            return None
+        j = k + 1
+    if j >= n or s[j] in " \t\n":
+        return None
+    delim = "}" if (name == "lstinline" and s[j] == "{") else s[j]
+    close = s.find(delim, j + 1)
+    return n if close < 0 else close + 1
 
 
 def classify(s: str) -> list[int]:
@@ -63,12 +160,9 @@ def classify(s: str) -> list[int]:
                 i += 1
                 continue
             name, end = hit
-            if name == "verb":
-                # \verb<delim>…<delim>; the delimiter is the next character
-                if end < n:
-                    delim = s[end]
-                    close = s.find(delim, end + 1)
-                    close = n if close < 0 else close + 1
+            if name in INLINE_VERBATIM:
+                close = _inline_verbatim_end(s, name, end)
+                if close is not None:
                     for k in range(i, close):
                         kind[k] = VERBATIM
                     i = close
@@ -274,6 +368,23 @@ class Brackets:
 
     def wrap_example(self, inner: str) -> str:
         return f"{self.ex_l}{inner}{self.ex_r}"
+
+    def custom_reference(self, label: str, letter: str = "", bare: bool = False) -> str:
+        r"""What ``\ref`` prints for an example with a custom label.
+
+        linguexx 1.4: the label "as a number would be printed" -- ``(7)``,
+        and ``7`` for ``\pref`` -- with a sub-example's letter inside the
+        brackets, ``(5a)``: the example brackets are taken off the label and
+        put back around both.  A label written without them stands as it
+        is, letter after it.  Before 1.4, ``\ref`` to such an example printed
+        nothing at all, and a sub-example's printed the counter's value.
+        """
+        left, right = self.ex_l, self.ex_r
+        if (left and right and label.startswith(left) and label.endswith(right)
+                and len(label) > len(left) + len(right)):
+            core = label[len(left):len(label) - len(right)]
+            return f"{core}{letter}" if bare else f"{left}{core}{letter}{right}"
+        return f"{label}{letter}"
 
     def ordinal(self, level: int, n: int) -> str:
         """The sub-example letter or numeral itself, as this document counts."""

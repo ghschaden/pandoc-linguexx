@@ -214,6 +214,10 @@ class ParseResult:
     """The document's own macros, for the renderer to expand in examples."""
     brackets: Brackets = field(default_factory=Brackets)
     """What the preamble asked an example number to be wrapped in."""
+    custom_labels: dict[str, tuple[str, str]] = field(default_factory=dict)
+    r"""label -> (custom label, sub-example letter or '') for the labels of
+    examples written \ex.[(7)]: a reference to one prints the label, not a
+    number (linguexx 1.4), and is text, since nothing renumbers it."""
 
 
 def _ordinal_text(level: int, ordinal: int, brackets: Brackets | None = None) -> str:
@@ -634,6 +638,7 @@ def parse(src: str) -> ParseResult:
         examples = [_redecorate(ex, brackets) for ex in examples]
 
     labels = _collect_labels(examples, brackets)
+    custom_labels = _collect_custom_labels(examples, brackets)
     sublabels = _sublabels(src, live)
     macros = collect_macros(src, live, KNOWN_COMMANDS | LINGUEXX_COMMANDS,
                             warnings.append)
@@ -648,6 +653,7 @@ def parse(src: str) -> ParseResult:
         examples, _located(spans), labels, sublabels, warnings)
 
     return ParseResult(
+        custom_labels=custom_labels,
         residue=_build_residue(src, spans, rel_spans),
         examples=examples,
         warnings=warnings,
@@ -969,6 +975,28 @@ def _build_residue(
         prev = stop
     out.append(src[prev:])
     return "".join(out)
+
+
+def _collect_custom_labels(examples: list[Example],
+                           brackets: Brackets | None = None) -> dict[str, tuple[str, str]]:
+    r"""The labels of custom-labelled examples (\ex.[(7)]) and of their
+    sub-examples, with the label and the letter a reference prints."""
+    custom: dict[str, tuple[str, str]] = {}
+    for ex in examples:
+        if not ex.custom_label:
+            continue
+        names = [ex.label]
+        if ex.body is not None:
+            names += [ex.body.label, *ex.body.more_labels]
+        for name in names:
+            if name:
+                custom[name] = (ex.custom_label, "")
+        for it in ex.items:
+            for name in (it.body.label, *it.body.more_labels):
+                if name:
+                    custom[name] = (ex.custom_label,
+                                    _ordinal_text(it.level, it.ordinal, brackets))
+    return custom
 
 
 def _collect_labels(examples: list[Example],

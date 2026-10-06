@@ -252,7 +252,7 @@ deliberate and worth keeping:
   written in the harness.
 
 ## Tracking linguexx
-- **This converter targets a linguexx VERSION**, currently 1.3.2, and the
+- **This converter targets a linguexx VERSION**, currently 1.4, and the
   README says so. It was written against 1.2 and went on silently emitting
   1.2's output for a month after 1.3 changed it, because nothing recorded
   which version it was for.

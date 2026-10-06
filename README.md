@@ -221,7 +221,7 @@ OnlyOffice. They agree now, and a test holds them to it.
 The `.odt` target remains the reference one: it is what the Writer macro,
 the reference document and the French manual are about.
 
-**Targets linguexx 1.3.2.** Worth stating, because the gap is otherwise
+**Targets linguexx 1.4.** Worth stating, because the gap is otherwise
 invisible: this converter was written against 1.2 and silently kept
 emitting 1.2's output for a month after 1.3 changed it. If you are on a
 newer linguexx, check this table before trusting the result.
@@ -240,7 +240,9 @@ Unless a row says otherwise, this is true of both targets.
 | construct | what happens |
 |---|---|
 | `\ex.` inside `itemize`, `enumerate` or a footnote | not converted: `\ex` is deleted, and the example's text stays where it was as ordinary unnumbered text, after a stray full stop |
-| `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped |
+| `\ex.[(4′)]` custom labels | printed literally; the counter is not stepped. A reference to one prints the label, as linguexx 1.4 does: "(4′)", a sub-example's "(4′a)", and without the brackets for `\pref`. It is text, not a field: a custom label is not a counter, and nothing renumbers it |
+| `\mvto`, `\mvfrom` movement arrows | the arrows are not drawn; the words they mark are kept, and the run says so once |
+| `\verb`, `\Verb`, `\lstinline` inside an example | printed as linguexx prints them, a starred one's spaces as visible spaces (␣). Their options (`\Verb*[formatcom=…]`, `\lstinline[basicstyle=…]`) are dropped. The `.odt` sets them in the code face, the `.docx` as ordinary text |
 | `\exsource{…}` | rendered inline at the end, not flush right |
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
 | `\refrange`, `\prefrange` | resolved as linguexx prints them, in prose and inside examples, with live references: "(3a–c)" when the range ends on a `\sublabel`, "(1–3a)" when it ends on a `\label`. A redefined `\rangedash` warns; the dash is an en dash |

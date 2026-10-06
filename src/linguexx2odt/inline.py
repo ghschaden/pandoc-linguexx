@@ -36,7 +36,8 @@ import unicodedata
 from collections.abc import Callable
 
 from . import macros as _macros
-from .latexutil import Brackets, find_group
+from .latexutil import (INLINE_VERBATIM, Brackets, find_group, rewrite_inline_verbatim,
+                        verbatim_for_pandoc, visible_spaces)
 
 XML_ESCAPES = {"&": "&amp;", "<": "&lt;", ">": "&gt;"}
 
@@ -89,6 +90,8 @@ SYMBOLS = {
     "dag": "†", "ddag": "‡", "S": "§", "P": "¶",
     "copyright": "©", "pounds": "£", "ldots": "…",
     "dots": "…", "textasciitilde": "~", "textbackslash": "\\",
+    # what the way back writes for a "^" (an \lstinline payload has one)
+    "textasciicircum": "^",
     "ae": "æ", "AE": "Æ", "oe": "œ", "OE": "Œ",
     "aa": "å", "AA": "Å", "o": "ø", "O": "Ø",
     "ss": "ß", "l": "ł", "L": "Ł", "i": "ı",
@@ -123,12 +126,25 @@ REF_SOURCE = re.compile(r"\\(p?ref)\s*\{[^}]*\}")
 #: and digits only, which pandoc passes through as they are.
 REF_TOKEN = "LXREFTOKEN{n}X"
 
+#: What stands in for an inline verbatim's payload while the rest of a .docx
+#: cell is rendered: letters and digits only, like REF_TOKEN.
+VERBATIM_TOKEN = "LXVERBTOKEN{n}X"
+
+
+#: linguexx 1.4's movement arrows, \mvto{name}{text} and \mvfrom{name}{text}
+#: (and their long names), with an optional [above|below|...] first.  The text
+#: is a word of the example and stays; the arrow is not drawn.  Unhandled, the
+#: fragment went to pandoc, which deleted the commands WITH their text:
+#: "MVPLAIN \mvto{a}{LANDA} stays here \mvfrom{a}{BASEA} end." came out
+#: "MVPLAIN stays here end.", the warning saying the opposite of what happened.
+MOVES = frozenset({"mvto", "mvfrom", "lxMoveTo", "lxMoveFrom"})
+
 
 #: Every command the renderer gives a meaning of its own.  A document's
 #: \newcommand over one of these is refused, as LaTeX refuses it.
 KNOWN_COMMANDS = frozenset(
     set(WRAPPERS) | set(SYMBOLS) | set(ACCENTS) | DECLARATIONS | DISCARD_ARG
-    | {"ref", "pref", "begin", "end", "Tree", "qtree"})
+    | MOVES | {"ref", "pref", "begin", "end", "Tree", "qtree"})
 
 
 class Unsupported(Exception):
@@ -155,6 +171,9 @@ class InlineRenderer:
         self._style_seq = 0
         self.labels: dict[str, tuple[int, str]] = {}
         """label -> (example index, sub-example letter): what \\ref names."""
+        self.custom_labels: dict[str, tuple[str, str]] = {}
+        """label -> (custom label, letter), for an example written \\ex.[(7)]."""
+        self._moves_said = False
         self.brackets = None
         """The document's \\ExLBr/\\ExRBr, for the number a reference shows."""
         self.macros: dict[str, _macros.Macro] = {}
@@ -172,8 +191,11 @@ class InlineRenderer:
         try:
             xml = self._render(latex)
         except Unsupported as exc:
-            self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
-            xml = self._pandoc_keeping_references(latex)
+            # Inline verbatim is pandoc's to render, and rendered right:
+            # linguexx 1.4 allows it in an example, so it is no warning.
+            if str(exc) not in {f"unhandled command \\{v}" for v in INLINE_VERBATIM}:
+                self.warn(f"{exc}; fragment rendered by pandoc: {latex.strip()[:50]!r}")
+            xml = self._pandoc_keeping_references(verbatim_for_pandoc(latex))
         if self.ref_markup is None:
             return REF_MARK.sub(lambda m: m.group(4), xml)
         return REF_MARK.sub(
@@ -207,10 +229,12 @@ class InlineRenderer:
         try:
             xml = self._render(latex)
         except Unsupported:
-            # Nothing rendered it, so the source as written -- except its
-            # references, which are still references: printed as source
-            # they were "\ref{a}" in a .docx cell, and measured as that.
-            xml = self._with_references(latex, esc)
+            xml = self._verbatim_as_text(latex)
+            if xml is None:
+                # Nothing rendered it, so the source as written -- except its
+                # references, which are still references: printed as source
+                # they were "\ref{a}" in a .docx cell, and measured as that.
+                xml = self._with_references(latex, esc)
 
         runs: list[tuple[str, bool, tuple | None]] = []
         spans: list[str] = []                  # open <text:span> styles
@@ -248,6 +272,33 @@ class InlineRenderer:
         flush()
 
         return [(_unesc(t), sc, ref) for t, sc, ref in runs]
+
+    def _verbatim_as_text(self, latex: str) -> str | None:
+        r"""The fragment rendered with its inline verbatim as plain text, or
+        None if something else in it is unhandled too.
+
+        For the .docx, which has no pandoc fallback for a cell: the verbatim
+        went there as source, "\verb|x_1|".  Each payload goes over as a
+        token (letters only, which the renderer passes through) and comes
+        back as its text -- the right characters, without the typewriter
+        face, which a cell does not carry for code anyway.
+        """
+        payloads: list[str] = []
+
+        def token(payload: str, starred: bool) -> str:
+            payloads.append(visible_spaces(payload, starred))
+            return VERBATIM_TOKEN.format(n=len(payloads) - 1)
+
+        masked = rewrite_inline_verbatim(latex, token)
+        if not payloads:
+            return None
+        try:
+            xml = self._render(masked)
+        except Unsupported:
+            return None
+        for n, payload in enumerate(payloads):
+            xml = xml.replace(VERBATIM_TOKEN.format(n=n), esc(payload), 1)
+        return xml
 
     def _small_caps(self, spans: list[str]) -> bool:
         return any(name in self.SMALLCAPS_STYLES for name in spans)
@@ -374,6 +425,26 @@ class InlineRenderer:
         if name in ("ref", "pref"):
             return self._reference(s, name, j, out)
 
+        if name in MOVES:
+            k = j
+            while k < len(s) and s[k] in " \t\n":
+                k += 1
+            if k < len(s) and s[k] == "[":  # [above], [level=2], ...
+                close = s.find("]", k)
+                if close < 0:
+                    raise Unsupported(f"\\{name} with an unclosed [option]")
+                k = close + 1
+            named = find_group(s, k)
+            text = find_group(s, named[1]) if named is not None else None
+            if named is None or text is None:
+                raise Unsupported(f"\\{name} without {{name}}{{text}}")
+            if not self._moves_said:
+                self._moves_said = True
+                self.warn("movement arrows (\\mvto, \\mvfrom) are not drawn; "
+                          "the words they mark are kept")
+            out.append(self._render(text[0]))
+            return text[1]
+
         raise Unsupported(f"unhandled command \\{name}")
 
     # -- references ---------------------------------------------------------
@@ -391,6 +462,11 @@ class InlineRenderer:
         label, bare = grp[0].strip(), name == "pref"
         br = self.brackets or Brackets()
         left, right = ("", "") if bare else (br.ex_l, br.ex_r)
+        if label in self.custom_labels:
+            # A custom label is not a number: text, which nothing renumbers.
+            custom, letter = self.custom_labels[label]
+            out.append(esc(br.custom_reference(custom, letter, bare)))
+            return grp[1]
         if label not in self.labels:
             self.warn(f"\\{name}{{{label}}} inside an example: no example is "
                       f"labelled {label!r}; printed as ??")

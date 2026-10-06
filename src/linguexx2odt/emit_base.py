@@ -63,6 +63,10 @@ class BaseEmitter:
     r"""label -> (example index, sub-letter), for a \ref inside an example.
     The prose's go through the inject pass; these never reach it."""
 
+    custom_labels: dict[str, tuple[str, str]] = field(default_factory=dict)
+    r"""label -> (custom label, sub-letter), for a \ref inside an example to
+    one written \ex.[(7)]: printed as text (extract.ParseResult)."""
+
     any_judgment: bool = False
     """Whether *any* example in the document carries a judgment mark.
 
@@ -75,6 +79,7 @@ class BaseEmitter:
         if self.inline is None:
             self.inline = InlineRenderer(self.warnings.append)
         self.inline.labels = self.labels
+        self.inline.custom_labels = self.custom_labels
         self.inline.macros = self.macros
         self.inline.brackets = self.brackets
         self._warn = self.warnings.append

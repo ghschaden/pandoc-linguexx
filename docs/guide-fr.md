@@ -202,7 +202,7 @@ L'argument optionnel (forme orale) est abandonné.
 
 Sauf mention contraire, le tableau ci-dessous vaut pour les deux formats.
 
-**Cible linguexx 1.3.2.** L'écart est autrement invisible : ce convertisseur
+**Cible linguexx 1.4.** L'écart est autrement invisible : ce convertisseur
 a été écrit pour la 1.2 et a continué pendant un mois à produire
 silencieusement la sortie de la 1.2 après que la 1.3 l'eut changée. Avec une
 version plus récente, vérifiez ce tableau avant de faire confiance au
@@ -216,7 +216,9 @@ tableau dit lequel :
 | construction | ce qui se passe |
 |---|---|
 | `\ex.` dans `itemize`, `enumerate` ou une note | non converti : `\ex` est supprimé, et le texte de l'exemple reste en place, en texte ordinaire non numéroté, après un point isolé |
-| étiquettes personnalisées `\ex.[(4′)]` | imprimées littéralement ; le compteur n'avance pas |
+| étiquettes personnalisées `\ex.[(4′)]` | imprimées littéralement ; le compteur n'avance pas. Un renvoi à l'une d'elles imprime l'étiquette, comme linguexx 1.4 : « (4′) », celui d'un sous-exemple « (4′a) », et sans les parenthèses pour `\pref`. C'est du texte, pas un champ : une étiquette personnalisée n'est pas un compteur, et rien ne la renumérote |
+| flèches de déplacement `\mvto`, `\mvfrom` | les flèches ne sont pas dessinées ; les mots qu'elles marquent restent, et l'exécution le dit une fois |
+| `\verb`, `\Verb`, `\lstinline` dans un exemple | imprimés comme linguexx les imprime, les espaces d'une forme étoilée en espaces visibles (␣). Leurs options (`\Verb*[formatcom=…]`, `\lstinline[basicstyle=…]`) sont abandonnées. Le `.odt` les compose dans la police du code, le `.docx` en texte ordinaire |
 | `\exsource{…}` | rendu en ligne à la fin, pas aligné à droite |
 | `\refrange`, `\prefrange` | résolus comme linguexx les imprime, dans le texte comme dans les exemples, avec des renvois vivants : « (3a–c) » quand l'intervalle finit sur un `\sublabel`, « (1–3a) » quand il finit sur un `\label`. Un `\rangedash` redéfini est signalé ; le tiret est demi-cadratin |
 | un renvoi à un sous-sous-exemple (le niveau romain), intervalles compris | non pris en charge : imprimé sans la lettre de son sous-exemple, « (1i) » là où linguexx imprime « (1b-i) ». L'exécution avertit à chaque renvoi |

@@ -275,6 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     emitter = emitter_for(args.to, layout=layout, split=not args.no_split,
                           brackets=parsed.brackets, labels=parsed.labels,
+                          custom_labels=parsed.custom_labels,
                           macros=parsed.macros)
     emitter.prepare(parsed.examples)
     blocks = {ex.index: emitter.example(ex) for ex in parsed.examples}
@@ -319,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
             _degrade_citations(ast, warnings.append)
 
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
-                          emitter=emitter)
+                          emitter=emitter, custom_labels=parsed.custom_labels)
         report_dropped_latex(doc, warnings.append)
 
         ast_path = tmp / "ast.json"

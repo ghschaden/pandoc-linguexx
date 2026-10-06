@@ -37,6 +37,7 @@ from typing import Any
 from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
+from .latexutil import Brackets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
 
@@ -154,9 +155,14 @@ class Injector:
         labels: dict[str, tuple[int, str]],
         warn: Callable[[str], None] | None = None,
         emitter=None,
+        custom_labels: dict[str, tuple[str, str]] | None = None,
     ) -> None:
         self.blocks = blocks_by_index
         self.labels = labels
+        # A reference to an example written \ex.[(7)] prints its label
+        # (linguexx 1.4): plain text, the same in every format, and no field,
+        # since a custom label is not a counter and nothing renumbers it.
+        self.custom_labels = custom_labels or {}
         self.warn = warn or (lambda _m: None)
         # The emitter decides what a reference and a raw block ARE; this
         # pass only decides where they go.
@@ -231,6 +237,8 @@ class Injector:
     def _reference(self, node: dict):
         if node.get("t") == "Link":
             label = _link_reference(node)
+            if label and label in self.custom_labels:
+                return self._custom_reference(label, bare=False)
             if label and label in self.labels:
                 index, letter = self.labels[label]
                 self.refs_rewritten += 1
@@ -240,6 +248,8 @@ class Injector:
             fmt, text = (node.get("c") or ["", ""])[:2]
             if fmt in ("latex", "tex"):
                 m = REF_CMD.fullmatch(str(text).strip())
+                if m and m.group(2) in self.custom_labels:
+                    return self._custom_reference(m.group(2), bare=m.group(1) == "pref")
                 if m and m.group(2) in self.labels:
                     index, letter = self.labels[m.group(2)]
                     self.refs_rewritten += 1
@@ -251,10 +261,17 @@ class Injector:
                     return _raw_inline(self.fmt, xml)
         return None
 
+    def _custom_reference(self, label: str, bare: bool) -> dict:
+        custom, letter = self.custom_labels[label]
+        br = getattr(self.emitter, "brackets", None) or Brackets()
+        self.refs_rewritten += 1
+        return {"t": "Str", "c": br.custom_reference(custom, letter, bare)}
+
 
 def inject(doc: dict, blocks_by_index, labels, warn=None,
-           emitter=None) -> tuple[dict, Injector]:
-    inj = Injector(blocks_by_index, labels, warn, emitter=emitter)
+           emitter=None, custom_labels=None) -> tuple[dict, Injector]:
+    inj = Injector(blocks_by_index, labels, warn, emitter=emitter,
+                   custom_labels=custom_labels)
     return inj.run(doc), inj
 
 
