@@ -113,8 +113,9 @@ class Emitter(BaseEmitter):
         # "1.1" -- the whole of it, not only the chapter's.
         fmt = {"number": "chapter", "title": "text", "page": "page"}[form]
         cached = {"number": sec.shown, "title": sec.title, "page": "?"}[form]
+        name = sec.number_bookmark if form == "number" else sec.bookmark
         return (f'<text:bookmark-ref text:reference-format="{fmt}"'
-                f' text:ref-name="{sec.bookmark}">{esc(cached)}</text:bookmark-ref>')
+                f' text:ref-name="{name}">{esc(cached)}</text:bookmark-ref>')
 
     def page_reference(self, index: int) -> str:
         return (f'<text:sequence-ref text:reference-format="page"'

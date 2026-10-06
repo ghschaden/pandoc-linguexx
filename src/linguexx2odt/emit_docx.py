@@ -197,7 +197,7 @@ class DocxEmitter(BaseEmitter):
         # and a reader that does not update fields (OnlyOffice) shows the
         # cache: "?" says so, where a guess would be a wrong page.
         if form == "number":
-            return field_run(f"REF {sec.bookmark} \\w \\h", sec.shown)
+            return field_run(f"REF {sec.number_bookmark} \\w \\h", sec.shown)
         if form == "title":
             return field_run(f"REF {sec.bookmark} \\h", sec.title)
         return field_run(f"PAGEREF {sec.bookmark} \\h", "?")

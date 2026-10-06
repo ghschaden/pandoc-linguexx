@@ -173,3 +173,32 @@ def test_autoref_to_an_unnumbered_heading_says_section(tmp_path: Path) -> None:
     shown = " ".join("".join(re.findall(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>", para))
                      .replace(" ", " ").split())
     assert "E section 1.1.1 subsubsection 1.1.1 F" in shown, shown
+
+
+STARRED = r"""\documentclass{article}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\begin{document}
+\section{One}\label{s1}
+\subsection{Sub}\label{s11}
+\section*{Star}\label{star}
+\paragraph{Para}\label{par}
+STAR: \ref{star}, \ref{par}, \cref{star}, \pageref{star}.
+\end{document}
+"""
+
+
+@pandoc
+@soffice
+@pytest.mark.parametrize("target", ["odt", "docx"])
+def test_a_reference_to_an_unnumbered_heading_shows_the_last_number(
+        tmp_path: Path, target: str) -> None:
+    r"""LaTeX prints the last number set before a \section* or a
+    \paragraph (measured: "1.1").  The stored value was that, but the field
+    pointed at the heading itself, which has no number, and showed nothing
+    once LibreOffice updated it.  It points at the last numbered heading."""
+    tex = tmp_path / "doc.tex"
+    tex.write_text(STARRED, encoding="utf-8")
+    out = tmp_path / f"doc.{target}"
+    assert main([str(tex), "-o", str(out), "--to", target, "-q"]) == 0
+    assert "STAR: 1.1, 1.1, section 1.1, 1." in _laid_out(out)

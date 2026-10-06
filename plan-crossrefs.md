@@ -56,9 +56,10 @@ from the output" warning. The full corpus against linguexx 1.4 passes (521).
   numbers right ("1.1" for a section), but such classes number only to
   `\subsection`, and level 3 is numbered here regardless.
 - A `--reference-doc`'s own heading numbering is replaced.
-- An unnumbered heading's reference in the `.odt` is computed by LibreOffice
-  from the outline, which has no number there; LaTeX's "last number set" is
-  only the cache.
+- ~~An unnumbered heading's reference showed nothing once updated~~, in
+  both formats (found while writing the manual): the field pointed at the
+  heading, which has no number. It points at the last numbered heading
+  before it now, whose number is what LaTeX prints.
 
 ## Step 2: tables, figures and footnotes — done (756f86b)
 
@@ -202,9 +203,9 @@ against LaTeX first, and each has its tests.
   LibreOffice and pdfinfo are there, the finished file is exported to PDF
   with its bookmarks as named destinations, and each page field's "?"
   becomes the page its bookmark is on. Without them, "?" stays and the run
-  says so. In the `.odt` a page reference to an *example* stays "?" (its
-  number is a sequence, not a bookmark); LibreOffice computes it on
-  loading, and no other `.odt` reader was tried.
+  says so. In the `.odt` a page reference to an *example* or a *footnote*
+  stays "?" (a sequence and a note, not bookmarks); LibreOffice computes it
+  on loading, and no other `.odt` reader was tried.
 - **The document's language** (`names.py`, `tools/measure_names.py`,
   `tests/test_names.py`). Measured per language and per way of loading:
   cleveref's names follow a language given to cleveref or to the class,

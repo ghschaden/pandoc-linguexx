@@ -69,6 +69,16 @@ class Section:
     r"""After \appendix: lettered, "A", "A.1"."""
     numbers: tuple[int, ...] = ()
     r"""Its number's parts, (1, 1) for "A.1": what \cref sorts by."""
+    numbered_by: str = ""
+    r"""For an unnumbered heading, the bookmark of the last numbered one
+    before it: what a field showing its number points at.  Pointed at the
+    heading itself, the field showed nothing once updated, where \ref
+    prints that last number."""
+
+    @property
+    def number_bookmark(self) -> str:
+        """The bookmark a field showing this heading's number points at."""
+        return self.bookmark if self.number else (self.numbered_by or self.bookmark)
 
     @property
     def bookmark(self) -> str:
@@ -136,6 +146,7 @@ def sections(blocks: Any) -> list[tuple[dict, Section]]:
     counters = [0] * (NUMBERED_LEVELS + 1)
     last = ""
     appendix = False
+    last_bookmark = ""
     out: list[tuple[dict, Section]] = []
     n = 0
     for h in _headers(blocks):
@@ -157,9 +168,12 @@ def sections(blocks: Any) -> list[tuple[dict, Section]]:
                 parts[0] = _letter(numbers[0])
             number = ".".join(parts)
             last = number
-        out.append((h, Section(ident, level, _text(inlines).strip(),
-                               number, number or last, n,
-                               appendix and number is not None, numbers)))
+        sec = Section(ident, level, _text(inlines).strip(), number, number or last, n,
+                      appendix and number is not None, numbers,
+                      "" if number else last_bookmark)
+        if number:
+            last_bookmark = sec.bookmark
+        out.append((h, sec))
         n += 1
     return out
 
