@@ -321,11 +321,13 @@ def item_bookmark(serial: int) -> str:
 
 
 def _own_label(blocks: Any) -> str | None:
-    """The \\label in an item, not in a list nested in it."""
+    """The \\label in an item, not in a list nested in it, nor in a
+    footnote: LaTeX gives that one to the note."""
     for node in blocks or []:
         if not isinstance(node, dict):
             continue
-        if node.get("t") == "OrderedList":
+        if node.get("t") in ("OrderedList", "Note"):
+            # a nested list's label is its item's, a footnote's the note's
             continue
         if node.get("t") == "RawInline" and node["c"][0] in ("latex", "tex"):
             m = re.fullmatch(r"\s*\\label\s*\{([^}]*)\}\s*", node["c"][1])

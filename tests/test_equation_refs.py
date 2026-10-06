@@ -39,6 +39,8 @@ import pytest
 from linguexx2odt import postprocess
 from linguexx2odt.cli import main
 
+from equationxml import equation_paragraphs, math_objects
+
 pandoc = pytest.mark.skipif(shutil.which("pandoc") is None,
                             reason="pandoc not installed")
 soffice = pytest.mark.skipif(shutil.which("soffice") is None
@@ -70,12 +72,12 @@ F \nameref{eq:a} G \pageref{eq:g} H \eqref{t}.
 \end{document}
 """
 
-#: LaTeX's rendering of SOURCE: each numbered row with its number, the
-#: unnumbered ones with none, and the references.
-LATEX_ROWS = ["a=b (1)", "x=y (2)", "u=v (3)", "g=h (4)", "k (∗)"]
+#: LaTeX's numbering of SOURCE, numbered display by numbered display: a=b
+#: (1); the align's x=y (2), z=w none, u=v (3); g=h (4); k (∗).  c=d and
+#: e=f have no number, and stay as pandoc writes them.
+NUMBERS = ["(1)", "(2)", None, "(3)", "(4)", "(∗)"]
 LATEX_REFS = ("REFS: A 1 B (2) C eq. (3) D Equation (4) E Equation 1 F Intro"
               " G 1 H (∗).")
-UNNUMBERED = ["c=d", "z=w", "e=f"]
 
 
 def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
@@ -87,37 +89,34 @@ def _convert(tmp_path: Path, target: str, quiet: bool = True) -> Path:
     return out
 
 
-def _lines(doc: Path) -> list[str]:
-    """The laid-out page, line by line, spaces collapsed and those around
-    "=" dropped (the formula objects space it their own way)."""
+def _text(doc: Path) -> str:
+    """The laid-out page as one line of text."""
     subprocess.run(["soffice", "--headless", "--convert-to", "pdf",
                     "--outdir", str(doc.parent), str(doc)],
                    check=True, capture_output=True, timeout=120)
-    txt = subprocess.run(["pdftotext", "-layout", str(doc.with_suffix(".pdf")), "-"],
+    txt = subprocess.run(["pdftotext", str(doc.with_suffix(".pdf")), "-"],
                          check=True, capture_output=True, text=True).stdout
-    return [re.sub(r"\s*=\s*", "=", " ".join(line.split()))
-            for line in txt.splitlines() if line.strip()]
+    return " ".join(txt.split())
 
 
 @pandoc
-@soffice
 @pytest.mark.parametrize("target", ["odt", "docx"])
 def test_equations_are_numbered_as_latex_numbers_them(tmp_path: Path, target: str) -> None:
-    lines = _lines(_convert(tmp_path, target))
-    for row in LATEX_ROWS:
-        assert row in lines, f"{row!r} not a line of:\n{lines}"
-    for row in UNNUMBERED:
-        assert row in lines, f"{row!r} (no number) not a line of:\n{lines}"
-    assert "Before the math" in lines and "and prose after it." in lines, lines
+    """Read from the file, not off the page: what a PDF gives for a
+    formula's text depends on the LibreOffice that made it (equationxml)."""
+    out = _convert(tmp_path, target)
+    assert equation_paragraphs(out) == [(True, n) for n in NUMBERS]
+    assert math_objects(out) == len(NUMBERS) + 2       # c=d and e=f, unnumbered
 
 
 @pandoc
 @soffice
 @pytest.mark.parametrize("target", ["odt", "docx"])
-def test_a_reference_to_an_equation_prints_what_latex_prints(
+def test_the_prose_stays_and_a_reference_prints_what_latex_prints(
         tmp_path: Path, target: str) -> None:
-    lines = _lines(_convert(tmp_path, target))
-    assert LATEX_REFS in lines, lines
+    text = _text(_convert(tmp_path, target))
+    assert "Before the math" in text and "and prose after it." in text, text
+    assert LATEX_REFS in text, text
 
 
 @pandoc

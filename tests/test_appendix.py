@@ -38,6 +38,8 @@ import pytest
 from linguexx2odt import postprocess
 from linguexx2odt.cli import main
 
+from equationxml import equation_paragraphs
+
 pandoc = pytest.mark.skipif(shutil.which("pandoc") is None,
                             reason="pandoc not installed")
 soffice = pytest.mark.skipif(shutil.which("soffice") is None
@@ -66,13 +68,14 @@ G \cref{a1,a2} H \nameref{a2} I \eqref{e2} J \cref{s1,a1} K \cref{e0,e1} L \ref{
 
 HEADINGS = ["1 Intro", "A Data", "A.1 More", "B Code"]
 
-#: LaTeX's rendering, without and with \numberwithin{equation}{section}.
+#: LaTeX's rendering, without and with \numberwithin{equation}{section}:
+#: the numbers of z, a and b, then the references.
 LATEX = {
-    "": ["z (1)", "a (2)", "b (3)",
+    "": ["(1)", "(2)", "(3)",
          "APP: A A B A.1 C section A D Section A.1 E Appendix A F subsection A.1 "
          "G sections A and B H Code I (3) J sections 1 and A K eqs. (1) and (2) L 3."],
     r"\numberwithin{equation}{section}": [
-        "z (1.1)", "a (1.2)", "b (A.1)",
+        "(1.1)", "(1.2)", "(A.1)",
         "APP: A A B A.1 C section A D Section A.1 E Appendix A F subsection A.1 "
         "G sections A and B H Code I (A.1) J sections 1 and A K eqs. (1.1) and (1.2) L A.1."],
 }
@@ -102,8 +105,10 @@ def test_the_appendix_is_lettered_as_latex_letters_it(
     text = " ".join(lines)
     for heading in HEADINGS:
         assert heading in lines, f"{heading!r} not a line of:\n{lines}"
-    for line in LATEX[within]:
-        assert line in text, f"{line!r} not in:\n{text}"
+    # the equations' numbers from the file, not off the page (equationxml)
+    *numbers, refs = LATEX[within]
+    assert equation_paragraphs(out) == [(True, n) for n in numbers]
+    assert refs in text, f"{refs!r} not in:\n{text}"
 
 
 @pandoc

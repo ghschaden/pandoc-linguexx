@@ -162,3 +162,21 @@ def test_a_list_with_its_own_style_keeps_it_and_its_cache_follows(tmp_path: Path
     para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "ROMAN" in p)
     assert "".join(re.findall(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>", para)) == "ROMAN: (ii)."
     assert 'w:val="lowerRoman"' in postprocess.read(out, "word/numbering.xml")
+
+
+@pandoc
+def test_a_label_in_a_footnote_in_an_item_is_the_notes(tmp_path: Path) -> None:
+    r"""\cref to it said "item 2": the item took the note's \label.  LaTeX
+    prints "footnote 1" (measured)."""
+    tex = tmp_path / "doc.tex"
+    tex.write_text("\\documentclass{article}\\usepackage{linguexx}\\usepackage{cleveref}\n"
+                   "\\begin{document}\n\\begin{enumerate}\n\\item One.\\label{it:one}\n"
+                   "\\item Two.\\footnote{A note.\\label{fn:one}}\n\\end{enumerate}\n\n"
+                   "NOTE: \\cref{it:one} and \\cref{fn:one}.\n\\end{document}\n", encoding="utf-8")
+    out = tmp_path / "doc.docx"
+    assert main([str(tex), "-o", str(out), "--to", "docx", "-q"]) == 0
+    xml = postprocess.read(out, "word/document.xml")
+    para = next(p for p in re.findall(r"<w:p\b.*?</w:p>", xml, re.S) if "NOTE:" in p)
+    shown = " ".join("".join(re.findall(r"<w:t(?:\s[^>]*)?>([^<]*)</w:t>", para))
+                     .replace("\u00a0", " ").split())
+    assert shown == "NOTE: item 1 and footnote 1.", shown
