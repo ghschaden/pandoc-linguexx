@@ -171,3 +171,14 @@ def test_a_reference_to_a_float_or_note_is_no_warning(tmp_path: Path, capsys) ->
     _convert(tmp_path, "odt", quiet=False)
     err = capsys.readouterr().err
     assert "deleted from the output" not in err, err
+
+
+def test_a_tables_label_on_a_div_around_it_is_its_label() -> None:
+    r"""pandoc 3.6 puts a table's \label on a Div wrapping it; 3.10 on the
+    table.  Either way \ref{t1} must find table 1."""
+    from linguexx2odt.sections import targets
+
+    table = {"t": "Table", "c": [["", [], []], [None, [{"t": "Plain", "c": [
+        {"t": "Str", "c": "T."}]}]], [], [["", [], []], []], [], [["", [], []], []]]}
+    found = targets([{"t": "Div", "c": [["t1", [], []], [table]]}]).by_label()
+    assert found["t1"].kind == "table" and found["t1"].number == 1

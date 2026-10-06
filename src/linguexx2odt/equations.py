@@ -27,6 +27,12 @@ nothing; a starred environment, ``\[ \]`` and ``displaymath`` none.
 The numbers are text, and so is a reference to one: the user's decision
 (equations stay text), so neither follows a renumbering.
 
+The source is read, not pandoc's AST: pandoc 3.6 gives an `equation` as
+its bare body and an `align` as `aligned`, so the AST cannot tell
+`equation` from `equation*`, nor which rows an `align` numbers (3.10 keeps
+the environment).  The residue pandoc reads holds the same displays in the
+same order (display_math), and the k-th numbers pandoc's k-th.
+
 Format-agnostic: no markup here.
 """
 
@@ -103,8 +109,57 @@ def _rows(body: str) -> list[str]:
 TAGGED = "\x00"
 
 
-def number_rows(tex: str, counter: list[int]) -> list[Row]:
+_DISPLAY = re.compile(
+    r"\\begin\{(equation|align|gather|multline|flalign|alignat|eqnarray|displaymath)"
+    r"(\*?)\}|\\\[|\$\$")
+
+
+def display_math(src: str) -> list[str]:
+    """The display equations of *src* as written, in order: what pandoc
+    makes a DisplayMath of.  Comments and verbatim are skipped."""
+    from .latexutil import live_mask
+
+    live = live_mask(src)
+    out: list[str] = []
+    i = 0
+    while True:
+        m = _DISPLAY.search(src, i)
+        if m is None:
+            return out
+        if not live[m.start()]:
+            i = m.end()
+            continue
+        if m.group(1):
+            close = f"\\end{{{m.group(1)}{m.group(2)}}}"
+        else:
+            close = "\\]" if m.group(0) == "\\[" else "$$"
+        end = src.find(close, m.end())
+        if end < 0:
+            return out
+        end += len(close)
+        tex = src[m.start():end]
+        # \[ \] and $$ $$ are written as displaymath, which numbers nothing
+        if not m.group(1):
+            tex = "\\begin{displaymath}" + src[m.end():end - len(close)] + "\\end{displaymath}"
+        out.append(tex)
+        i = end
+
+
+def _shown(tex: str) -> str:
+    """The TeX to typeset a whole display from: pandoc's, its environment
+    dropped where it is a bare equation (3.10 keeps it, 3.6 does not)."""
+    m = _ENV.fullmatch(tex)
+    if m and m.group(1) in ("equation", "displaymath"):
+        return _clean(m.group(3))
+    return _clean(tex)
+
+
+def number_rows(tex: str, counter: list[int], shown: str | None = None) -> list[Row]:
+    """*tex* as written decides the numbers; *shown*, pandoc's TeX for it,
+    is what a row that is not split is typeset from."""
     rows = _number_rows(tex, counter)
+    if shown is not None and len(rows) == 1:
+        rows[0].math = _shown(shown)
     for r in rows:
         if r.number is not None and r.number.startswith(TAGGED):
             r.number, r.tagged = r.number[len(TAGGED):], True
@@ -196,10 +251,31 @@ class EquationTargets:
     """id(Row) -> its serial, for every numbered row."""
 
 
+def _display_nodes(node: Any) -> int:
+    if isinstance(node, list):
+        return sum(_display_nodes(x) for x in node)
+    if not isinstance(node, dict):
+        return 0
+    if node.get("t") == "Math":
+        return int(node["c"][0].get("t") == "DisplayMath")
+    if node.get("t") in ("RawInline", "RawBlock", "Str", "Code", "CodeBlock"):
+        return 0
+    return _display_nodes(node.get("c"))
+
+
 def equation_targets(blocks: Any, heads: dict[int, Any],
-                     within: int | None = None) -> EquationTargets:
+                     within: int | None = None,
+                     sources: list[str] | None = None,
+                     warn=lambda _m: None) -> EquationTargets:
     r"""*within*: the heading level \numberwithin{equation}{...} names --
-    the counter restarts there and the number is that heading's, "1.2"."""
+    the counter restarts there and the number is that heading's, "1.2".
+    *sources*: display_math of what pandoc read, one per DisplayMath."""
+    if sources is not None and len(sources) != _display_nodes(blocks):
+        warn(f"{len(sources)} display equations in the source, "
+             f"{_display_nodes(blocks)} in what pandoc made of it: numbered "
+             "from pandoc's, which may not say which are starred")
+        sources = None
+    seen = [0]
     counter = [0]
     prefix: list[Any] = [None]
     serial = [SERIAL_BASE]
@@ -226,7 +302,9 @@ def equation_targets(blocks: Any, heads: dict[int, Any],
             kind, tex = node["c"]
             if kind.get("t") != "DisplayMath":
                 return
-            numbered = number_rows(tex, counter)
+            written = sources[seen[0]] if sources is not None else tex
+            seen[0] += 1
+            numbered = number_rows(written, counter, tex)
             if any(r.number is not None for r in numbered):
                 rows[id(node)] = numbered
                 for r in numbered:

@@ -158,3 +158,34 @@ def test_amsmath_numbering() -> None:
     # \tag prints its text and steps nothing
     assert rows(r"\begin{equation} k \tag{A}\end{equation}") == [("k", "A")]
     assert rows(r"\begin{equation} m \end{equation}") == [("m", "7")]
+
+
+def test_the_numbers_come_from_the_source_not_pandocs_ast() -> None:
+    r"""pandoc 3.6 gives `equation` as its bare body and `equation*` the
+    same way, so the AST cannot say which is numbered; the source can."""
+    from linguexx2odt.equations import display_math, equation_targets
+
+    src = (r"A \begin{equation}\label{a} x \end{equation} B \[ y \] "
+           r"% \begin{equation} commented \end{equation}" "\n"
+           r"\begin{equation*} z \end{equation*} \begin{equation}\label{b} w \end{equation}")
+    written = display_math(src)
+    assert len(written) == 4 and written[1].startswith(r"\begin{displaymath}")
+
+    def math(tex: str) -> dict:
+        return {"t": "Math", "c": [{"t": "DisplayMath"}, tex]}
+    # what pandoc 3.6.1 makes of it: environments gone
+    blocks = [{"t": "Para", "c": [math(r"\label{a} x"), math("y"), math("z"),
+                                  math(r"\label{b} w")]}]
+    found = equation_targets(blocks, {}, sources=written)
+    assert [(e.ident, e.number) for e in found.equations] == [("a", "1"), ("b", "2")]
+    assert [r.math for rows in found.rows.values() for r in rows] == ["x", "w"]
+
+
+def test_a_count_that_does_not_match_falls_back_and_says_so() -> None:
+    from linguexx2odt.equations import equation_targets
+
+    said: list[str] = []
+    blocks = [{"t": "Para", "c": [{"t": "Math", "c": [
+        {"t": "DisplayMath"}, r"\begin{equation}\label{a} x\end{equation}"]}]}]
+    found = equation_targets(blocks, {}, sources=[], warn=said.append)
+    assert [e.number for e in found.equations] == ["1"] and len(said) == 1

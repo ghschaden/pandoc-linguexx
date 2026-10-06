@@ -221,6 +221,7 @@ class Injector:
         custom_labels: dict[str, tuple[str, str]] | None = None,
         names: Names | None = None,
         equations_within: int | None = None,
+        display_sources: list[str] | None = None,
     ) -> None:
         self.blocks = blocks_by_index
         self.labels = labels
@@ -232,6 +233,8 @@ class Injector:
         self.names = names or ENGLISH
         # \numberwithin{equation}{...}: the heading level, or None
         self.equations_within = equations_within
+        # the display equations as written (equations.display_math)
+        self.display_sources = display_sources
         self.warn = warn or (lambda _m: None)
         # The emitter decides what a reference and a raw block ARE; this
         # pass only decides where they go.
@@ -268,7 +271,7 @@ class Injector:
 
             found = targets(blocks, example_notes,
                             getattr(inline, "note_labels", None),
-                            self.equations_within)
+                            self.equations_within, self.display_sources, self.warn)
             self._headings = {id(h): sec for h, sec in found.headings}
             self._floats = {id(n): f for n, f in found.floats}
             self._notes = {n.ident: n for n in found.footnotes}
@@ -648,10 +651,11 @@ class Injector:
 
 def inject(doc: dict, blocks_by_index, labels, warn=None,
            emitter=None, custom_labels=None, names=None,
-           equations_within=None) -> tuple[dict, Injector]:
+           equations_within=None, display_sources=None) -> tuple[dict, Injector]:
     inj = Injector(blocks_by_index, labels, warn, emitter=emitter,
                    custom_labels=custom_labels, names=names,
-                   equations_within=equations_within)
+                   equations_within=equations_within,
+                   display_sources=display_sources)
     return inj.run(doc), inj
 
 

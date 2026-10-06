@@ -426,7 +426,9 @@ class Targets:
 
 def targets(blocks: Any, example_notes: Any = None,
             note_labels: dict[str, int] | None = None,
-            equations_within: int | None = None) -> Targets:
+            equations_within: int | None = None,
+            display_sources: list[str] | None = None,
+            warn=lambda _m: None) -> Targets:
     """*example_notes*(node) -> the numbers of the footnotes in the example
     a placeholder stands for (the renderer's, inline.notes), which LaTeX
     counts with the rest; *note_labels* their labels."""
@@ -436,6 +438,10 @@ def targets(blocks: Any, example_notes: Any = None,
     floats: list[tuple[dict, Float]] = []
     notes: list[Footnote] = []
     note_number = 0
+    # pandoc 3.6 puts a table's \label on a Div around it, 3.10 on the table
+    wrapped = {id(d["c"][1][0]): d["c"][0][0] for d in _walk(blocks)
+               if d.get("t") == "Div" and d["c"][0][0] and len(d["c"][1]) == 1
+               and isinstance(d["c"][1][0], dict) and d["c"][1][0].get("t") == "Table"}
     for node in _walk(blocks):
         t = node.get("t")
         if t in ("Table", "Figure"):
@@ -445,7 +451,8 @@ def targets(blocks: Any, example_notes: Any = None,
             kind = t.lower()
             counts[kind] += 1
             title = _text(inlines).strip()
-            floats.append((node, Float(node["c"][0][0], kind, counts[kind],
+            floats.append((node, Float(node["c"][0][0] or wrapped.get(id(node), ""),
+                                       kind, counts[kind],
                                        title[:-1] if title.endswith(".") else title,
                                        serial)))
             serial += 1
@@ -469,4 +476,5 @@ def targets(blocks: Any, example_notes: Any = None,
 
     by_node = {id(h): s for h, s in heads}
     return Targets(heads, floats, notes, list_targets(blocks, by_node, serial),
-                   equation_targets(blocks, by_node, equations_within))
+                   equation_targets(blocks, by_node, equations_within,
+                                    display_sources, warn))

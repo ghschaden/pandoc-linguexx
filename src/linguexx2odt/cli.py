@@ -35,6 +35,7 @@ from .extract import parse
 from .includes import expand_includes
 from .inject import inject, report_dropped_latex
 from .latexutil import live_mask, scan_bibliography
+from .equations import display_math
 from .equations import within as equations_within
 from .names import detect as detect_names
 from .styles import Layout, named_styles
@@ -324,7 +325,8 @@ def main(argv: list[str] | None = None) -> int:
         doc, inj = inject(ast, blocks, parsed.labels, warnings.append,
                           emitter=emitter, custom_labels=parsed.custom_labels,
                           names=detect_names(source, warnings.append),
-                          equations_within=equations_within(source))
+                          equations_within=equations_within(source),
+                          display_sources=display_math(parsed.residue))
         report_dropped_latex(doc, warnings.append)
 
         ast_path = tmp / "ast.json"
