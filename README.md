@@ -12,6 +12,10 @@ citations — is converted by pandoc as usual.
 linguexx2odt paper.tex -o paper.odt
 ```
 
+**The manual:** [`docs/manual/pandoc-linguexx.pdf`](docs/manual/pandoc-linguexx.pdf)
+covers everything below at more length, with figures of the output; its
+source is `docs/manual/pandoc-linguexx.tex` (`make manual`).
+
 **Documentation en français :** [`docs/guide-fr.md`](docs/guide-fr.md)
 couvre les deux outils ; [`docs/manuel-extension-fr.md`](docs/manuel-extension-fr.md)
 est un manuel autonome pour la seule extension LibreOffice, avec les

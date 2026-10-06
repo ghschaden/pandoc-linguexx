@@ -1,0 +1,27 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage[lazy]{linguexx}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\begin{document}
+\section{Data}\label{sec:data}
+\ex.\label{ex:a} An example.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll} form & gloss \\ chat & cat \\ \end{tabular}
+\caption{Two words.}\label{tab:words}
+\end{table}
+
+\begin{equation}\label{eq:sem} [\![\textit{cat}]\!] = \lambda x.\,\mathrm{cat}(x) \end{equation}
+
+\subsection{Analysis}\label{sec:analysis}
+\begin{enumerate}
+\item First point.\label{it:one}
+\item Second point.\label{it:two}
+\end{enumerate}
+
+See \ref{ex:a}, \cref{sec:analysis}, \cref{tab:words}, \eqref{eq:sem},
+\cref{it:one,it:two}; \cref{sec:data,sec:analysis} start on
+page \pageref{sec:data}.
+\end{document}

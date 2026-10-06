@@ -23,3 +23,9 @@ tests/reference/*.fodt
 # the Word add-in: dev certificate, and the manifest written from its template
 .addin-cert/
 addin/word/manifest.xml
+
+# the manual's build files; the PDF itself is committed, as linguexx's is
+docs/manual/*.aux
+docs/manual/*.log
+docs/manual/*.out
+docs/manual/*.toc

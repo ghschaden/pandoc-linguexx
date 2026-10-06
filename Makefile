@@ -21,7 +21,7 @@
 
 PYTHON ?= python3
 
-.PHONY: all check test js-test onlyoffice onlyoffice-test lint macro oxt advances schemas venv clean
+.PHONY: all check test js-test onlyoffice onlyoffice-test lint macro oxt advances schemas manual figures venv clean
 
 all: check
 
@@ -93,6 +93,18 @@ advances:
 # them fails on that alone.  tools/validate_docx.py uses them.
 schemas:
 	@$(PYTHON) tools/fetch_ooxml_schemas.py
+
+# The manual, with LuaLaTeX (it quotes Unicode pdfLaTeX would need a font
+# setup for).  Two runs, for the table of contents and the references.  Its
+# figures are committed; `make figures` remakes them from this checkout,
+# which needs pandoc, LibreOffice and pdfcrop.
+manual:
+	@cd docs/manual && lualatex -interaction=nonstopmode -halt-on-error pandoc-linguexx.tex >/dev/null \
+		&& lualatex -interaction=nonstopmode -halt-on-error pandoc-linguexx.tex >/dev/null \
+		&& echo "docs/manual/pandoc-linguexx.pdf"
+
+figures:
+	@sh docs/manual/figures/make-figures.sh
 
 # pCloud syncs this checkout between machines and does not preserve the
 # executable bit, which leaves .venv/bin/linguexx2odt present and not
