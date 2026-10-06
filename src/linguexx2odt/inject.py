@@ -38,24 +38,36 @@ from collections.abc import Callable
 
 from .extract import PLACEHOLDER_RE
 from .latexutil import Brackets
-from .sections import AUTOREF_NAMES, sections
+from .sections import AUTOREF_NAMES, CAPTION_NAMES, WORDS, Float, Footnote, \
+    caption_inlines, targets
 
 REF_CMD = re.compile(r"\\(p?ref)\s*\{([^}]*)\}")
-#: Every reference command a section label can be given to, and \pageref,
-#: which an example's can.
+#: Every reference command a section's, a table's, a figure's or a
+#: footnote's label can be given to, and \pageref, which an example's can.
 ANY_REF = re.compile(
     r"\\(ref|pref|cref|Cref|autoref|nameref|pageref|cpageref|Cpageref)"
     r"\s*\{([^}]*)\}")
 #: What each prints before the field: cleveref's and hyperref's names, as
 #: LaTeX sets them (measured, plan-crossrefs.md), with their unbreakable
-#: space.  None is \autoref's, whose name depends on the heading's level.
-_SECTION_FORMS = {
+#: space.  None is the target's own: \cref, \Cref and \autoref name what
+#: they point at (sections.WORDS, AUTOREF_NAMES).
+_FORMS = {
     "ref": ("", "number"), "pref": ("", "number"),
-    "cref": ("section", "number"), "Cref": ("Section", "number"),
+    "cref": (None, "number"), "Cref": (None, "number"),
     "autoref": (None, "number"), "nameref": ("", "title"),
     "pageref": ("", "page"), "cpageref": ("page", "page"),
     "Cpageref": ("Page", "page"),
 }
+_LABEL = re.compile(r"\s*\\label\s*\{([^}]*)\}\s*")
+
+
+def _word(target, cmd: str) -> str:
+    if isinstance(target, (Float, Footnote)):
+        kind = target.kind if isinstance(target, Float) else "footnote"
+        return WORDS[kind][cmd]
+    if cmd == "autoref":
+        return AUTOREF_NAMES.get(target.level, "section")
+    return "Section" if cmd == "Cref" else "section"
 
 
 def _text_of(inlines: Any) -> str:
@@ -198,17 +210,23 @@ class Injector:
         # between two of THESE, never between an example and raw markup the
         # document itself carried
         self._examples: set[int] = set()
-        # headings, by identity and by label; filled by run()
+        # what a reference can point at besides an example: headings and
+        # captioned floats by identity, footnotes by the \label in them,
+        # all of them by label (self.targets); filled by run()
         self._headings: dict[int, Any] = {}
-        self.sections: dict[str, Any] = {}
+        self._floats: dict[int, Float] = {}
+        self._notes: dict[str, Footnote] = {}
+        self.targets: dict[str, Any] = {}
 
     def run(self, doc: dict) -> dict:
         doc = dict(doc)
         blocks = _free_trapped_placeholders(doc.get("blocks", []), self.warn)
         if self.emitter is not None:
-            found = sections(blocks)
-            self._headings = {id(h): sec for h, sec in found}
-            self.sections = {sec.ident: sec for _h, sec in found if sec.ident}
+            found = targets(blocks)
+            self._headings = {id(h): sec for h, sec in found.headings}
+            self._floats = {id(n): f for n, f in found.floats}
+            self._notes = {n.ident: n for n in found.footnotes}
+            self.targets = found.by_label()
         # the body is a block list like any other: through _node, so that
         # _separate sees it -- mapping it item by item here skipped exactly
         # the list consecutive examples almost always sit in
@@ -243,10 +261,14 @@ class Injector:
             # reference points at, and in an unnumbered heading the sign the
             # postprocess keeps the outline number off it by.
             level, attr, inlines = node["c"]
-            start, end = self.emitter.heading_marks(sec)
+            start, end = self.emitter.marks(sec.bookmark, sec.serial)
             return {"t": "Header", "c": [level, attr,
                     [_raw_inline(self.fmt, start)] + self._node(inlines)
                     + [_raw_inline(self.fmt, end)]]}
+
+        flt = self._floats.get(id(node))
+        if flt is not None:
+            return self._numbered_caption(node, flt)
 
         if node.get("c") is not None:
             node = dict(node)
@@ -289,12 +311,18 @@ class Injector:
         if node.get("t") == "RawInline":
             fmt, text = (node.get("c") or ["", ""])[:2]
             if fmt in ("latex", "tex"):
+                label = _LABEL.fullmatch(str(text))
+                if label and label.group(1) in self._notes:
+                    # in a footnote: the place the note is found by
+                    note = self._notes[label.group(1)]
+                    return _raw_inline(self.fmt, self.emitter.point_mark(
+                        note.marker, note.serial))
                 m = REF_CMD.fullmatch(str(text).strip())
                 if m and m.group(2) in self.custom_labels:
                     return self._custom_reference(m.group(2), bare=m.group(1) == "pref")
                 any_ref = ANY_REF.fullmatch(str(text).strip())
-                if any_ref and any_ref.group(2) in self.sections:
-                    return self._section_reference(*any_ref.groups())
+                if any_ref and any_ref.group(2) in self.targets:
+                    return self._target_reference(*any_ref.groups())
                 if (any_ref and any_ref.group(1).lower().endswith("pageref")
                         and any_ref.group(2) in self.labels):
                     return self._page_reference(*any_ref.groups())
@@ -309,19 +337,55 @@ class Injector:
                     return _raw_inline(self.fmt, xml)
         return None
 
-    def _section_reference(self, cmd: str, label: str) -> dict:
-        sec = self.sections[label]
-        word, form = _SECTION_FORMS[cmd]
+    def _target_reference(self, cmd: str, label: str) -> dict:
+        target = self.targets[label]
+        word, form = _FORMS[cmd]
         if word is None:
-            word = AUTOREF_NAMES.get(sec.level, "section")
+            word = _word(target, cmd)
         self.refs_rewritten += 1
-        return _with_word(word, _raw_inline(
-            self.fmt, self.emitter.section_reference(sec, form)))
+        if isinstance(target, Footnote):
+            if form == "title":
+                # \nameref to a footnote: LaTeX prints nothing (measured)
+                return {"t": "Str", "c": ""}
+            xml = self.emitter.note_reference(target, form)
+        elif isinstance(target, Float):
+            xml = self.emitter.float_reference(target, form)
+        else:
+            xml = self.emitter.section_reference(target, form)
+        return _with_word(word, _raw_inline(self.fmt, xml))
+
+    def _numbered_caption(self, node: dict, flt: Float) -> dict:
+        r"""The float, its caption numbered as LaTeX numbers it -- "Table 1:
+        A table." -- by a live sequence, its title bookmarked for \nameref.
+        Pandoc writes the caption without a number."""
+        node = dict(node)
+        node["c"] = self._node(node["c"])
+        inlines = caption_inlines(node)
+        if inlines is None:     # pragma: no cover - targets() checked
+            return node
+        stop: list = []
+        last = inlines[-1] if inlines else None
+        if last and last.get("t") == "Str" and last["c"].endswith("."):
+            inlines = inlines[:-1] + ([{"t": "Str", "c": last["c"][:-1]}]
+                                      if last["c"] != "." else [])
+            stop = [{"t": "Str", "c": "."}]
+        start, end = self.emitter.marks(flt.title_bookmark, flt.serial, slot=1)
+        numbered = ([{"t": "Str", "c": CAPTION_NAMES[flt.kind]}, {"t": "Space"},
+                     _raw_inline(self.fmt, self.emitter.caption_number(flt)),
+                     {"t": "Str", "c": ":"}, {"t": "Space"},
+                     _raw_inline(self.fmt, start)] + inlines
+                    + [_raw_inline(self.fmt, end)] + stop)
+        caption = node["c"][1]
+        first = dict(caption[1][0])
+        first["c"] = numbered
+        node["c"] = list(node["c"])
+        node["c"][1] = [caption[0], [first] + list(caption[1][1:])]
+        return node
 
     def _page_reference(self, cmd: str, label: str) -> dict:
         index, _letter = self.labels[label]
         self.refs_rewritten += 1
-        return _with_word(_SECTION_FORMS[cmd][0], _raw_inline(
+        return _with_word(_FORMS[cmd][0], _raw_inline(
             self.fmt, self.emitter.page_reference(index)))
 
     def _custom_reference(self, label: str, bare: bool) -> dict:

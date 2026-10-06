@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from .emit_base import BaseEmitter, register
+from .sections import CAPTION_NAMES
 from .inline import esc
 from .latexutil import Brackets
 from .ir import Body, Example
@@ -119,9 +120,35 @@ class Emitter(BaseEmitter):
         return (f'<text:sequence-ref text:reference-format="page"'
                 f' text:ref-name="{ref_name(index)}">?</text:sequence-ref>')
 
-    def heading_marks(self, sec) -> tuple[str, str]:
-        return (f'<text:bookmark-start text:name="{sec.bookmark}"/>',
-                f'<text:bookmark-end text:name="{sec.bookmark}"/>')
+    def marks(self, name: str, serial: int, slot: int = 0) -> tuple[str, str]:
+        return (f'<text:bookmark-start text:name="{name}"/>',
+                f'<text:bookmark-end text:name="{name}"/>')
+
+    def point_mark(self, name: str, serial: int) -> str:
+        return f'<text:bookmark text:name="{name}"/>'
+
+    def caption_number(self, flt) -> str:
+        name = CAPTION_NAMES[flt.kind]
+        return (f'<text:sequence text:ref-name="{flt.bookmark}" text:name="{name}"'
+                f' text:formula="ooow:{name}+1" style:num-format="1">'
+                f'{flt.number}</text:sequence>')
+
+    def float_reference(self, flt, form: str) -> str:
+        if form == "title":
+            return (f'<text:bookmark-ref text:reference-format="text"'
+                    f' text:ref-name="{flt.title_bookmark}">{esc(flt.title)}'
+                    '</text:bookmark-ref>')
+        fmt, cached = ("page", "?") if form == "page" else ("value", flt.number)
+        return (f'<text:sequence-ref text:reference-format="{fmt}"'
+                f' text:ref-name="{flt.bookmark}">{cached}</text:sequence-ref>')
+
+    def note_reference(self, note, form: str) -> str:
+        # The ref-name is a placeholder: ODF names a note by its text:id,
+        # which pandoc chooses; the postprocess puts it in (headings.py).
+        fmt, cached = ("page", "?") if form == "page" else ("text", note.number)
+        return (f'<text:note-ref text:note-class="footnote"'
+                f' text:reference-format="{fmt}" text:ref-name="{note.bookmark}">'
+                f'{cached}</text:note-ref>')
 
     # -- entry point ------------------------------------------------------
     def example(self, ex: Example) -> str:

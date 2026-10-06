@@ -15,7 +15,7 @@ writer deletes raw LaTeX.
 - **Order**: sections and pages first; then footnotes, tables and figures,
   list items, equations. Equations stay text when their turn comes.
 
-## Step 1: sections and pages — done
+## Step 1: sections and pages — done (f32bbea)
 
 Tested 2026-10-06, pandoc 3.10.2, LibreOffice; the expected text is
 LaTeX's (`article`, hyperref, cleveref), read off `pdflatex` and
@@ -61,7 +61,47 @@ from the output" warning. The full corpus against linguexx 1.4 passes (521).
   from the outline, which has no number there; LaTeX's "last number set" is
   only the cache.
 
+## Step 2: tables, figures and footnotes — done
+
+Measured the same way (2026-10-06).
+
+| LaTeX | table | figure | footnote |
+|---|---|---|---|
+| caption | "Table 1: A table." | "Figure 1: A figure." | — |
+| `\ref` | 2 | 1 | 2 |
+| `\cref` / `\Cref` | table 1 / Table 1 | fig. 1 / Figure 1 | footnote 1 / Footnote 1 |
+| `\autoref` | Table 2 | Figure 1 | footnote 1 |
+| `\nameref` | the caption without its full stop | same | nothing at all |
+
+- Pandoc writes a caption without a number, so the injector numbers it:
+  "Table", a sequence field (`text:sequence` named Table or Figure, `SEQ
+  Table`), ": ", and the title in a bookmark of its own for `\nameref`.
+  The sequences are declared beside NumEx. Only a captioned float is
+  counted, as only `\caption` steps LaTeX's counter.
+- A footnote's `\label` arrives as raw LaTeX inside the Note. The injector
+  puts a bookmark there (`_Reflxfnl<n>`), and the postprocess finds the
+  note by it: in ODF to name the note's `text:id` in `text:note-ref`, in
+  OOXML to bookmark the run with the note's mark in the text
+  (`_Reflxfn<n>`), which is what `NOTEREF` points at.
+- Spiked by hand first, as step 1 was: LibreOffice computes every field in
+  both formats.
+
+Tests: `tests/test_float_refs.py`; the conversions fail on the code of step 1.
+
+### Known limits of step 2
+
+- The names are English ("Table", "Figure", "footnote"). A French
+  document's LaTeX prints "Tableau"; the converter does not read babel's
+  language for this.
+- A footnote inside an example is not counted (the example is rendered on
+  its own, its note is not in the document's AST), so the cached number of
+  a reference to a later note is one short: "2" where LaTeX prints "3". The
+  field resolves to the right note and LibreOffice shows "3"; a .docx
+  reader that does not update fields shows "2". Older than this step, and
+  found by it: that note gets pandoc's id `ftn0` a second time, which a
+  note reference to the first note of the document would find twice.
+- Subfigures and `\caption` outside a float are not handled.
+
 ## Next
 
-Footnotes, tables and figures (whether pandoc already numbers captions is
-to be measured), list items, equations (text).
+List items, then equations (text).

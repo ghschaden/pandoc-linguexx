@@ -134,11 +134,30 @@ class BaseEmitter:
         raise NotImplementedError(
             f"{type(self).__name__} does not know how to refer to a page")
 
-    def heading_marks(self, sec) -> tuple[str, str]:  # pragma: no cover - abstract
-        """The markup that opens and closes the bookmark a section
-        reference points at, around the heading's title."""
-        raise NotImplementedError(
-            f"{type(self).__name__} does not know how to mark a heading")
+    # The rest of what a reference to a table, figure or footnote needs;
+    # what each target is and how it is numbered is sections.py's.
+    def marks(self, name: str, serial: int,
+              slot: int = 0) -> tuple[str, str]:  # pragma: no cover - abstract
+        """Markup opening and closing bookmark *name*, around a heading's or
+        a caption's title.  *serial* and *slot* identify it where a format
+        numbers its bookmarks."""
+        raise NotImplementedError
+
+    def point_mark(self, name: str, serial: int) -> str:  # pragma: no cover - abstract
+        """A bookmark that marks a place: where a footnote's label was."""
+        raise NotImplementedError
+
+    def caption_number(self, flt) -> str:  # pragma: no cover - abstract
+        """The live number in a caption, "Table <1>: ...", bookmarked."""
+        raise NotImplementedError
+
+    def float_reference(self, flt, form: str) -> str:  # pragma: no cover - abstract
+        """As section_reference, for a table or figure."""
+        raise NotImplementedError
+
+    def note_reference(self, note, form: str) -> str:  # pragma: no cover - abstract
+        """As section_reference, for a footnote: its number, or its page."""
+        raise NotImplementedError
 
     def prepare(self, examples) -> None:
         r"""Document-level decisions, taken before the first example is emitted.

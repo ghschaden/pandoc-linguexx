@@ -25,13 +25,18 @@ three levels LaTeX's article numbers are numbered here.  A ``\section*``
 is not: the inject pass put a bookmark named ``sections.UNNUMBERED...`` in
 it, and that heading is taken out of the numbering without stepping it --
 ``text:is-list-header`` in ODF, ``numId 0`` in OOXML.
+
+The end of the module does the same for captions and footnotes: declaring
+the sequences a caption's number counts in, and connecting a reference to a
+footnote with the note, which pandoc names.
 """
 
 from __future__ import annotations
 
 import re
 
-from .sections import NUMBERED_LEVELS, UNNUMBERED
+from .sections import (CAPTION_NAMES, FOOTNOTE_MARK, FOOTNOTE_MARKER,
+                       NUMBERED_LEVELS, UNNUMBERED)
 
 # -- ODF ------------------------------------------------------------------
 
@@ -155,3 +160,60 @@ def unnumber_docx_headings(document_xml: str) -> str:
                 + f"<w:pPr>{_with_numpr(ppr.group(1) or '', _NO_NUMBER)}</w:pPr>"
                 + para[ppr.end():])
     return _DOCX_PARA.sub(fix, document_xml)
+
+
+# -- captions and footnotes -------------------------------------------------
+#
+# Not headings, but the same kind of work: what the inject pass could not
+# write because pandoc decides it -- a note's id, the run its mark is in.
+
+def declare_caption_sequences(content_xml: str) -> str:
+    """Declare the Table and Figure sequences beside NumEx (which
+    postprocess.inject_sequence_decls put there first)."""
+    decls = "".join(
+        f'<text:sequence-decl text:display-outline-level="0" text:name="{name}"/>'
+        for name in CAPTION_NAMES.values()
+        if f'text:sequence-decl text:display-outline-level="0" text:name="{name}"'
+        not in content_xml)
+    if not decls:
+        return content_xml
+    return content_xml.replace("</text:sequence-decls>",
+                               decls + "</text:sequence-decls>", 1)
+
+
+_ODF_NOTE = re.compile(r'<text:note\b[^>]*\btext:id="([^"]+)"[^>]*>.*?</text:note>', re.S)
+_MARKER = re.compile(rf'text:name="{FOOTNOTE_MARKER}(\d+)"')
+
+
+def name_odt_note_refs(content_xml: str) -> str:
+    """Point each text:note-ref at the note that holds its marker."""
+    ids = {}
+    for note in _ODF_NOTE.finditer(content_xml):
+        for marker in _MARKER.finditer(note.group(0)):
+            ids[marker.group(1)] = note.group(1)
+    return re.sub(rf'(<text:note-ref\b[^>]*\btext:ref-name="){FOOTNOTE_MARK}(\d+)"',
+                  lambda m: f'{m.group(1)}{ids.get(m.group(2), "")}"', content_xml)
+
+
+_DOCX_NOTE = re.compile(r'<w:footnote\b[^>]*\bw:id="(\d+)"[^>]*>.*?</w:footnote>', re.S)
+_DOCX_MARKER = re.compile(rf'w:name="{FOOTNOTE_MARKER}(\d+)"')
+
+
+def bookmark_docx_note_marks(document_xml: str, footnotes_xml: str) -> str:
+    """Put bookmark _Reflxfn<n> around the run that carries the mark of the
+    note holding marker _Reflxfnl<n>: NOTEREF points at the mark in the
+    text, not at the note."""
+    from .emit_docx import bookmark_id
+
+    for note in _DOCX_NOTE.finditer(footnotes_xml):
+        for marker in _DOCX_MARKER.finditer(note.group(0)):
+            serial = int(marker.group(1))
+            ident = bookmark_id(serial, 1)
+            run = re.compile(r'<w:r>(?:(?!</w:r>).)*?<w:footnoteReference w:id="%s"\s*/>'
+                             r'(?:(?!</w:r>).)*?</w:r>' % note.group(1), re.S)
+            document_xml = run.sub(
+                lambda m, s=serial, i=ident: (
+                    f'<w:bookmarkStart w:id="{i}" w:name="{FOOTNOTE_MARK}{s}"/>'
+                    f'{m.group(0)}<w:bookmarkEnd w:id="{i}"/>'),
+                document_xml, count=1)
+    return document_xml

@@ -121,6 +121,9 @@ def apply_styles(raw: Path, out: Path, fragment: str,
     members = {}
     document = read(raw, "word/document.xml")
     ended = headings.unnumber_docx_headings(end_with_paragraph(document))
+    if "word/footnotes.xml" in zipfile.ZipFile(raw).namelist():
+        ended = headings.bookmark_docx_note_marks(
+            ended, read(raw, "word/footnotes.xml"))
     if ended != document:
         members["word/document.xml"] = ended
     # Headings numbered as LaTeX numbers them, which a reference to a

@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .emit_base import BaseEmitter, register
+from .sections import CAPTION_NAMES
 from .inline import esc
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA,
@@ -66,8 +67,15 @@ def dxa(cm: float) -> int:
     return int(round(cm * DXA))
 
 
-#: Where the ids of the bookmarks in headings start (DocxEmitter.heading_marks).
-HEADING_BOOKMARK_IDS = 900000
+#: Where the ids of the converter's reference bookmarks start: above any
+#: example's (index + 1) and pandoc's own, which count up from a handful.
+BOOKMARK_IDS = 900000
+
+
+def bookmark_id(serial: int, slot: int = 0) -> int:
+    """Two ids per target (sections.targets): a float's number and its
+    title, a footnote's marker and the mark in the text."""
+    return BOOKMARK_IDS + 2 * serial + slot
 
 
 def bookmark_name(index: int) -> str:
@@ -189,12 +197,30 @@ class DocxEmitter(BaseEmitter):
     def page_reference(self, index: int) -> str:
         return field_run(f"PAGEREF {bookmark_name(index)} \\h", "?")
 
-    def heading_marks(self, sec) -> tuple[str, str]:
-        # Ids above any example's (index + 1) and pandoc's own, which count
-        # up from a handful.
-        ident = HEADING_BOOKMARK_IDS + sec.serial
-        return (f'<w:bookmarkStart w:id="{ident}" w:name="{sec.bookmark}"/>',
+    def marks(self, name: str, serial: int, slot: int = 0) -> tuple[str, str]:
+        ident = bookmark_id(serial, slot)
+        return (f'<w:bookmarkStart w:id="{ident}" w:name="{name}"/>',
                 f'<w:bookmarkEnd w:id="{ident}"/>')
+
+    def point_mark(self, name: str, serial: int) -> str:
+        return "".join(self.marks(name, serial))
+
+    def caption_number(self, flt) -> str:
+        start, end = self.marks(flt.bookmark, flt.serial)
+        return (start + field_run(f"SEQ {CAPTION_NAMES[flt.kind]} \\* ARABIC",
+                                  str(flt.number)) + end)
+
+    def float_reference(self, flt, form: str) -> str:
+        if form == "title":
+            return field_run(f"REF {flt.title_bookmark} \\h", flt.title)
+        if form == "page":
+            return field_run(f"PAGEREF {flt.bookmark} \\h", "?")
+        return field_run(f"REF {flt.bookmark} \\h", str(flt.number))
+
+    def note_reference(self, note, form: str) -> str:
+        if form == "page":
+            return field_run(f"PAGEREF {note.bookmark} \\h", "?")
+        return field_run(f"NOTEREF {note.bookmark} \\h", str(note.number))
 
     def between_examples(self) -> str:
         """A 1 pt paragraph: Word joins tables that touch (see GAP_PARA)."""
