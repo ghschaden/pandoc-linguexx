@@ -414,6 +414,9 @@ same number, so **an example can be changed without breaking a single
 glossed example can come back as a tree or as a paradigm. Drawn trees come
 back too: the group of shapes carries the bracket notation it was drawn
 from in its alt text, since shapes have positions and not structure.
+An example holding a footnote is refused, and so are typed lines holding
+one: the lines have no place for a note, and the note would be deleted.
+Put the footnote in the text before or after the example.
 
 Formatting you applied by hand comes through — small caps on a Leipzig
 gloss, italics, bold, superscripts — and each run is measured in the font
@@ -495,6 +498,7 @@ and lays out as the converter lays out, and tests hold it to both exactly
 |---|---|---|
 | renumbering after an insertion | Word for the desktop: Ctrl+A, F9. **Word on the web never renumbers fields** and will not let an add-in do it: the new example is numbered right, and the pane says which numbers and references are stale | at once — and every other field in the document is refreshed with them, the numbers already in the file included: an example typeset into a converted document renumbered the converter's examples and references in OnlyOffice Desktop (checked 2026-10-04). Document Builder 9.4, which the test suite runs, renumbers only what was typeset since the file was opened; docx2linguexx reads the fields, so the LaTeX is right either way |
 | trees | a label's width is estimated from the face's metrics, where the macro measures it by setting it: in a face nobody measured, a long label may crowd its neighbour (the pane says when the face is unmeasured) | the same; roofs and arrows are drawn as separate straight lines, since OnlyOffice's API makes preset shapes only |
+| a footnote or endnote in an example, or in the lines to typeset | refused, as by the Writer macro: the typed lines have no place for a note, and going ahead would delete it. Move the footnote to the text before or after the example | the same |
 | several examples in one table — a file converted before 2026-09-26 | *Untypeset* refuses it; reconvert the file (see the `.docx` row above) | does not arise: OnlyOffice keeps touching tables apart |
 | a document an earlier add-in build wrote into | its `LxExampleCell` may carry Times New Roman: Styles ▸ LxExampleCell ▸ Modify ▸ the document's face | — |
 | a spacing set, then set equal again | — | OnlyOffice cannot return a style to inheriting once it has its own value: both sides look right, and no longer follow a later edit of `LxExampleSpace` |

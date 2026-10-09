@@ -15,7 +15,7 @@ import { planTable, prepareSelection, toExample } from "../../core/plan.js";
 import { tableRows } from "../../core/table.js";
 import { dxa } from "../../word/ooxml.js";
 import { STYLE_IDS } from "../../word/styles.js";
-import { linesFromRead, prepareJob, runsOf, stylesJob } from "../job.js";
+import { linesFromRead, prepareJob, runsOf, stylesJob, untypesetJob } from "../job.js";
 
 const run = (text, extra = {}) => ({ text, bold: false, italic: false, smallCaps: false,
   underline: false, vertAlign: "baseline", style: "", ...extra });
@@ -64,6 +64,25 @@ test("a selection inside a table is refused, as is nothing selected", () => {
   assert.match(prepareJob(read([], { error: "Select the lines of an example first." })).refusal, /Select/);
   assert.match(prepareJob(read([{ inTable: false, runs: [run("x y")] }, { inTable: false, runs: [run("b. z")] }])).refusal,
     /sub-example letter/);
+});
+
+test("a footnote's mark, in typed lines or in an example, is refused: the note would be deleted", () => {
+  const mark = run("", { note: true });
+  assert.match(prepareJob(read([{ inTable: false, runs: [run("Jean dort"), mark] },
+    { inTable: false, runs: [run("John sleeps")] }])).refusal, /hold a footnote/);
+  const cell = (style, ...runs) => ({ style, runs });
+  const rows = [
+    [cell("LxExampleSpaceAbove")],
+    [cell("LxExampleCell", run("1")), cell("LxExampleCell", run("Jean")), cell("LxExampleCell", run("dort"), mark)],
+    [cell("LxExampleCell"), cell("LxExampleCell", run("John")), cell("LxExampleCell", run("sleeps"))],
+    [cell("LxExampleCell"), cell("LxTranslation", run("‘John sleeps.’"))],
+    [cell("LxExampleSpaceBelow")],
+  ];
+  const u = untypesetJob({ rows, pos: 1, number: { bookmark: "NumEx1", shown: "1" } });
+  assert.match(u.refusal || "", /holds a footnote/);
+  assert.match(u.refusal, /before or after/);
+  rows[1][2].runs.pop();
+  assert.equal(untypesetJob({ rows, pos: 1, number: null }).refusal, undefined, "without the mark it reads");
 });
 
 test("the job is core/table.js's rows in twips, runs split by format", () => {

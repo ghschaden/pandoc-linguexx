@@ -42,6 +42,26 @@ export function readSelection() {
     out.error = "Select the lines of an example first.";
     return out;
   }
+  // A footnote's or an endnote's mark (core NOTE_IN_EXAMPLE says why it
+  // matters).  The API says so nowhere directly; the mark is a run with no
+  // text, and two things give it away (measured, Document Builder 9.4,
+  // 2026-10-09).  Its character style, "footnote reference" -- Word's,
+  // pandoc's and the editor's own name for it -- and, on a note made in
+  // the editor, its ToJSON, which lists the notes it carries.  On one
+  // loaded from a file ToJSON throws instead, and so does it on a field's
+  // own runs, so a throw says nothing.  Here and not shared, because a
+  // command is self-contained (see the top).
+  function isNote(run) {
+    if (run.GetText() !== "") return false;
+    var st = run.GetStyle();
+    if (st && /^(foot|end)note reference$/i.test(st.GetName())) return true;
+    try {
+      var j = JSON.parse(run.ToJSON(false, false));
+      return !!((j.footnotes && j.footnotes.length) || (j.endnotes && j.endnotes.length));
+    } catch (e) {
+      return false;
+    }
+  }
   function runsOf(container, into) {
     var n = container.GetElementsCount();
     for (var i = 0; i < n; i++) {
@@ -53,6 +73,7 @@ export function readSelection() {
           text: el.GetText(), bold: !!el.GetBold(), italic: !!el.GetItalic(),
           smallCaps: !!el.GetSmallCaps(), underline: !!el.GetUnderline(),
           vertAlign: el.GetVertAlign() || "", style: st ? st.GetName() : "",
+          note: isNote(el),
         });
       } else if (el.GetElementsCount) {
         runsOf(el, into);               // a hyperlink, a content control
@@ -381,6 +402,26 @@ export function readExampleTable() {
   var para = range ? range.GetParagraph(0) : doc.GetCurrentParagraph();
   var table = para ? para.GetParentTable() : null;
   if (!table) return { error: "Put the cursor in the example you want back as text." };
+  // A footnote's or an endnote's mark (core NOTE_IN_EXAMPLE says why it
+  // matters).  The API says so nowhere directly; the mark is a run with no
+  // text, and two things give it away (measured, Document Builder 9.4,
+  // 2026-10-09).  Its character style, "footnote reference" -- Word's,
+  // pandoc's and the editor's own name for it -- and, on a note made in
+  // the editor, its ToJSON, which lists the notes it carries.  On one
+  // loaded from a file ToJSON throws instead, and so does it on a field's
+  // own runs, so a throw says nothing.  Here and not shared, because a
+  // command is self-contained (see the top).
+  function isNote(run) {
+    if (run.GetText() !== "") return false;
+    var st = run.GetStyle();
+    if (st && /^(foot|end)note reference$/i.test(st.GetName())) return true;
+    try {
+      var j = JSON.parse(run.ToJSON(false, false));
+      return !!((j.footnotes && j.footnotes.length) || (j.endnotes && j.endnotes.length));
+    } catch (e) {
+      return false;
+    }
+  }
   function runsOf(container, into) {
     var n = container.GetElementsCount();
     for (var i = 0; i < n; i++) {
@@ -391,6 +432,7 @@ export function readExampleTable() {
           text: el.GetText(), bold: !!el.GetBold(), italic: !!el.GetItalic(),
           smallCaps: !!el.GetSmallCaps(), underline: !!el.GetUnderline(),
           vertAlign: el.GetVertAlign() || "", style: st ? st.GetName() : "",
+          note: isNote(el),
         });
       } else if (el.GetElementsCount) runsOf(el, into);
     }

@@ -165,6 +165,33 @@ def test_the_tree_constants_are_the_macros() -> None:
     assert f'TREE_TITLE = "{macro_title}"' in js
 
 
+def test_the_note_refusals_are_the_macros() -> None:
+    """A footnote in an example, or in lines to typeset, is refused in the
+    same words by the macro and the add-ins -- written twice, in Basic and
+    in addin/core/untypeset.js, and read out of both here."""
+    from linguexx2odt import writermacro
+
+    bas = writermacro.source()
+    js = (CORE / "untypeset.js").read_text(encoding="utf-8")
+
+    def basic(fn: str) -> str:
+        body = re.search(rf"^Function {fn}\(\) As String\s*\n(.*?)^End Function", bas, re.M | re.S)
+        assert body, fn
+        expr = body.group(1).split("=", 1)[1]
+        return "".join("\n" if piece.startswith("Chr") else piece.strip('"')
+                       for piece in re.findall(r'"[^"]*"|Chr\(10\)', expr))
+
+    def core(name: str) -> str:
+        expr = re.search(rf"^export const {name} = (.*?);$", js, re.M | re.S)
+        assert expr, name
+        return "".join(json.loads(lit) for lit in re.findall(r'"(?:[^"\\]|\\.)*"', expr.group(1)))
+
+    pairs = (("LxNoteInExample", "NOTE_IN_EXAMPLE"), ("LxNoteInLines", "NOTE_IN_SELECTION"))
+    for fn, name in pairs:
+        assert basic(fn) == core(name), name
+        assert "before or after" in core(name)
+
+
 def test_every_tree_fixture_has_the_macros_layout() -> None:
     """test_every_fixture_has_the_macros_parse, for trees.json."""
     data = json.loads((ROOT / "tests" / "fixtures" / "trees.json").read_text(encoding="utf-8"))

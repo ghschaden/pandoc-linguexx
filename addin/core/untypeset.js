@@ -10,7 +10,8 @@
  * It reads a table as rows of cells, each {style, text} -- and {tree} for
  * a cell holding a drawn tree: the lines it was drawn from, which the host
  * reads off the drawing's alt text (only off a drawing titled as ours,
- * core/tree.js's TREE_TITLE).  The paragraph
+ * core/tree.js's TREE_TITLE); {note: true} for a cell holding a footnote's
+ * or an endnote's mark (NOTE_IN_EXAMPLE).  The paragraph
  * style's NAME and the cell's text as a tagged string (parse.js), the
  * example number's shown digits left out -- the number is carried by its
  * field's identity, not read as a word.  Each host reads its own table
@@ -30,6 +31,21 @@ const has = (row, style) => row.some((c) => c.style === style);
 
 // Basic's Trim, which the macro reads a tree's lines back with: spaces only.
 const trimSpaces = (s) => s.replace(/^ +| +$/g, "");
+
+/**
+ * A footnote or endnote in an example cannot be given back: the typed
+ * lines have no place for one, so Untypeset would delete it, and Typeset
+ * would delete one in the selected lines.  The converter puts notes in
+ * examples (a \footnote in linguexx source), so a converted document has
+ * them.  The macro says the same, in the same words.
+ */
+export const NOTE_IN_EXAMPLE = "That example holds a footnote, which this cannot give back.\n\n" +
+  "The typed lines have no place for a note, so untypesetting the example would delete it. " +
+  "Move the footnote out of the example -- into the text just before or after it -- " +
+  "and untypeset the example then.";
+export const NOTE_IN_SELECTION = "The selected lines hold a footnote, which typesetting would delete.\n\n" +
+  "The typed lines of an example have no place for a note. " +
+  "Put the footnote in the text just before or after the example, and typeset the lines then.";
 
 /**
  * An example, or a table somebody built?  Both the converter and every
@@ -89,6 +105,8 @@ function rowText(row, lead, brace) {
  * \exannot{...} at the end of its object line.  {lines} or {error}.
  */
 export function readTable(rows) {
+  // A cell the host found a note mark in says {note: true}.
+  if (rows.some((row) => row.some((c) => c.note))) return { error: NOTE_IN_EXAMPLE };
   const { lead, judgment, marker } = leadColumns(rows);
   if (lead < 1) {
     return {

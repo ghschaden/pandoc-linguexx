@@ -1263,6 +1263,10 @@ Function LxSelectedLines(oRange As Object) As Variant
                     If sType = "LineBreak" Then
                         s = s & Chr(10)
                         bCloser = False
+                    ElseIf sType = "Footnote" Then
+                        ' an endnote's portion is called this too; its
+                        ' string is the mark, and the note would be lost
+                        If Len(LxNumErr) = 0 Then LxNumErr = LxNoteInLines()
                     ElseIf sType = "TextField" And LxIsNumberField(oPor) Then
                         ' An example number: taken over rather than read as
                         ' a word.  Its own presentation ("7") would
@@ -1333,6 +1337,29 @@ End Function
 Dim LxNumId  As Long          ' SequenceValue of the number to take over
 Dim LxNumHas As Boolean
 Dim LxNumErr As String        ' read by the commands, as LxTErr is
+                              ' -- and set by a note in the selection,
+                              ' which stops them as early (LxNoteInLines)
+
+
+' A footnote or endnote cannot go through the typed lines: they have no
+' place for one, so typesetting lines that hold a note would delete it, and
+' untypesetting an example that holds one would too.  The converter puts a
+' \footnote in an example as a note in its cell, so a converted document
+' has them.  The add-ins refuse in the same words (addin/core/untypeset.js).
+Function LxNoteInExample() As String
+    LxNoteInExample = "That example holds a footnote, which this cannot give back." & _
+        Chr(10) & Chr(10) & _
+        "The typed lines have no place for a note, so untypesetting the example " & _
+        "would delete it. Move the footnote out of the example -- into the text " & _
+        "just before or after it -- and untypeset the example then."
+End Function
+
+Function LxNoteInLines() As String
+    LxNoteInLines = "The selected lines hold a footnote, which typesetting would delete." & _
+        Chr(10) & Chr(10) & _
+        "The typed lines of an example have no place for a note. Put the footnote " & _
+        "in the text just before or after the example, and typeset the lines then."
+End Function
 
 
 ' The drawings found in the example being untypesetted: which cell each
@@ -2661,6 +2688,11 @@ Sub LxUntypesetCommand()
         Exit Sub
     End If
 
+    If LxTableHasNote(oDoc, oTable) Then
+        Call LxSay(LxNoteInExample())
+        Exit Sub
+    End If
+
     aLines = LxReadTable(oTable, sErr)
     If Len(sErr) > 0 Then
         Call LxSay(sErr)
@@ -2699,6 +2731,34 @@ End Sub
 
 
 ' ------------------------------------------------------ reading it back ---
+
+' Whether a footnote or an endnote is anchored in the table: asked of the
+' notes, each of which knows where its mark is, rather than of the cells'
+' text portions, so that a mark in any cell counts -- the number's too.
+Function LxTableHasNote(oDoc As Object, oTable As Object) As Boolean
+    Dim aNotes(1) As Object
+    Dim oT As Object
+    Dim k As Integer, n As Integer
+
+    LxTableHasNote = False
+    aNotes(0) = oDoc.getFootnotes()
+    aNotes(1) = oDoc.getEndnotes()
+    For k = 0 To 1
+        For n = 0 To aNotes(k).getCount() - 1
+            oT = Nothing
+            On Error Resume Next
+            oT = aNotes(k).getByIndex(n).getAnchor().TextTable
+            On Error Goto 0
+            If Not IsNull(oT) Then
+                If EqualUnoObjects(oT, oTable) Then
+                    LxTableHasNote = True
+                    Exit Function
+                End If
+            End If
+        Next n
+    Next k
+End Function
+
 
 ' Every line of the example: one per tier, one per translation, the
 ' sub-example letter and judgment mark back at the head of their item's

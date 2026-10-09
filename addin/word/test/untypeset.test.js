@@ -83,3 +83,15 @@ test("a table Word joined from several examples is refused, not taken apart as o
   const joined = one.replace(tbl, tbl.replace(/<\/w:tbl>$/, "") + tbl.replace(/^<w:tbl>.*?<\/w:tblGrid>/s, ""));
   assert.match(untypesetPackage(joined).refusal, /holds 2 examples/);
 });
+
+test("an example holding a footnote is refused, not given back without it", () => {
+  // the converter writes a \footnote in an example as a note mark in its cell
+  const built = builtPackage(["Jean dort bien", "John sleeps well", "‘John sleeps well.’"]);
+  for (const ref of ['<w:footnoteReference w:id="700000"/>', '<w:endnoteReference w:id="3"/>']) {
+    const noted = built.replace(/(<w:t[^>]*>dort<\/w:t><\/w:r>)/, `$1<w:r>${ref}</w:r>`);
+    assert.notEqual(noted, built);
+    const u = untypesetPackage(noted);
+    assert.match(u.refusal || "", /holds a footnote/);
+    assert.match(u.refusal, /before or after/);
+  }
+});

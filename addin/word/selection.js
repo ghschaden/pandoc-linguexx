@@ -26,6 +26,7 @@
 
 import { strip, tagRun } from "../core/parse.js";
 import { TREE_TITLE } from "../core/tree.js";
+import { NOTE_IN_SELECTION } from "../core/untypeset.js";
 import { child, findAll, parse } from "./xml.js";
 import { LEIPZIG_CHAR } from "./styles.js";
 
@@ -204,6 +205,11 @@ function inlineReader(styles, formats) {
   };
 }
 
+/** Whether *el* holds a footnote's or an endnote's mark (core NOTE_IN_EXAMPLE). */
+function holdsNote(el) {
+  return findAll(el, "w:footnoteReference").length + findAll(el, "w:endnoteReference").length > 0;
+}
+
 /** The document's default face, as selection and table readers report it. */
 function defaultFonts(styles) {
   // LxExampleCell names no face, so the example is drawn in the document
@@ -276,6 +282,9 @@ export function readSelection(ooxml) {
     },
   };
 
+  // The inline reader has no case for a note's mark and would drop it, and
+  // the note with it.
+  if (holdsNote(body)) out.refusal = NOTE_IN_SELECTION;
   for (const block of body.children) {
     if (typeof block === "string") continue;
     if (block.name === "w:p") {
@@ -373,7 +382,9 @@ export function readExampleTable(ooxml) {
         read(p, sink);
       }
       const tree = treeOf(tc);
-      row.push(tree ? { style, text, tree } : { style, text });
+      const cell = tree ? { style, text, tree } : { style, text };
+      if (holdsNote(tc)) cell.note = true;
+      row.push(cell);
     }
     out.rows.push(row);
   }

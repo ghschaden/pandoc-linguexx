@@ -529,6 +529,7 @@ Elle ne devine pas quand la sélection est ambiguë :
 |---|---|
 | rien n'est sélectionné | demande de sélectionner la ou les lignes de l'exemple |
 | une lettre de sous-exemple apparaît **en cours** de sélection alors que la sélection ne commence pas par une lettre | demande de commencer à la première lettre |
+| une note de bas de page dans les lignes sélectionnées, ou dans l'exemple à défaire | refuse : les lignes tapées n'ont pas de place pour une note, qui serait supprimée ; placez-la dans le texte avant ou après l'exemple |
 
 ## B.6 Annuler
 
@@ -736,6 +737,7 @@ les mêmes styles, la même séquence `NumEx`.
 |---|---|---|
 | renumérotation après une insertion | Word pour le bureau : Ctrl+A, F9. **Word sur le web ne renumérote jamais** et n'y autorise pas un complément : le nouvel exemple est bien numéroté, et le volet dit quels numéros et renvois sont périmés | immédiate — et tous les autres champs du document sont rafraîchis avec, y compris les numéros déjà présents dans le fichier : un exemple composé dans un document converti a renuméroté les exemples et renvois du convertisseur dans OnlyOffice Desktop (vérifié le 4 octobre 2026). Document Builder 9.4, qu'utilisent les tests, ne renumérote que ce qui a été composé depuis l'ouverture ; docx2linguexx lit les champs, le LaTeX est donc juste dans tous les cas |
 | arbres | la largeur d'une étiquette est estimée d'après les métriques de la police, là où la macro la mesure en la composant : dans une police non mesurée, une longue étiquette peut serrer sa voisine (le volet signale une police non mesurée) | pareil ; triangles et flèches sont faits de traits droits séparés, l'API d'OnlyOffice ne créant que des formes prédéfinies |
+| une note de bas de page ou de fin dans un exemple, ou dans les lignes à composer | refusé, comme par la macro Writer : les lignes tapées n'ont pas de place pour une note, et continuer la supprimerait. Placez la note dans le texte avant ou après l'exemple | pareil |
 | plusieurs exemples dans un tableau — un fichier converti avant le 26 septembre 2026 | *Untypeset* refuse ; reconvertissez le fichier (voir le `.docx`, A.6) | ne se produit pas : OnlyOffice garde les tableaux séparés |
 | un document où une version antérieure du complément a écrit | son style `LxExampleCell` peut être en Times New Roman : Styles ▸ LxExampleCell ▸ Modifier ▸ la police du document | — |
 | un espacement réglé, puis rendu égal | — | OnlyOffice ne sait pas rendre un style à l'héritage une fois qu'il a sa propre valeur : les deux côtés sont justes, mais ne suivent plus une modification ultérieure de `LxExampleSpace` |

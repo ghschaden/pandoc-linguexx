@@ -195,6 +195,11 @@ the command decides and the text never does, here as everywhere else.
 
 ### What it refuses
 
+- **An example holding a footnote or an endnote.** The typed lines have no
+  place for a note, so untypesetting would delete it. Move the footnote out
+  of the example, into the text just before or after it, and untypeset
+  then. A converted document has such examples wherever the LaTeX put a
+  `\footnote` in one.
 - **A drawing that carries no source** — a picture put into an example, or
   a tree drawn before trees kept their brackets. There is nothing to give
   back, and untypesetting would lose it.
@@ -245,6 +250,8 @@ paradigm, or a glossed example rebuilt as a **numbered tree**, keeps it.
 
 Refused, rather than guessed at:
 
+- **A footnote in the selected lines**, which typesetting would delete:
+  put it in the text before or after the example.
 - **Two numbers in one selection.** An example has one; that selection is
   two examples.
 - **A number part-way through the selection.** The number an example takes

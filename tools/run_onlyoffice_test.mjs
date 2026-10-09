@@ -782,6 +782,70 @@ builder.CloseFile();
   console.log(`--- converted: typeset as (${log.res && log.res.number}) into a converted paper; ` +
     `listed ${JSON.stringify(log.list)}; ${examples} examples back through docx2linguexx`);
 }
+
+// -- a footnote in a converted example ---------------------------------------
+//
+// The converter puts a \footnote in an example as a note mark in its cell.
+// The typed lines have no place for one, so Untypeset must refuse that
+// example rather than give it back without its note, and Typeset must
+// refuse lines holding one.  Loaded from a file, the mark is a run with no
+// text whose ToJSON throws, as a field's runs' does; it is known by its
+// style (commands.js, isNote) -- which only the real editor half can show,
+// and the example with no note is there to show a field is not a note.
+
+const noted = join(OUT, "example-footnote.docx");
+try {
+  execFileSync("python3", ["-m", "linguexx2odt", join(ROOT, "tests/fixtures/example-footnote.tex"),
+    "--to", "docx", "-o", noted, "-q"],
+  { cwd: ROOT, env: { ...process.env, PYTHONPATH: join(ROOT, "src") }, stdio: ["ignore", "ignore", "pipe"] });
+} catch (e) {
+  problems.push(`footnote: the converter did not run: ${String(e.stderr || e).slice(0, 200)}`);
+}
+if (existsSync(noted)) {
+  const notedOut = join(OUT, "example-footnote-after.docx");
+  run(`builder.OpenFile(${JSON.stringify(noted)});
+${bundle}
+if (typeof Asc.scope !== "object" || !Asc.scope) Asc.scope = {};
+var doc = Api.GetDocument();
+var log = { untypeset: [], typeset: null, tablesBefore: 0, tablesAfter: 0 };
+try {
+  var tables = [];
+  for (var i = 0; i < doc.GetElementsCount(); i++) if (doc.GetElement(i).GetClassType() === "table") tables.push(i);
+  log.tablesBefore = tables.length;
+  for (var t = 0; t < tables.length; t++) {
+    doc.GetElement(tables[t]).GetRow(1).GetCell(1).GetContent().GetElement(0).GetRange().Select();
+    var u = LinguExx.untypesetJob(LinguExx.readExampleTable());
+    log.untypeset.push(u.refusal ? "refused: " + u.refusal : "lines: " + u.back.lines.length);
+  }
+  for (var k = 0; k < doc.GetElementsCount(); k++) {
+    var el = doc.GetElement(k);
+    if (el.GetClassType() === "paragraph" && el.GetText().indexOf("Jean dort bien.") === 0) {
+      el.GetRange().Select();
+      var prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 40);
+      log.typeset = prep.refusal ? "refused: " + prep.refusal : "prepared";
+      break;
+    }
+  }
+  for (var m = 0; m < doc.GetElementsCount(); m++) if (doc.GetElement(m).GetClassType() === "table") log.tablesAfter++;
+} catch (e) { log.error = String(e && e.stack || e); }
+var out = Api.CreateParagraph(); out.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, out);
+builder.SaveFile("docx", ${JSON.stringify(notedOut)});
+builder.CloseFile();
+`, "footnote");
+
+  const fail = (m) => problems.push(`footnote: ${m}`);
+  const first = findAll(parse(unzip(notedOut, "word/document.xml")), "w:p")[0];
+  const log = JSON.parse(findAll(first, "w:t").map(textOf).join("").replace(/^LXRESULT/, ""));
+  if (log.error) fail(log.error);
+  const [withNote, without] = log.untypeset || [];
+  if (!/^refused: That example holds a footnote/.test(withNote || "")) fail(`the noted example: ${withNote}`);
+  if (without !== "lines: 3") fail(`the example with no note: ${without}`);
+  if (!/^refused: The selected lines hold a footnote/.test(log.typeset || "")) fail(`the noted prose: ${log.typeset}`);
+  if (log.tablesBefore !== 2 || log.tablesAfter !== 2) fail(`tables ${log.tablesBefore} before, ${log.tablesAfter} after`);
+  console.log(`--- footnote: untypeset ${JSON.stringify((log.untypeset || []).map((s) => s.slice(0, 40)))}; ` +
+    `typeset ${JSON.stringify((log.typeset || "").slice(0, 40))}`);
+}
+
 if (problems.length) {
   console.log(problems.slice(0, 40).map((p) => `    FAIL: ${p}`).join("\n"));
   if (problems.length > 40) console.log(`    ... and ${problems.length - 40} more`);

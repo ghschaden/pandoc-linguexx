@@ -108,6 +108,12 @@ test("two numbers, or one part-way through, are refused -- a number must not mov
   assert.match(readSelection(pkg("<w:tbl><w:tr><w:tc>" + p(r("x")) + "</w:tc></w:tr></w:tbl>")).refusal, /table/);
 });
 
+test("lines holding a footnote are refused: typesetting would delete the note", () => {
+  const note = '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="2"/></w:r>';
+  assert.match(readSelection(pkg(p(r("Jean dort"), note) + p(r("John sleeps")))).refusal, /hold a footnote/);
+  assert.equal(readSelection(pkg(p(r("Jean dort")) + p(r("John sleeps")))).refusal, "");
+});
+
 test("the default face is reported, a theme as a theme", () => {
   assert.deepEqual(readSelection(pkg(p(r("x")), STYLES)).fonts, ["theme:minorHAnsi"]);
   const named = STYLES.replace('w:asciiTheme="minorHAnsi"', 'w:ascii="Times New Roman"');

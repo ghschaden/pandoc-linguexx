@@ -25,7 +25,7 @@ import { looksLikeMarker, parseLines, strip, tagIndex, tagRun } from "../core/pa
 import { planTable, prepareSelection, toExample } from "../core/plan.js";
 import { tableRows } from "../core/table.js";
 import { TREE, TREE_TITLE, drawTree, parseTreeLines } from "../core/tree.js";
-import { isExampleTable, readTable } from "../core/untypeset.js";
+import { NOTE_IN_SELECTION, isExampleTable, readTable } from "../core/untypeset.js";
 import { OPT, checkSettings, readSettings, spacingPlan } from "../core/settings.js";
 import { freshBookmark } from "../word/numbering.js";
 import { dxa } from "../word/ooxml.js";
@@ -99,6 +99,7 @@ export function linesFromRead(read) {
     let line = "";
     out.starts.push(out.lines.length);   // where this paragraph's first line lands
     for (const r of p.runs) {
+      if (r.note) out.refusal ||= NOTE_IN_SELECTION;
       const fmt = {};
       if (r.style) fmt.rStyle = r.style;
       if (r.bold) fmt.bold = true;
@@ -367,7 +368,9 @@ export function untypesetJob(read) {
       if (t) text += tagRun(t, index(fmt));
     }
     // a drawn tree's lines, read off its alt text (commands.readExampleTable)
-    return c.tree ? { style: c.style, text, tree: c.tree } : { style: c.style, text };
+    const cell = c.tree ? { style: c.style, text, tree: c.tree } : { style: c.style, text };
+    if (c.runs.some((r) => r.note)) cell.note = true;
+    return cell;
   }));
   if (!isExampleTable(rows)) {
     return { refusal: "That table is not an example.\n\nAn example is topped and tailed by the " +

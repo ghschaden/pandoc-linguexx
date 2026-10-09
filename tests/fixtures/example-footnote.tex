@@ -1,0 +1,19 @@
+% A footnote in an example, and one in a line of prose a user might select
+% to typeset: tools/run_onlyoffice_test.mjs opens the converted .docx and
+% holds the plugin to refusing both, since the typed lines have no place
+% for a note and going ahead would delete it.
+\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+
+Jean dort bien.\footnote{A note in the prose.}
+
+\ex. \gll Jean dort\footnote{A note in the gloss.} bien \\
+     John sleeps well \\
+     \glt `John sleeps well.'
+
+\ex. \gll Marie chante \\
+     Mary sings \\
+     \glt `Mary sings.'
+
+\end{document}

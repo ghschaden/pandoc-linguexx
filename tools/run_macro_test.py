@@ -2281,6 +2281,7 @@ def check_untypeset(ctx, out: Path, profile: Path) -> int:
     bad += check_untypeset_adjacent(ctx)
     bad += check_untypeset_converted(ctx, out)
     bad += check_untypeset_converted_charstyles(ctx, out)
+    bad += check_untypeset_notes(ctx, out)
     bad += check_untypeset_annot(ctx, out)
     bad += check_untypeset_trees(ctx)
     bad += check_untypeset_formatting(ctx)
@@ -2444,6 +2445,67 @@ def check_untypeset_converted(ctx, out: Path) -> int:
         return 1
     print("    ok — a converted document untypesets and rebuilds, bands and all")
     return 0
+
+
+def check_untypeset_notes(ctx, out: Path) -> int:
+    r"""A footnote stops Untypeset and Typeset, rather than being lost.
+
+    The converter puts a \footnote in an example as a note in its cell.
+    The typed lines have no place for one, so Untypeset must leave that
+    example alone and say so -- while the example beside it, with no note,
+    still comes apart -- and Typeset must refuse lines holding a note.
+    The add-ins are held to the same by tools/run_onlyoffice_test.mjs and
+    the Word tests, on the same fixture where they can be.
+    """
+    odt = out / "example-footnote.odt"
+    built = subprocess.run(
+        [sys.executable, "-m", "linguexx2odt.cli",
+         str(ROOT / "tests" / "fixtures" / "example-footnote.tex"), "-o", str(odt)],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    if built.returncode or not odt.is_file():
+        print(f"    skipped — the converter did not run: "
+              f"{(built.stdout + built.stderr).strip()[:80]!r}")
+        return 0
+
+    desktop = ctx.ServiceManager.createInstanceWithContext(
+        "com.sun.star.frame.Desktop", ctx)
+    doc = desktop.loadComponentFromURL(odt.as_uri(), "_blank", 0, ())
+    vc = doc.getCurrentController().getViewCursor()
+    tables = [el for el in paragraphs(doc)
+              if el.supportsService("com.sun.star.text.TextTable")]
+    vc.gotoRange(tables[0].getCellByName("B2").getText().getStart(), False)
+    noted = run(ctx, "UntypesetSelectionQuiet")
+    kept = doc.getTextTables().getCount()
+
+    paras = [p for p in paragraphs(doc)
+             if p.supportsService("com.sun.star.text.Paragraph")]
+    prose = next(i for i, p in enumerate(paras) if p.getString().startswith("Jean dort bien."))
+    select_paras(doc, prose, prose)
+    typed = run(ctx)
+
+    vc.gotoRange(tables[1].getCellByName("B2").getText().getStart(), False)
+    plain = run(ctx, "UntypesetSelectionQuiet")
+    left = doc.getTextTables().getCount()
+    notes = doc.getFootnotes().getCount()
+    doc.dispose()
+
+    bad = 0
+    if not noted.startswith("That example holds a footnote") or kept != 2:
+        print(f"    FAIL: notes: the noted example: {noted[:60]!r}, {kept} table(s)")
+        bad += 1
+    if not typed.startswith("The selected lines hold a footnote"):
+        print(f"    FAIL: notes: the noted prose: {typed[:60]!r}")
+        bad += 1
+    if plain or left != 1:
+        print(f"    FAIL: notes: the example with no note: {plain[:60]!r}, {left} table(s) left")
+        bad += 1
+    if notes != 2:
+        print(f"    FAIL: notes: {notes} footnote(s) left of 2")
+        bad += 1
+    if not bad:
+        print("    ok — a footnote stops Untypeset and Typeset; an example without one comes apart")
+    return bad
 
 
 # Each formatted word is the widest thing in its column, so a column is as
