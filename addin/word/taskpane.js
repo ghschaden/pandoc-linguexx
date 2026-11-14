@@ -239,10 +239,10 @@ async function typeset(trees = false) {
 
       const read = readSelection(ooxml.value);
       if (read.refusal) throw new Refusal(read.refusal);
-      const parsed = trees ? parseTreeLines(read.lines) : parseLines(read.lines);
+      const parsed = trees ? parseTreeLines(read.lines) : parseLines(read.lines, undefined, { shared: true });
       if (parsed.error) throw new Refusal(parsed.error);
 
-      const ex = toExample(parsed.items, 0, parsed.head);
+      const ex = toExample(parsed.items, 0, parsed.head, parsed.shared);
       const width = read.textWidthCm ?? LAYOUT.text_width_cm;
       if (read.textWidthCm === null) {
         notes.push(`Word did not say how wide the text block is; the example is laid out for ${width} cm.`);

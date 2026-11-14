@@ -480,3 +480,31 @@ def test_each_command_takes_its_own_format(tmp_path: Path) -> None:
     f.write_bytes(b"")
     with pytest.raises(SystemExit, match="use odt2linguexx"):
         reverse.main_docx([str(f)])
+
+
+@pandoc
+def test_shared_bands_drop_filler_across_variants_and_glosses(tmp_path: Path) -> None:
+    """A missing variant word is a slot; each band's physical filler is not."""
+    source = r"""\documentclass{article}
+\usepackage{linguexx}
+\begin{document}
+\ex. SHARED
+\ag. *Alpha {} Cappa\exannot{ANNA}\\
+\bg. Beta Longer Delta\exannot{ANNB}\\
+\CommonGloss FIRST SECOND THIRD\\
+\CommonGloss ONE TWO THREE\\
+\glt Translation.
+
+\end{document}
+"""
+    tex = tmp_path / "shared.tex"
+    tex.write_text(source)
+    docx = tmp_path / "shared.docx"
+    assert forward([str(tex), "--to", "docx", "-o", str(docx),
+                    "--text-width", "6.5", "-q"]) == 0
+    back, warnings = _back(tmp_path, docx)
+    assert not warnings
+    assert r"*Alpha {} Cappa" in back
+    assert r"Beta Longer Delta" in back
+    assert r"\CommonGloss FIRST SECOND THIRD" in back
+    assert r"\CommonGloss ONE TWO THREE" in back

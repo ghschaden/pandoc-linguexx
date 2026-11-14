@@ -437,6 +437,32 @@ export function readExampleTable() {
       } else if (el.GetElementsCount) runsOf(el, into);
     }
   }
+  var structural = ["LxExampleCell", "LxExampleBand", "LxVariant", "LxCommonGloss", "LxCommonGlossBand",
+    "LxTranslation", "LxJudgmentCell", "LxAnnot", "LxExampleSpaceAbove", "LxExampleSpaceBelow"];
+  var stylesById = null;
+  function structuralStyle(st) {
+    if (!st) return "";
+    var name = st.GetName();
+    if (structural.indexOf(name) >= 0) return name;
+    // ODT language/tab formatting becomes a derived paragraph style on
+    // import. ApiStyle exposes basedOn in its documented JSON form.
+    try {
+      if (stylesById === null) {
+        stylesById = {};
+        var all = doc.GetAllStyles ? doc.GetAllStyles() : [];
+        for (var k = 0; k < all.length; k++) {
+          var data = JSON.parse(all[k].ToJSON());
+          stylesById[data.styleId] = data;
+        }
+      }
+      var own = JSON.parse(st.ToJSON());
+      for (var depth = 0; depth < 20 && own; depth++) {
+        if (structural.indexOf(own.name) >= 0) return own.name;
+        own = stylesById[own.basedOn];
+      }
+    } catch (e) { /* An unknown style stays unknown; no content is guessed. */ }
+    return name;
+  }
   var rows = [];
   for (var r = 0; r < table.GetRowsCount(); r++) {
     var row = table.GetRow(r), cells = [];
@@ -446,9 +472,15 @@ export function readExampleTable() {
       for (var e = 0; e < content.GetElementsCount(); e++) {
         var p = content.GetElement(e);
         if (p.GetClassType() !== "paragraph") continue;
-        if (!style && p.GetStyle()) style = p.GetStyle().GetName();
+        var pStyle = structuralStyle(p.GetStyle());
+        if (!style) style = pStyle;
         if (runs.length) runs.push({ text: " " });
+        var pp = p.GetParaPr ? p.GetParaPr() : null;
+        var tabs = pp && pp.GetTabs ? pp.GetTabs() : [];
+        var morpheme = tabs && tabs.length && ["LxExampleCell", "LxExampleBand", "LxVariant", "LxCommonGloss", "LxCommonGlossBand"].indexOf(pStyle) >= 0;
+        var startRun = runs.length;
         runsOf(p, runs);
+        if (morpheme) for (var ri = startRun; ri < runs.length; ri++) runs[ri].morpheme = true;
       }
       // A drawn tree gives back the lines it was drawn from, off its alt
       // text -- only a drawing titled as ours: a picture with a description
@@ -459,7 +491,8 @@ export function readExampleTable() {
         var pr = JSON.parse(drawings[g].ToJSON()).docPr || {};
         if (pr.title === "LinguExx tree") tree = pr.descr || "";
       }
-      cells.push(tree ? { style: style, runs: runs, tree: tree } : { style: style, runs: runs });
+      var cell = tree ? { style: style, runs: runs, tree: tree } : { style: style, runs: runs };
+      cells.push(cell);
     }
     rows.push(cells);
   }

@@ -213,3 +213,17 @@ If Test 1 came back needing F9, edit Phase 2 to say the caches are written
 correct at build time. If Test 2 came back with a repair prompt *despite*
 the file validating, say so loudly — the validator exists now, so that
 result would mean conformance is not enough and Phase 1 needs more than it.
+
+## Word add-in shared-gloss authoring (2026-11-14)
+
+The Word task pane now accepts the same shared-gloss syntax as Writer and
+OnlyOffice. Node tests exercise the actual Typeset command with an Office.js
+boundary mock, and the real OOXML readers/writers through repeated cycles,
+preserving formatting, gaps, headings, translations and number bookmarks.
+
+These new authoring changes have not been tested in a live Word session.
+When Word is available, select the shared example from the README, Typeset,
+Untypeset and repeat. Check a narrow page, custom styles, existing references,
+ODT/DOCX interoperability, and single-step Undo. Confirm that malformed
+shared input leaves the selection and numbering unchanged, and that Typeset
+tree continues to reject shared-gloss input.

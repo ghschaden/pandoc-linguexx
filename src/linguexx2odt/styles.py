@@ -92,6 +92,9 @@ MACRO_NAMES: dict[str, str] = {
     "TRANS_PARA": TRANSLATION_PARA,
     "JUDG_PARA": JUDGMENT_PARA,
     "BAND_PARA": BAND_PARA,
+    "COMMON_PARA": COMMON_PARA,
+    "COMMON_BAND_PARA": COMMON_BAND_PARA,
+    "VARIANT_PARA": VARIANT_PARA,
     "SPACE_PARA": SPACE_PARA,
     "SPACE_ABOVE": SPACE_ABOVE_PARA,
     "SPACE_BELOW": SPACE_BELOW_PARA,
@@ -148,10 +151,6 @@ MACRO_NOT_SHARED: dict[str, str] = {
 #: gave an eight-column grid where linguexx's is seven.  The macro now
 #: knows the style, so the entry is gone rather than explained away.
 MACRO_STYLES_NOT_SHARED: dict[str, str] = {
-    "COMMON_PARA": ("shared glosses use the CLI reverse converter; "
-                    "Writer Untypeset cannot read them"),
-    "COMMON_BAND_PARA": "shared-gloss continuation bands are read by the CLI reverse converter",
-    "VARIANT_PARA": "single-tier variant rows are read by the CLI reverse converter",
     "EQUATION_PARA": (
         "nothing: the macro reads examples, which are tables, and an "
         "equation is a paragraph of the prose it never looks at"),

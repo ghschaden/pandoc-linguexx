@@ -226,7 +226,7 @@ export function pullJudgment(word) {
  * [line without it, label]: \exannot{...} taken off a line -- LxPullAnnot.
  * Like the Basic, a line that had one comes back without its marks.
  */
-export function pullAnnot(line) {
+export function pullAnnot(line, preserveFormatting = false) {
   // Case-blind, as the Basic is: LibreOffice's InStr compares as text by
   // default, so the macro takes "\EXANNOT{..}" too.
   const found = /\\exannot/i.exec(line);
@@ -250,7 +250,79 @@ export function pullAnnot(line) {
     i++;
   }
   if (depth !== 0) return [line, ""];
+  if (preserveFormatting) return [
+    trimTagged(line.slice(0, at) + carryTag(line.slice(0, i + 1), line.slice(i + 1))),
+    carryTag(line.slice(0, open + 1), line.slice(open + 1, i)),
+  ];
   return [strip(line.slice(0, at) + line.slice(i + 1)), line.slice(open + 1, i)];
+}
+
+/** Exact authoring command: a longer word such as CommonGlossary is text. */
+export const isCommonGloss = (line) => /^\\CommonGloss(?:\s|$)/.test(strip(line).trim());
+
+/** Brace grouping with explicit empty slots and strict brace validation. */
+export function splitSharedWords(line) {
+  const out = [];
+  let cur = "", t = "", depth = 0, active = false;
+  for (const c of line + " ") {
+    if (tagIndex(c) >= 0) {
+      t = c;
+      if (active) cur += c;
+    } else if (c === "{") {
+      depth++; active = true;
+    } else if (c === "}") {
+      if (--depth < 0) throw new Error("Unbalanced grouping braces.");
+    } else if (isSpace(c) && depth === 0) {
+      if (active) out.push(trimTags(cur));
+      cur = ""; active = false;
+    } else {
+      if (!cur) cur = t;
+      cur += c; active = true;
+    }
+  }
+  if (depth) throw new Error("Unbalanced grouping braces.");
+  return out;
+}
+
+/** One explicit shared group, with the same authoring scope as Writer. */
+export function parseSharedLines(rawLines) {
+  const lines = rawLines.map((text, i) => ({text: trimTagged(text), line: i + 1}))
+    .filter(({text}) => strip(text).trim());
+  let head = "", translation = "";
+  const items = [], tiers = [], markers = new Set();
+  if (lines.length > 1 && !looksLikeMarker(lines[0].text) && isFirstMarker(markerOf(lines[1].text))) {
+    head = lines.shift().text;
+  }
+  for (const {text, line} of lines) {
+    try {
+      if (isCommonGloss(text)) {
+        if (!items.length || translation) throw new Error("Shared tiers must follow variants and precede the translation.");
+        const at = text.indexOf("\\CommonGloss") + 12;
+        const rest = carryTag(text.slice(0, at), text.slice(at));
+        if (!strip(rest).trim()) throw new Error("A shared tier cannot be empty.");
+        tiers.push(splitSharedWords(rest));
+      } else if (looksLikeMarker(text)) {
+        if (tiers.length) throw new Error("Variants must precede every shared tier.");
+        const marker = markerOf(text), plain = strip(marker);
+        if (markers.has(plain)) throw new Error("Duplicate variant marker " + plain);
+        markers.add(plain);
+        let rest = carryTag(marker, trimTagged(text.slice(marker.length)));
+        let annot, judgment;
+        [rest, annot] = pullAnnot(rest, true);
+        [rest, judgment] = pullJudgment(rest);
+        const words = splitSharedWords(rest);
+        if (!words.length) throw new Error("A variant needs one object-language line.");
+        items.push({marker, judgment, annot, translation: "", tiers: [words]});
+      } else {
+        if (!tiers.length || translation) throw new Error("Expected one object line per variant and at most one final translation.");
+        translation = text;
+      }
+    } catch (err) {
+      return {error: `Line ${line}: ${err.message} Use distinct marked variants, consecutive \\CommonGloss tiers, then an optional translation.`};
+    }
+  }
+  if (!items.length || !tiers.length) return {error: "A shared group needs marked variants and shared tiers."};
+  return {items, head, shared: {tiers, translation}};
 }
 
 /**
@@ -298,7 +370,12 @@ export function makeItem(marker, body) {
  * LxTreeOnly -- the command decides, never the brackets.  An item that
  * comes back as {error} stops the parse, as LxTErr stops LxParseItems.
  */
-export function parseLines(rawLines, make = makeItem) {
+export function parseLines(rawLines, make = makeItem, { shared = false } = {}) {
+  if (rawLines.some(isCommonGloss)) {
+    if (shared && make === makeItem) return parseSharedLines(rawLines);
+    return {error: "These lines contain a shared gloss. Typeset does not yet build shared-gloss tables. " +
+      "Keep the CommonGloss markers; use Undo to restore the table, or the LaTeX converter to rebuild it."};
+  }
   let lines = rawLines.map(trimTagged).filter((l) => l.length > 0);
   if (lines.length === 0) return { error: "no lines" };
 

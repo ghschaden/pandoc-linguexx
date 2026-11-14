@@ -280,7 +280,7 @@ export function prepareJob(read, now = Date.now(), { trees = false } = {}) {
     sel.lines[at] = dropNumber(sel.lines[at]);
     takeOver = numbers[0];
   }
-  const parsed = trees ? parseTreeLines(sel.lines) : parseLines(sel.lines);
+  const parsed = trees ? parseTreeLines(sel.lines) : parseLines(sel.lines, undefined, { shared: true });
   if (parsed.error) return { refusal: parsed.error };
 
   const notes = [];
@@ -296,7 +296,7 @@ export function prepareJob(read, now = Date.now(), { trees = false } = {}) {
       `face is ${face}, which has not been measured. Words may wrap in their columns.`);
   }
 
-  const ex = toExample(parsed.items, 0, parsed.head);
+  const ex = toExample(parsed.items, 0, parsed.head, parsed.shared);
   const settings = readSettings(read.props || {});
   const [layout, anyJudgment] = prepareSelection(ex,
     { ...LAYOUT, text_width_cm: width, font_name: face, font_pt: size }, { formats: sel.formats, settings });
@@ -364,12 +364,13 @@ export function untypesetJob(read) {
       if (r.vertAlign === "subscript" || r.vertAlign === "superscript") fmt.vertAlign = r.vertAlign;
       if (r.smallCaps) fmt.smallCaps = true;
       // a line break in a cell is a space, as LxReadText has it
-      const t = String(r.text).replace(/\r\n|\r|\n/g, " ");
+      const t = String(r.text).replace(/\r\n|\r|\n/g, " ").replace(/\t/g, r.morpheme ? "" : "\t");
       if (t) text += tagRun(t, index(fmt));
     }
     // a drawn tree's lines, read off its alt text (commands.readExampleTable)
     const cell = c.tree ? { style: c.style, text, tree: c.tree } : { style: c.style, text };
     if (c.runs.some((r) => r.note)) cell.note = true;
+    if (c.morpheme) cell.morpheme = true;
     return cell;
   }));
   if (!isExampleTable(rows)) {

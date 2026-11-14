@@ -627,6 +627,11 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
         if number_cell is None:
             number_cell = row[0]
         rest = [c for c in row[lead:] if c.style != ANNOT_PARA]
+        if is_common:
+            # Writer's shared emitter leaves unused grid cells in the base
+            # style. They are physical padding, rather than alignment slots.
+            rest = [c for c in rest if c.style in {
+                VARIANT_PARA, COMMON_PARA, COMMON_BAND_PARA, TRANSLATION_PARA}]
         if any(c.style == TRANSLATION_PARA for c in row):
             if is_common:
                 rest = row[1:]
@@ -663,6 +668,19 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
         if not b.bands or (rest and rest[0].style == BAND_PARA):
             b.bands.append([])
         b.bands[-1].append(rest)
+
+    if is_common:
+        # A shared band's padding is empty across ALL variants and tiers.
+        # Looking at a variant alone mistakes its filler for a missing word;
+        # looking only at shared tiers can discard a slot a variant needs.
+        for band_index in range(len(shared.bands)):
+            band_rows = [row for body in [*bodies, shared]
+                         if band_index < len(body.bands)
+                         for row in body.bands[band_index]]
+            stop = max((i + 1 for row in band_rows for i, cell in enumerate(row)
+                        if cell.plain or latex(cell)), default=0)
+            for row in band_rows:
+                del row[stop:]
 
     built = [_body(b, latex, ctx, index, force_tiers=is_common) for b in bodies]
     custom, brackets, marks = "", None, []
@@ -715,7 +733,7 @@ def _body(b: _Building, latex, ctx: Context, index: int, force_tiers=False) -> B
         # INSIDE a tier is a word one line lacks, and keeps its place.
         texts = [[latex(c) for c in row] for row in band]
         plains = [[c.plain for c in row] for row in band]
-        if len(band) > 1 and all(r and not t[-1] and not p[-1]
+        if not force_tiers and len(band) > 1 and all(r and not t[-1] and not p[-1]
                                  for r, t, p in zip(band, texts, plains)):
             texts = [t[:-1] for t in texts]
         for t, cells in enumerate(texts):

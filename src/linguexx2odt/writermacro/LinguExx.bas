@@ -64,27 +64,30 @@ Option Explicit
 '
 '     python3 tools/sync_macro.py --write
 '
-Const CELL_PARA    As String = "LxExampleCell"
-Const TRANS_PARA   As String = "LxTranslation"
-Const JUDG_PARA    As String = "LxJudgmentCell"
-Const BAND_PARA    As String = "LxExampleBand"
-Const SPACE_PARA   As String = "LxExampleSpace"
-Const SPACE_ABOVE  As String = "LxExampleSpaceAbove"
-Const SPACE_BELOW  As String = "LxExampleSpaceBelow"
-Const SEQ_NAME     As String = "NumEx"
-Const ANNOT_PARA   As String = "LxAnnot"
+Const CELL_PARA        As String = "LxExampleCell"
+Const TRANS_PARA       As String = "LxTranslation"
+Const JUDG_PARA        As String = "LxJudgmentCell"
+Const BAND_PARA        As String = "LxExampleBand"
+Const COMMON_PARA      As String = "LxCommonGloss"
+Const COMMON_BAND_PARA As String = "LxCommonGlossBand"
+Const VARIANT_PARA     As String = "LxVariant"
+Const SPACE_PARA       As String = "LxExampleSpace"
+Const SPACE_ABOVE      As String = "LxExampleSpaceAbove"
+Const SPACE_BELOW      As String = "LxExampleSpaceBelow"
+Const SEQ_NAME         As String = "NumEx"
+Const ANNOT_PARA       As String = "LxAnnot"
 
 ' In centimetres, from linguexx2odt.styles.Layout.
-Const PAD_CM       As Double = 0.16
-Const MIN_COL_CM   As Double = 0.55
-Const MAX_COL_CM   As Double = 6.0
-Const NUMBER_CM    As Double = 1.1
-Const MARKER_CM    As Double = 0.7
-Const JUDG_GAP_CM  As Double = 0.12
-Const SPACE_CM     As Double = 0.18
-Const SC_RATIO     As Double = 0.8
-Const ANNOT_RATIO  As Double = 0.75
-Const ANNOT_SEP_EM As Double = 1.0
+Const PAD_CM           As Double = 0.16
+Const MIN_COL_CM       As Double = 0.55
+Const MAX_COL_CM       As Double = 6.0
+Const NUMBER_CM        As Double = 1.1
+Const MARKER_CM        As Double = 0.7
+Const JUDG_GAP_CM      As Double = 0.12
+Const SPACE_CM         As Double = 0.18
+Const SC_RATIO         As Double = 0.8
+Const ANNOT_RATIO      As Double = 0.75
+Const ANNOT_SEP_EM     As Double = 1.0
 
 ' Deliberately not shared:
 '   text_width_cm — the macro reads the real page style instead
@@ -422,17 +425,17 @@ End Function
 
 
 Sub LxBuildExample(oDoc As Object, oRange As Object, aLines As Variant, nLines As Integer)
-    Dim aItems As Variant
+    Dim aItems As Variant, aShared As Variant
     Dim sError As String
 
-    aItems = LxParseItems(aLines, nLines, sError)
+    aItems = LxParseItems(aLines, nLines, sError, aShared)
     If Len(sError) > 0 Then
         Call LxSay(sError)
         Exit Sub
     End If
 
     Call LxEnsureStyles(oDoc)
-    Call LxLayOut(oDoc, oRange, aItems)
+    Call LxLayOut(oDoc, oRange, aItems, aShared)
 End Sub
 
 
@@ -442,7 +445,7 @@ End Sub
 ' language, which is how people actually type them.
 ' A tree item reports its trouble through LxTErr, which is checked once
 ' here rather than threaded back out of LxMakeItem.
-Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As String) As Variant
+Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As String, Optional ByRef aShared As Variant) As Variant
     Dim aItems() As Variant
     Dim aBody() As String
     Dim i As Integer, n As Integer, nBody As Integer, nFirst As Integer
@@ -456,6 +459,15 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
 
     bAny = False
     For i = 0 To nLines - 1
+        If LxIsCommon(aLines(i)) Then
+            If LxTreeOnly Then
+                sError = "Line " & (i + 1) & ": shared glosses cannot be trees."
+                LxParseItems = Array()
+            Else
+                LxParseItems = LxParseShared(aLines, nLines, sError, aShared)
+            End If
+            Exit Function
+        End If
         If LxLooksLikeMarker(aLines(i)) Then bAny = True
     Next i
 
@@ -536,6 +548,108 @@ Function LxParseItems(aLines As Variant, nLines As Integer, ByRef sError As Stri
 
     ReDim Preserve aItems(n - 1)
     LxParseItems = aItems()
+End Function
+
+
+Function LxIsCommon(sLine As String) As Boolean
+    Dim s As String
+    s = Trim(LxStrip(sLine))
+    LxIsCommon = (s = "\CommonGloss")
+    If Len(s) > 12 Then LxIsCommon = (Left(s, 12) = "\CommonGloss" And LxIsSpace(Mid(s, 13, 1)))
+End Function
+
+
+' Explicit group: shared tiers, translation. Variant items retain their usual fields.
+Function LxParseShared(aLines As Variant, nLines As Integer, ByRef sError As String, _
+                       ByRef aShared As Variant) As Variant
+    Dim aItems() As Variant, aGloss() As Variant, aItem As Variant, aWords As Variant
+    Dim i As Integer, j As Integer, nV As Integer, nG As Integer, nFirst As Integer
+    Dim s As String, sMarker As String, sJudg As String, sAnnot As String, sTrans As String
+    ReDim aItems(nLines), aGloss(nLines)
+    nV = 0 : nG = 0 : nFirst = 0 : sTrans = ""
+    If Not LxLooksLikeMarker(aLines(0)) And nLines > 1 Then
+        If LxIsFirstMarker(LxMarkerOf(LxTrimTagged(aLines(1)))) Then
+            LxHeadLine = aLines(0) : nFirst = 1
+        End If
+    End If
+    For i = nFirst To nLines - 1
+        s = LxTrimTagged(aLines(i))
+        If LxIsCommon(s) Then
+            If nV = 0 Or Len(sTrans) > 0 Then GoTo Invalid
+            ' Strip command while carrying its active formatting to the tier.
+            s = LxCarryTag(Left(s, InStr(s, "\CommonGloss") + 11), Mid(s, InStr(s, "\CommonGloss") + 12))
+            aWords = LxSharedWords(s, sError)
+            If Len(sError) > 0 Then GoTo Invalid
+            If UBound(aWords) < 0 Or Len(Trim(LxStrip(s))) = 0 Then GoTo Invalid
+            aGloss(nG) = aWords : nG = nG + 1
+        ElseIf LxLooksLikeMarker(s) Then
+            If nG > 0 Then GoTo Invalid
+            sMarker = LxMarkerOf(s)
+            For j = 0 To nV - 1
+                aItem = aItems(j)
+                If LxStrip(aItem(IT_MARKER)) = LxStrip(sMarker) Then GoTo Invalid
+            Next j
+            s = LxCarryTag(sMarker, LxTrimTagged(Mid(s, Len(sMarker) + 1)))
+            sAnnot = "" : sJudg = ""
+            s = LxPullAnnot(s, sAnnot)
+            s = LxPullJudgment(s, sJudg)
+            aWords = LxSharedWords(s, sError)
+            If Len(sError) > 0 Or UBound(aWords) < 0 Then GoTo Invalid
+            ReDim aItem(IT_SIZE - 1)
+            aItem(IT_MARKER) = sMarker : aItem(IT_JUDG) = sJudg
+            aItem(IT_ANNOT) = sAnnot : aItem(IT_TRANS) = ""
+            aItem(IT_TIERS) = Array(aWords) : aItem(IT_NTIERS) = 1
+            aItems(nV) = aItem : nV = nV + 1
+        Else
+            If nG = 0 Or Len(sTrans) > 0 Then GoTo Invalid
+            sTrans = s
+        End If
+    Next i
+    ReDim Preserve aItems(nV - 1), aGloss(nG - 1)
+    aShared = Array(aGloss(), sTrans)
+    LxParseShared = aItems()
+    Exit Function
+Invalid:
+    sError = "Line " & (i + 1) & ": " & sError & " Expected distinct marked variants (one object line each), " & _
+             "consecutive \CommonGloss tiers, then at most one translation; balance grouping braces."
+    LxParseShared = Array()
+End Function
+
+
+' Empty brace groups are slots, even when they contain only format tags.
+Function LxSharedWords(s As String, ByRef sError As String) As Variant
+    Dim aOut() As String, n As Integer, i As Integer, depth As Integer
+    Dim cur As String, tag As String, c As String, active As Boolean
+    ReDim aOut(Len(s))
+    n = 0 : depth = 0 : active = False : cur = "" : tag = ""
+    For i = 1 To Len(s) + 1
+        c = " "
+        If i <= Len(s) Then c = Mid(s, i, 1)
+        If LxTagIndex(c) >= 0 Then
+            tag = c
+            If active Then cur = cur & c
+        ElseIf c = "{" Then
+            depth = depth + 1 : active = True
+        ElseIf c = "}" Then
+            depth = depth - 1
+            If depth < 0 Then sError = "Unbalanced braces." : Exit For
+        ElseIf LxIsSpace(c) And depth = 0 Then
+            If active Then
+                aOut(n) = LxTrimTags(cur) : n = n + 1
+                cur = "" : active = False
+            End If
+        Else
+            If Len(cur) = 0 Then cur = tag
+            cur = cur & c : active = True
+        End If
+    Next i
+    If depth <> 0 Then sError = "Unbalanced braces."
+    If n = 0 Then
+        LxSharedWords = Array()
+    Else
+        ReDim Preserve aOut(n - 1)
+        LxSharedWords = aOut()
+    End If
 End Function
 
 
@@ -653,8 +767,7 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
             If Len(sMark) > 0 Then
                 If Len(sFirst) > 0 Then
                     aWords(0) = sFirst
-                    aTiers(0) = aWords
-                Else
+                        Else
                     aTiers(0) = LxDropFirst(aWords)   ' the mark stood alone
                 End If
             End If
@@ -671,7 +784,7 @@ Function LxMakeItem(sMarker As String, aBody() As String, nBody As Integer) As V
 End Function
 
 
-Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
+Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant, Optional aShared As Variant)
     Dim oFont As Object, dPxPerCm As Double
     Dim dAvail As Double, dNumber As Double, dJudg As Double, dMarker As Double
     Dim dAnnot As Double
@@ -687,6 +800,9 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Dim nLead As Integer, nItems As Integer
     Dim bSub As Boolean, bGlossed As Boolean
 
+    Dim bShared As Boolean, aMeasure As Variant, aCommon As Variant, aMT() As Variant
+    bShared = Not IsMissing(aShared)
+    If bShared Then bShared = IsArray(aShared)
     nItems = UBound(aItems) + 1
     If nItems < 1 Then Exit Sub
 
@@ -792,6 +908,20 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     ' "ausserordentlich" sits under "habe" in an unrelated sentence.  The
     ' grid absorbs the difference instead, exactly as it already did for the
     ' bands of one item, and linguexx2odt's Grid does the same.
+    If bShared Then
+        aCommon = aShared(0)
+        ReDim aMT(nItems + UBound(aCommon))
+        For k = 0 To nItems - 1
+            aItem = aItems(k) : aTiers = aItem(IT_TIERS)
+            aMT(k) = aTiers(0)
+        Next k
+        For t = 0 To UBound(aCommon)
+            aMT(nItems + t) = aCommon(t)
+        Next t
+        aMeasure = aItems(0)
+        aMeasure(IT_TIERS) = aMT() : aMeasure(IT_NTIERS) = UBound(aMT) + 1
+    End If
+
     ReDim aItemNW(nItems - 1)
     ReDim aNBands(nItems - 1)
     bGlossed = False
@@ -800,6 +930,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
         aItem = aItems(k)
         aItemNW(k) = 0
         aNBands(k) = 0
+        If bShared Then aItem = aMeasure
         If aItem(IT_NTIERS) > 1 Then
             bGlossed = True
             aItemNW(k) = LxItemWords(aItem)
@@ -824,6 +955,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
         For k = 0 To nItems - 1
             If aItemNW(k) > 0 Then
                 aItem = aItems(k)
+                If bShared Then aItem = aMeasure
                 aTiers = aItem(IT_TIERS)
                 ReDim aOneW(aItemNW(k) - 1)
                 For i = 0 To aItemNW(k) - 1
@@ -883,7 +1015,7 @@ Sub LxLayOut(oDoc As Object, oRange As Object, aItems As Variant)
     Call LxEmitTable(oDoc, oRange, aItems, aBandStart(), aNBands(), aItemNW(), _
                      aColW(), nCols, aWordCol(), aWordSpan(), _
                      dNumber, dMarker, dJudg, dFiller, nLead, dIndent, dTable, _
-                     dAnnot)
+                     dAnnot, aShared)
 End Sub
 
 
@@ -912,7 +1044,7 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
                 dNumber As Double, dMarker As Double, dJudg As Double, _
                 dFiller As Double, nLead As Integer, _
                 dIndent As Double, dTable As Double, _
-                dAnnot As Double)
+                dAnnot As Double, Optional aShared As Variant)
     Dim oTable As Object
     Dim nRows As Integer, nTotalCols As Integer, nFill As Integer
     Dim nAnn As Integer
@@ -931,10 +1063,18 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
     If dAnnot > 0 Then nAnn = 1
     nTotalCols = nLead + nCols + nFill + nAnn
 
+    Dim bShared As Boolean, aCommon As Variant
+    bShared = Not IsMissing(aShared)
+    If bShared Then bShared = IsArray(aShared)
     nRows = 2                                 ' the two spacer rows
     For k = 0 To nItems - 1
         nRows = nRows + LxItemRows(aItems(k), aNBands(k))
     Next k
+    If bShared Then
+        aCommon = aShared(0)
+        nRows = 2 + aNBands(0) * (nItems + UBound(aCommon) + 1)
+        If Len(aShared(1)) > 0 Then nRows = nRows + 1
+    End If
     bHead = (Len(LxHeadLine) > 0 And nLead = 3)
     If bHead Then nRows = nRows + 1           ' the line before the letters
 
@@ -997,6 +1137,11 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
         Call LxWideCell(oTable, nRow, 1, nTotalCols - 1, LxHeadLine, CELL_PARA)
         bFirstOfAll = False
         nRow = nRow + 1
+    End If
+    If bShared Then
+        Call LxEmitSharedRows(oDoc, oTable, aItems, aShared, aBandStart(), aNBands(), _
+             aItemNW(), aWordCol(), aWordSpan(), nRow, bFirstOfAll, nLead, nCols, nFill, nAnn, nTotalCols)
+        Exit Sub
     End If
     For k = 0 To nItems - 1
         aItem = aItems(k)
@@ -1068,6 +1213,43 @@ Sub LxEmitTable(oDoc As Object, oRange As Object, aItems As Variant, _
             nRow = nRow + 1
         End If
     Next k
+End Sub
+
+
+Sub LxEmitSharedRows(oDoc As Object, oTable As Object, aItems As Variant, aShared As Variant, _
+        aBandStart() As Integer, aNBands() As Integer, aItemNW() As Integer, _
+        aWordCol() As Integer, aWordSpan() As Integer, nRow As Integer, bFirst As Boolean, _
+        nLead As Integer, nCols As Integer, nFill As Integer, nAnn As Integer, nTotalCols As Integer)
+    Dim b As Integer, r As Integer, i As Integer, c As Integer, shift As Integer, nV As Integer
+    Dim aCommon As Variant, aItem As Variant, aTiers As Variant, aWords As Variant
+    Dim style As String, oCur As Object
+    nV = UBound(aItems) + 1 : aCommon = aShared(0)
+    For b = 0 To aNBands(0) - 1
+        For r = 0 To nV + UBound(aCommon)
+            If r < nV Then
+                aItem = aItems(r) : aTiers = aItem(IT_TIERS) : aWords = aTiers(0)
+                Call LxHead(oDoc, oTable, nRow, aItem, bFirst, nLead)
+                Call LxPutAnnot(oTable, nRow, nTotalCols, nAnn, aItem)
+                bFirst = False : style = VARIANT_PARA
+            Else
+                aWords = aCommon(r - nV) : style = COMMON_PARA
+                If b > 0 And r = nV Then style = COMMON_BAND_PARA
+            End If
+            shift = 0
+            For i = aBandStart(0, b) To LxBandEnd(aBandStart(), aNBands(), aItemNW(), 0, b) - 1
+                c = nLead + aWordCol(0, i) - shift
+                Call LxSetCellStyle(oTable, LxCell(c, nRow), style)
+                If i <= UBound(aWords) Then Call LxPut(oTable.getCellByName(LxCell(c, nRow)), aWords(i))
+                If aWordSpan(0, i) > 1 Then
+                    oCur = oTable.createCursorByCellName(LxCell(c, nRow))
+                    oCur.goRight(aWordSpan(0, i) - 1, True) : oCur.mergeRange()
+                    shift = shift + aWordSpan(0, i) - 1
+                End If
+            Next i
+            nRow = nRow + 1
+        Next r
+    Next b
+    If Len(aShared(1)) > 0 Then Call LxWideCell(oTable, nRow, 1, nTotalCols - 1, aShared(1), TRANS_PARA)
 End Sub
 
 
@@ -1917,8 +2099,8 @@ Function LxPullAnnot(sLine As String, ByRef sAnnot As String) As String
         Exit Function
     End If
 
-    sAnnot = Mid(sLine, nOpen + 1, i - nOpen - 1)
-    LxPullAnnot = LxStrip(Left(sLine, nAt - 1) & Mid(sLine, i + 1))
+    sAnnot = LxCarryTag(Left(sLine, nOpen), Mid(sLine, nOpen + 1, i - nOpen - 1))
+    LxPullAnnot = LxTrimTagged(Left(sLine, nAt - 1) & LxCarryTag(Left(sLine, i), Mid(sLine, i + 1)))
 End Function
 
 
@@ -2577,6 +2759,15 @@ Sub LxEnsureStyles(oDoc As Object)
         oStyle.ParaAdjust = com.sun.star.style.ParagraphAdjust.LEFT
     End If
 
+    Dim aSharedStyles As Variant, sSharedStyle As Variant
+    aSharedStyles = Array(VARIANT_PARA, COMMON_PARA, COMMON_BAND_PARA)
+    For Each sSharedStyle In aSharedStyles
+        If Not oFam.hasByName(sSharedStyle) Then
+            oStyle = oDoc.createInstance("com.sun.star.style.ParagraphStyle")
+            oStyle.ParentStyle = CELL_PARA
+            oFam.insertByName(sSharedStyle, oStyle)
+        End If
+    Next sSharedStyle
     Call LxEnsureChildStyle(oDoc, oFam, SPACE_ABOVE)
     Call LxEnsureChildStyle(oDoc, oFam, SPACE_BELOW)
 End Sub
@@ -2793,6 +2984,15 @@ Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
         Exit Function
     End If
 
+    For nRow = 1 To nRows
+        aCells = LxRowCells(oTable, nRow)
+        If LxRowHasStyle(oTable, aCells, COMMON_PARA) Or _
+           LxRowHasStyle(oTable, aCells, COMMON_BAND_PARA) Then
+            LxReadTable = LxReadCommonTable(oTable, nRows, nLead, bJudg, sErr)
+            Exit Function
+        End If
+    Next nRow
+
     ' One line per row, and a row holding a tree gives back as many lines
     ' as its brackets were typed over.
     nMax = nRows
@@ -2905,6 +3105,133 @@ Function LxReadTable(oTable As Object, ByRef sErr As String) As Variant
 End Function
 
 
+' Shared-gloss bands are read as one set of variants plus explicit
+' CommonGloss lines, accepted by the shared authoring parser.
+Function LxReadCommonTable(oTable As Object, nRows As Integer, nLead As Integer, _
+                           bJudg As Boolean, ByRef sErr As String) As Variant
+    Dim aMarkers() As String, aWords() As String, aJudgs() As String, aAnnots() As String
+    Dim aGloss() As String, aOut() As String, aCells As Variant
+    Dim nV As Integer, nG As Integer, nOut As Integer, nRow As Integer, nBand As Integer, i As Integer
+    Dim sHead As String, sTrans As String, sMark As String, sFirst As String, sLine As String
+    ReDim aMarkers(nRows), aWords(nRows), aJudgs(nRows), aAnnots(nRows), aGloss(nRows), aOut(nRows)
+    nV = 0 : nG = 0 : nBand = 0 : nOut = 0
+    For nRow = 1 To nRows
+        aCells = LxRowCells(oTable, nRow)
+        If LxRowHasStyle(oTable, aCells, VARIANT_PARA) Then
+            sMark = Trim(LxCellText(oTable, 1, nRow))
+            If nBand > 0 And sMark = sFirst Then
+                Call LxReadCommonBand(oTable, nBand, nRow - 1, nLead, bJudg, _
+                     aMarkers(), aWords(), aJudgs(), aAnnots(), aGloss(), nV, nG)
+                nBand = nRow
+            End If
+            If nBand = 0 Then
+                nBand = nRow : sFirst = sMark
+                If Len(sHead) = 0 Then Call LxTakeCellNumber(oTable, nRow)
+            End If
+        ElseIf LxRowHasStyle(oTable, aCells, TRANS_PARA) Then
+            sTrans = LxRowText(oTable, aCells, 1, False)
+        ElseIf UBound(aCells) = 1 And nBand = 0 Then
+            If Not LxRowHasStyle(oTable, aCells, SPACE_ABOVE) Then
+                Call LxTakeCellNumber(oTable, nRow)
+                sHead = LxRowText(oTable, aCells, 1, False)
+            End If
+        End If
+    Next nRow
+    If nBand > 0 Then Call LxReadCommonBand(oTable, nBand, nRows, nLead, bJudg, _
+         aMarkers(), aWords(), aJudgs(), aAnnots(), aGloss(), nV, nG)
+    If nV = 0 Or nG = 0 Then
+        sErr = "That shared gloss is missing its variant or gloss rows; it was left unchanged."
+        LxReadCommonTable = Array()
+        Exit Function
+    End If
+    If Len(LxStrip(sHead)) > 0 Then
+        aOut(nOut) = sHead : nOut = nOut + 1
+    End If
+    For i = 0 To nV - 1
+        sLine = aMarkers(i) & " " & aJudgs(i) & aWords(i)
+        If Len(LxStrip(aAnnots(i))) > 0 Then sLine = sLine & "\exannot{" & aAnnots(i) & "}"
+        aOut(nOut) = sLine : nOut = nOut + 1
+    Next i
+    For i = 0 To nG - 1
+        aOut(nOut) = "\CommonGloss " & aGloss(i) : nOut = nOut + 1
+    Next i
+    If Len(LxStrip(sTrans)) > 0 Then
+        aOut(nOut) = sTrans : nOut = nOut + 1
+    End If
+    LxReadCommonTable = LxNonEmpty(aOut(), nOut)
+End Function
+
+
+Sub LxReadCommonBand(oTable As Object, nStart As Integer, nEnd As Integer, _
+                     nLead As Integer, bJudg As Boolean, aMarkers() As String, _
+                     aWords() As String, aJudgs() As String, aAnnots() As String, _
+                     aGloss() As String, ByRef nV As Integer, ByRef nG As Integer)
+    Dim aCells As Variant
+    Dim nRow As Integer, i As Integer, nCount As Integer, nSeen As Integer, nTier As Integer, n As Integer
+    Dim sMark As String, sLine As String, sCell As String, sStyle As String
+    nCount = 0
+    For nRow = nStart To nEnd
+        aCells = LxRowCells(oTable, nRow)
+        If LxRowHasStyle(oTable, aCells, VARIANT_PARA) Or _
+           LxRowHasStyle(oTable, aCells, COMMON_PARA) Or _
+           LxRowHasStyle(oTable, aCells, COMMON_BAND_PARA) Then
+            nSeen = 0
+            For i = 0 To UBound(aCells)
+                sStyle = LxCellStyle(oTable.getCellByName(aCells(i)))
+                If LxCellColOf(aCells(i)) >= nLead And sStyle <> ANNOT_PARA Then
+                    nSeen = nSeen + 1
+                    If Len(Trim(oTable.getCellByName(aCells(i)).getString())) > 0 Then _
+                        nCount = LxMaxI(nCount, nSeen)
+                End If
+            Next i
+        End If
+    Next nRow
+    nTier = 0
+    For nRow = nStart To nEnd
+        aCells = LxRowCells(oTable, nRow)
+        If LxRowHasStyle(oTable, aCells, VARIANT_PARA) Or _
+           LxRowHasStyle(oTable, aCells, COMMON_PARA) Or _
+           LxRowHasStyle(oTable, aCells, COMMON_BAND_PARA) Then
+            sLine = "" : nSeen = 0
+            For i = 0 To UBound(aCells)
+                sStyle = LxCellStyle(oTable.getCellByName(aCells(i)))
+                If LxCellColOf(aCells(i)) >= nLead And sStyle <> ANNOT_PARA And nSeen < nCount Then
+                    sCell = LxTrimTagged(LxReadGlossCell(oTable.getCellByName(aCells(i))))
+                    If Len(LxStrip(sCell)) = 0 Then
+                        sCell = "{}"
+                    ElseIf InStr(LxStrip(sCell), " ") > 0 Then
+                        sCell = "{" & sCell & "}"
+                    End If
+                    If nSeen > 0 Then sLine = sLine & " "
+                    sLine = sLine & sCell : nSeen = nSeen + 1
+                End If
+            Next i
+            If LxRowHasStyle(oTable, aCells, VARIANT_PARA) Then
+                sMark = Trim(LxCellText(oTable, 1, nRow))
+                n = 0
+                Do While n < nV
+                    If aMarkers(n) = sMark Then Exit Do
+                    n = n + 1
+                Loop
+                If n = nV Then
+                    aMarkers(n) = sMark
+                    If bJudg Then aJudgs(n) = Trim(LxCellText(oTable, nLead - 1, nRow))
+                    aAnnots(n) = LxRowAnnot(oTable, aCells)
+                    nV = nV + 1
+                End If
+                If Len(aWords(n)) > 0 Then aWords(n) = aWords(n) & " "
+                aWords(n) = aWords(n) & sLine
+            Else
+                If Len(aGloss(nTier)) > 0 Then aGloss(nTier) = aGloss(nTier) & " "
+                aGloss(nTier) = aGloss(nTier) & sLine
+                nTier = nTier + 1
+                nG = LxMaxI(nG, nTier)
+            End If
+        End If
+    Next nRow
+End Sub
+
+
 ' The lines that have something in them, in order.
 Function LxNonEmpty(aLines() As String, nLines As Integer) As Variant
     Dim aOut() As String
@@ -2952,6 +3279,9 @@ Function LxLeadColumns(oTable As Object, nRows As Integer, _
                 bJudg = True
                 nLead = LxCellColOf(aCells(i)) + 1
                 Exit For
+            ElseIf sStyle = VARIANT_PARA Then
+                nLead = LxCellColOf(aCells(i))
+                Exit For
             ElseIf sStyle = TRANS_PARA And nLead < 0 Then
                 nLead = LxCellColOf(aCells(i))
             End If
@@ -2995,7 +3325,7 @@ Function LxRowText(oTable As Object, aCells As Variant, nLead As Integer, _
         ' gains a column -- which is what a converted example used to do.
         If LxCellColOf(aCells(i)) >= nLead _
            And LxCellStyle(oTable.getCellByName(aCells(i))) <> ANNOT_PARA Then
-            sCell = LxTrimTagged(LxReadText(oTable.getCellByName(aCells(i)).getText()))
+            sCell = LxTrimTagged(LxReadGlossCell(oTable.getCellByName(aCells(i))))
             sPlain = LxStrip(sCell)
             If Len(sPlain) > 0 Then
                 If bBrace And nCount > 1 And InStr(sPlain, " ") > 0 Then _
@@ -3015,11 +3345,12 @@ End Function
 '
 ' The number field is skipped: it is read for its identity, by
 ' LxTakeCellNumber, and would otherwise arrive as a word saying "7".
-Function LxReadText(oText As Object) As String
+Function LxReadText(oText As Object, Optional bMorpheme As Variant) As String
     Dim oParEnum As Object, oPorEnum As Object
     Dim oPar As Object, oPor As Object
     Dim s As String, sTxt As String, sType As String
 
+    If IsMissing(bMorpheme) Then bMorpheme = False
     s = ""
     oParEnum = oText.createEnumeration()
     Do While oParEnum.hasMoreElements()
@@ -3039,6 +3370,7 @@ Function LxReadText(oText As Object) As String
                     ' its identity is taken elsewhere; its text is not text
                 Else
                     sTxt = oPor.getString()
+                    If bMorpheme And LxHasMorphemeTabs(oPar) Then sTxt = Replace(sTxt, Chr(9), "")
                     If Len(sTxt) > 0 Then s = s & LxTagged(sTxt, LxFormatIndex(oPor))
                 End If
             Loop
@@ -3219,7 +3551,50 @@ Function LxCellStyle(oCell As Object) As String
     LxCellStyle = ""
     If IsNull(oCell) Then Exit Function
     oEnum = oCell.getText().createEnumeration()
-    If oEnum.hasMoreElements() Then LxCellStyle = oEnum.nextElement().ParaStyleName
+    If oEnum.hasMoreElements() Then LxCellStyle = LxStructuralStyle(oEnum.nextElement().ParaStyleName)
+End Function
+
+
+Function LxStructuralStyle(sName As String) As String
+    Dim oStyles As Object, s As String, n As Integer
+    s = sName
+    oStyles = ThisComponent.StyleFamilies.getByName("ParagraphStyles")
+    For n = 0 To 20
+        Select Case s
+            Case CELL_PARA, BAND_PARA, VARIANT_PARA, COMMON_PARA, COMMON_BAND_PARA, _
+                 TRANS_PARA, JUDG_PARA, ANNOT_PARA, SPACE_ABOVE, SPACE_BELOW
+                LxStructuralStyle = s
+                Exit Function
+        End Select
+        If Len(s) = 0 Then Exit For
+        If Not oStyles.hasByName(s) Then Exit For
+        s = oStyles.getByName(s).ParentStyle
+    Next n
+    LxStructuralStyle = sName
+End Function
+
+
+Function LxHasMorphemeTabs(oPar As Object) As Boolean
+    Dim aTabs As Variant, i As Integer
+    LxHasMorphemeTabs = False
+    aTabs = oPar.ParaTabStops
+    For i = 0 To UBound(aTabs)
+        ' DEFAULT (=4) is Writer's ordinary tab interval, not a word's
+        ' explicit morpheme stops. A literal tab elsewhere must survive.
+        If aTabs(i).Alignment <> 4 And aTabs(i).Position > 0 Then
+            LxHasMorphemeTabs = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+
+Function LxReadGlossCell(oCell As Object) As String
+    Dim sStyle As String, bMorph As Boolean
+    sStyle = LxCellStyle(oCell)
+    bMorph = (sStyle = CELL_PARA Or sStyle = BAND_PARA Or sStyle = VARIANT_PARA _
+              Or sStyle = COMMON_PARA Or sStyle = COMMON_BAND_PARA)
+    LxReadGlossCell = LxReadText(oCell.getText(), bMorph)
 End Function
 
 

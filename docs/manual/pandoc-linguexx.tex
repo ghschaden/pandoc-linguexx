@@ -341,9 +341,29 @@ report. \cs{TextNext}, \cs{pTextNext} and \cs{Refrange} are recognized too.
 
 The command-line reverse converters recover shared gloss structure and join
 morphemes without adding spaces. They do not reconstruct language declarations
-or the morpheme-alignment switch. The Writer macro and editor add-ins retain
-their existing input syntax; their \emph{Untypeset} does not read these new
-layouts. Use \texttt{docx2linguexx} or \texttt{odt2linguexx} for the way back.
+or the morpheme-alignment switch. The Writer macro and Word/OnlyOffice
+add-ins also \emph{Untypeset} these layouts: shared tiers return as explicit
+\cs{CommonGloss} lines, gaps as \texttt{\{\}}, and continuation bands are
+joined. Annotations, text formatting and the example's number are retained;
+morpheme-padding tabs are removed without adding spaces inside words.
+Ordinary morpheme glosses can be re-typeset with word alignment.
+Writer, Word and OnlyOffice also author one shared group per selection. Type distinct marked
+variants with one object line each, consecutive \cs{CommonGloss} tiers, and
+an optional final translation, then run \emph{Typeset example}:
+\begin{verbatim}
+Optional heading
+a. *Alpha {} Cappa\exannot{ANNA}
+b. Beta Longer Delta\exannot{ANNB}
+\CommonGloss FIRST SECOND THIRD
+\CommonGloss ONE TWO THREE
+Translation.
+\end{verbatim}
+A grouped phrase occupies one slot; \texttt{\{\}} preserves an empty slot.
+Short rows are padded on the right, and all rows wrap together into bands.
+The translation need not be quoted. RTL, morpheme alignment, language
+declarations and mixtures with ordinary groups or trees are outside this
+syntax. For full LaTeX output,
+use \texttt{docx2linguexx} or \texttt{odt2linguexx}.
 
 \subsection{How an example is laid out}
 

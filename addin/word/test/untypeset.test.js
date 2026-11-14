@@ -20,8 +20,8 @@ import { untypesetPackage } from "../untypeset.js";
 const FIXTURES = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/fixtures/typed-examples.json", import.meta.url)), "utf-8"));
 
 function builtPackage(lines, formats = [], number = { id: 11, name: "LxEx5", cached: "4" }) {
-  const parsed = parseLines(lines);
-  const ex = toExample(parsed.items, 0, parsed.head);
+  const parsed = parseLines(lines, undefined, { shared: true });
+  const ex = toExample(parsed.items, 0, parsed.head, parsed.shared);
   const [lay, aj] = prepareSelection(ex, LAYOUT, { formats });
   const { plan } = planTable(ex, lay, { anyJudgment: aj, formats });
   return flatPackage(exampleTable(ex, plan, { number, formats }), { withStyles: true });
@@ -94,4 +94,52 @@ test("an example holding a footnote is refused, not given back without it", () =
     assert.match(u.refusal || "", /holds a footnote/);
     assert.match(u.refusal, /before or after/);
   }
+});
+
+const NEW_GLOSSES = JSON.parse(readFileSync(fileURLToPath(new URL("../../../tests/fixtures/linguexx15-untypeset.json", import.meta.url)), "utf-8"));
+for (const [name, fixture] of Object.entries(NEW_GLOSSES)) {
+  test(`converted 1.5 ${name}: gaps, shared rows and morphemes survive`, () => {
+    const u = untypesetPackage(fixture.xml);
+    assert.equal(u.refusal, undefined);
+    assert.deepEqual(u.lines.map(strip), fixture.lines);
+    assert.equal(u.number.shown, "1");
+    const parsed = parseLines(u.lines, undefined, {shared: true});
+    assert.equal(parsed.error, undefined);
+    const rebuilt = untypesetPackage(builtPackage(u.lines, u.formats,
+      {id: 20, name: u.number.bookmark, cached: u.number.shown}));
+    assert.equal(rebuilt.refusal, undefined);
+    assert.deepEqual(rebuilt.lines.map(strip), fixture.lines);
+    assert.deepEqual(rebuilt.number, u.number);
+  });
+}
+
+test("morpheme padding is removed without flattening formatting or prose tabs", () => {
+  const u = untypesetPackage(NEW_GLOSSES.morphemes.xml);
+  const read = readSelection(u.pkg);
+  assert.ok(read.formats.some((f) => f.smallCaps), "the gloss's small capitals survive");
+  // A tab in the translation is text, even when the paragraph declares stops.
+  const xml = NEW_GLOSSES.morphemes.xml.replace("Translation.</w:t>", "Trans</w:t><w:tab/><w:t>lation.</w:t>");
+  const got = untypesetPackage(xml);
+  assert.match(strip(got.lines.at(-1)), /Trans\tlation\./);
+});
+
+test("derived paragraph styles retain shared-row identity", () => {
+  const original = NEW_GLOSSES['shared-no-head'].xml;
+  const xml = original.replaceAll('<w:pStyle w:val="LxVariant"/>', '<w:pStyle w:val="DerivedVariant"/>')
+    .replace('</w:styles>', '<w:style w:type="paragraph" w:styleId="DerivedVariant"><w:name w:val="DerivedVariant"/><w:basedOn w:val="LxVariant"/></w:style></w:styles>');
+  const u = untypesetPackage(xml);
+  assert.deepEqual(u.lines.map(strip), NEW_GLOSSES['shared-no-head'].lines);
+});
+
+test("morpheme stops inherited from a paragraph style are read", () => {
+  let inherited = "";
+  const xml = NEW_GLOSSES.morphemes.xml.replace(
+    /<w:pPr><w:pStyle w:val="LxExampleCell"\/><w:tabs>(.*?)<\/w:tabs><\/w:pPr>/s,
+    (_all, stops) => {
+      inherited = '<w:style w:type="paragraph" w:styleId="InheritedMorph"><w:name w:val="InheritedMorph"/>' +
+        '<w:basedOn w:val="LxExampleCell"/><w:pPr><w:tabs>' + stops + '</w:tabs></w:pPr></w:style>';
+      return '<w:pPr><w:pStyle w:val="InheritedMorph"/></w:pPr>';
+    }).replace('</w:styles>', inherited + '</w:styles>');
+  assert.ok(inherited, "the test actually moved a tab definition");
+  assert.deepEqual(untypesetPackage(xml).lines.map(strip), NEW_GLOSSES.morphemes.lines);
 });

@@ -24,6 +24,7 @@
  * describe.
  */
 
+import { NAMES } from "../core/constants.js";
 import { strip, tagRun } from "../core/parse.js";
 import { TREE_TITLE } from "../core/tree.js";
 import { NOTE_IN_SELECTION } from "../core/untypeset.js";
@@ -359,6 +360,20 @@ export function readExampleTable(ooxml) {
       names.set(st.attrs["w:styleId"], n ? n.attrs["w:val"] : st.attrs["w:styleId"]);
     }
   }
+  const byId = new Map(styles ? findAll(styles, "w:style").map((st) => [st.attrs["w:styleId"], st]) : []);
+  const known = new Set(Object.values(NAMES));
+  const tierStyles = new Set([NAMES.CELL_PARA, NAMES.BAND_PARA, NAMES.VARIANT_PARA, NAMES.COMMON_PARA, NAMES.COMMON_BAND_PARA]);
+  function info(id, seen = new Set()) {
+    if (!id || seen.has(id)) return {name: id, tabs: false};
+    seen.add(id);
+    const st = byId.get(id), base = st && child(st, "w:basedOn");
+    const parent = info(base?.attrs["w:val"], seen);
+    const name = names.get(id) || id;
+    const ppr = st && child(st, "w:pPr");
+    const tabs = ppr && child(ppr, "w:tabs");
+    return {name: known.has(name) ? name : parent.name || name,
+      tabs: tabs ? findAll(tabs, "w:tab").some((t) => t.attrs["w:val"] !== "clear") : parent.tabs};
+  }
   const read = inlineReader(styles, out.formats);
   for (const tr of table.children) {
     if (typeof tr === "string" || tr.name !== "w:tr") continue;
@@ -367,17 +382,20 @@ export function readExampleTable(ooxml) {
       if (typeof tc === "string" || tc.name !== "w:tc") continue;
       let text = "";
       let style = "";
+      let morpheme = false;
       const sink = {
-        text(s, fmt) { text += tagRun(s, fmt); },
+        text(s, fmt) { text += tagRun(morpheme ? s.replace(/\t/g, "") : s, fmt); },
         brk() { text += " "; },
         number(n) { if (!out.number) out.number = n; },
       };
       for (const p of ownParagraphs(tc)) {
-        if (!style) {
-          const ppr = child(p, "w:pPr");
-          const ps = ppr && child(ppr, "w:pStyle");
-          if (ps) style = names.get(ps.attrs["w:val"]) || ps.attrs["w:val"];
-        }
+        const ppr = child(p, "w:pPr");
+        const ps = ppr && child(ppr, "w:pStyle");
+        const effective = info(ps?.attrs["w:val"]);
+        if (!style) style = effective.name || "";
+        const tabs = ppr && child(ppr, "w:tabs");
+        morpheme = tierStyles.has(effective.name) && (tabs ?
+          findAll(tabs, "w:tab").some((t) => t.attrs["w:val"] !== "clear") : effective.tabs);
         if (text) text += " ";
         read(p, sink);
       }

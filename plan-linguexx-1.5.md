@@ -31,11 +31,19 @@ shared glosses, and remove morpheme-padding tabs without adding word spaces.
 Language declarations and the alignment switch are not reconstructed.
 The round-trip oracle now compares shared tiers and translations too.
 
-The interactive Writer macro and add-in input syntax are unchanged. Their
-Untypeset implementations do not read these new layouts; use the command-line
-reverse converters for them. The generated Word style definitions include the
-new styles (`make macro`), and the unshared Writer styles are explicitly
-recorded in `MACRO_STYLES_NOT_SHARED`.
+Follow-up: the Writer macro and Word/OnlyOffice add-ins now read these
+layouts too. Shared tiers return as explicit `\CommonGloss` lines, gaps as
+`{}`, and continuation bands are joined. Morpheme-padding tabs are removed
+only from gloss paragraphs carrying custom tab stops. Paragraph-style
+inheritance is resolved, so imported language/morpheme styles retain their
+structural role. Text formatting and the existing number field are preserved.
+The shared-row styles are now generated into the editor constants.
+
+Writer, Word and OnlyOffice shared-gloss authoring now parse an explicit shared group, preserve
+brace gaps and measure all variants and shared tiers together. Bands repeat
+variants and annotations, followed by shared tiers; translation occurs once.
+Word now uses the same opt-in parsing and shared layout. Validation is recorded in
+`plan-writer-shared-gloss-authoring.md`.
 
 ## Validation
 
@@ -69,3 +77,18 @@ Final results:
   test files). Shared-gloss, morpheme and language-metadata DOCX documents
   passed ECMA-376 XML schema validation.
 - `make manual` succeeded; the rebuilt PDF is included.
+
+Editor follow-up validation:
+
+- `make check` passed all 615 tests in the default local suite.
+- The full Writer macro and OnlyOffice integration suites passed, including
+  shared glosses with and without a heading, continuation bands, morpheme
+  alignment and number-field preservation. Writer now supports shared-gloss
+  Typeset (see `plan-writer-shared-gloss-authoring.md`). OnlyOffice now supports
+  the same authoring scope, as does Word. Word host rendering and Undo still
+  require a connected Word session; package/command tests pass headlessly.
+- Word's XML Untypeset tests passed (60 checks), including inherited styles,
+  text formatting and preservation of translation tabs. `make js-test`
+  passed all 11 JavaScript test files.
+- `ruff check .` and `git diff --check` passed. The manual, Writer extension
+  and OnlyOffice plugin were rebuilt.

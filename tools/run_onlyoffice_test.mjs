@@ -81,6 +81,24 @@ const cases = Object.entries(FIXTURES)
   .filter(([g]) => !g.startsWith("_") && g !== "parsed")
   .flatMap(([g, cs]) => Object.entries(cs).map(([n, c]) => ({ key: `${g}/${n}`, lines: c.lines })));
 
+// Fresh shared authoring is also exercised through the shipped bundle.
+const sharedCommand = String.fromCharCode(92) + "CommonGloss";
+cases.push({key: "SHARED/fresh", lines: ["Heading", "a. *Alpha {} Cappa", "b. Beta {two words} Delta",
+  sharedCommand + " FIRST SECOND THIRD", sharedCommand + " ONE TWO THREE", "Translation."]});
+cases.push({key: "SHARED/unequal", lines: ["a. {} Alpha", "b. Beta", sharedCommand + " ONE TWO THREE"]});
+for (const [n, lines] of [["duplicate", ["a. A", "a. B", sharedCommand + " ONE"]],
+  ["braces", ["a. {A", sharedCommand + " ONE"]],
+  ["extra-tier", ["a. A", "extra tier", sharedCommand + " ONE"]],
+  ["translation", ["a. A", sharedCommand + " ONE", "T", "Extra"]]]) {
+  cases.push({key: "REFUSE/shared-" + n, lines});
+}
+
+cases.push({key: "SHARED/rich-after-rejection", lines: [
+  [{text: "a. *"}, {text: "Alpha", bold: true}, {text: " {} Cappa" + String.fromCharCode(92) + "exannot{ANNA}"}],
+  [{text: "b. Beta ", italic: true}, {text: "Longer Delta"}],
+  [{text: sharedCommand + " "}, {text: "ONE", smallCaps: true}, {text: " TWO THREE"}],
+]});
+
 /** The script: the bundle, then one insertion per fixture, then the results. */
 function script(docx) {
   const bundle = readFileSync(BUNDLE, "utf-8");
@@ -98,7 +116,14 @@ try {
   for (var c = 0; c < CASES.length; c++) {
     var start = doc.GetElementsCount();
     for (var l = 0; l < CASES[c].lines.length; l++) {
-      var p = Api.CreateParagraph(); p.AddText(CASES[c].lines[l]); doc.Push(p);
+      var p = Api.CreateParagraph(), line = CASES[c].lines[l];
+      if (typeof line === "string") p.AddText(line);
+      else for (var part = 0; part < line.length; part++) {
+        var rr = Api.CreateRun(); rr.AddText(line[part].text);
+        rr.SetBold(Boolean(line[part].bold)); rr.SetItalic(Boolean(line[part].italic));
+        rr.SetSmallCaps(Boolean(line[part].smallCaps)); p.AddElement(rr);
+      }
+      doc.Push(p);
     }
     var tail = Api.CreateParagraph(); tail.AddText("Prose after " + CASES[c].key + "."); doc.Push(tail);
     doc.GetElement(start).GetRange().ExpandTo(doc.GetElement(start + CASES[c].lines.length - 1).GetRange()).Select();
@@ -167,8 +192,8 @@ function compare(key, got, want, problems) {
 /** What the Word layer writes for the selection the editor reported. */
 function expected(read) {
   const sel = linesFromRead(read);
-  const parsed = parseLines(sel.lines);
-  const ex = toExample(parsed.items, 0, parsed.head);
+  const parsed = parseLines(sel.lines, undefined, {shared: true});
+  const ex = toExample(parsed.items, 0, parsed.head, parsed.shared);
   const width = read.widthTwips / TWIPS_PER_CM;
   // the document's face and size, as prepareJob lays it out
   const face = read.font || LAYOUT.font_name;
@@ -213,6 +238,15 @@ inserted.forEach((r, i) => {
   const want = describe(parse(expected(r.read)).children[0], names);
   compare(r.key, describe(tables[i], names), want, problems);
 });
+
+const richIndex = inserted.findIndex(r => r.key === "SHARED/rich-after-rejection");
+if (richIndex >= 0) {
+  const runs = findAll(tables[richIndex], "w:r");
+  for (const [word, property] of [["Alpha", "w:b"], ["Beta", "w:i"], ["ONE", "w:smallCaps"]]) {
+    const run = runs.find(r => findAll(r, "w:t").map(textOf).join("").includes(word));
+    if (!run || !child(child(run, "w:rPr"), property)) problems.push(`shared formatting missing: ${word} ${property}`);
+  }
+}
 
 // Numbers: UpdateAllFields ran after every insertion, so the caches count 1..N.
 const numbers = [];
@@ -845,6 +879,134 @@ builder.CloseFile();
   console.log(`--- footnote: untypeset ${JSON.stringify((log.untypeset || []).map((s) => s.slice(0, 40)))}; ` +
     `typeset ${JSON.stringify((log.typeset || "").slice(0, 40))}`);
 }
+
+// Converter 1.5 tables: preserve shared rows, padding-free morphemes and numbers.
+const newGlosses = JSON.parse(readFileSync(join(ROOT, "tests/fixtures/linguexx15-untypeset.json"), "utf-8"));
+for (const [name, fixture] of Object.entries(newGlosses)) {
+  const source = join(OUT, `new-${name}.tex`), input = join(OUT, `new-${name}.docx`);
+  const output = join(OUT, `new-${name}-back.docx`);
+  writeFileSync(source, "\\documentclass{article}\\usepackage{linguexx}\\begin{document}\n" + fixture.source + "\\end{document}");
+  execFileSync("python3", ["-m", "linguexx2odt", source, "--to", "docx", "-o", input, "--text-width", String(fixture.width || 17), "-q"],
+    {cwd: ROOT, env: {...process.env, PYTHONPATH: join(ROOT, "src")}, stdio: ["ignore", "ignore", "pipe"]});
+  run(`builder.OpenFile(${JSON.stringify(input)});
+${bundle}
+if (typeof Asc.scope !== "object" || !Asc.scope) Asc.scope = {};
+var doc = Api.GetDocument(), log = {};
+try {
+  var table = doc.GetAllTables()[0];
+  // Derived styles occur when opening ODT-derived DOCX and must retain
+  // their structural role. Exercise that path on the no-head case.
+  if (${JSON.stringify(name)} === "shared-no-head") {
+    var parent = doc.GetStyle("LxVariant"), derived = doc.CreateStyle("CustomVariant");
+    derived.SetBasedOn(parent);
+    for (var rr = 0; rr < table.GetRowsCount(); rr++) for (var cc = 0; cc < table.GetRow(rr).GetCellsCount(); cc++) {
+      var pp = table.GetRow(rr).GetCell(cc).GetContent().GetElement(0);
+      if (pp.GetStyle().GetName() === "LxVariant") pp.SetStyle(derived);
+    }
+  }
+  table.GetRow(1).GetCell(0).GetContent().GetElement(0).GetRange().Select();
+  var read = LinguExx.readExampleTable();
+  var u = LinguExx.untypesetJob(read);
+  if (u.refusal) throw new Error(u.refusal);
+  log.lines = u.back.lines.map(function (runs) { return runs.map(function (r) { return r.text; }).join(""); });
+  log.number = u.back.number;
+  Asc.scope.back = u.back;
+  LinguExx.writeLines();
+  log.after = doc.GetBookmarkRange(log.number.bookmark).GetText().trim();
+  if (${JSON.stringify(name)} === "shared-banded") {
+    doc.GetFinalSection().SetPageSize(6236, 16838);
+    doc.GetFinalSection().SetPageMargins(567, 567, 567, 567);
+  }
+  var at = u.back.pos, count = u.back.lines.length;
+  doc.GetElement(at).GetRange().ExpandTo(doc.GetElement(at + count - 1).GetRange()).Select();
+  var prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 70);
+  log.retypeset = prep.refusal || "accepted";
+  if (prep.refusal) throw new Error(prep.refusal);
+  for (var cycle = 0; cycle < 2; cycle++) {
+    Asc.scope.job = prep.job;
+    var inserted = LinguExx.insertExample();
+    if (inserted.error) throw new Error(inserted.error);
+    log.sameBookmark = prep.job.bookmark === log.number.bookmark;
+    var built = doc.GetAllTables()[0];
+    built.GetRow(1).GetCell(0).GetContent().GetElement(0).GetRange().Select();
+    var recovered = LinguExx.untypesetJob(LinguExx.readExampleTable());
+    if (recovered.refusal) throw new Error(recovered.refusal);
+    log.recovered = recovered.back.lines.map(function (runs) { return runs.map(function (r) { return r.text; }).join(""); });
+    if (cycle === 0) {
+      Asc.scope.back = recovered.back; LinguExx.writeLines();
+      var pos = recovered.back.pos, n = recovered.back.lines.length;
+      doc.GetElement(pos).GetRange().ExpandTo(doc.GetElement(pos + n - 1).GetRange()).Select();
+      prep = LinguExx.prepareJob(LinguExx.readSelection(), 1e12 + 71);
+      if (prep.refusal) throw new Error(prep.refusal);
+    }
+  }
+  log.tablesAfter = doc.GetAllTables().length;
+} catch (e) { log.error = String(e && e.stack || e); }
+${name === "shared-banded" ? `builder.SaveFile("pdf", ${JSON.stringify(join(OUT, "shared-authored-narrow.pdf"))});` : ""}
+var result = Api.CreateParagraph(); result.AddText("LXRESULT" + JSON.stringify(log)); doc.AddElement(0, result);
+builder.SaveFile("docx", ${JSON.stringify(output)});
+builder.CloseFile();
+`, `new-${name}`);
+  const first = findAll(parse(unzip(output, "word/document.xml")), "w:p")[0];
+  const log = JSON.parse(findAll(first, "w:t").map(textOf).join("").replace(/^LXRESULT/, ""));
+  if (log.error) problems.push(`1.5 ${name}: ${log.error}`);
+  if (JSON.stringify(log.lines) !== JSON.stringify(fixture.lines)) problems.push(`1.5 ${name}: lines ${JSON.stringify(log.lines)}`);
+  if (log.number?.shown !== "1" || log.after !== "1") problems.push(`1.5 ${name}: number not preserved`);
+  if (log.retypeset !== "accepted") problems.push(`1.5 ${name}: unexpected typeset result ${log.retypeset}`);
+  if (log.tablesAfter !== 1) problems.push(`1.5 ${name}: shared table was not rebuilt`);
+  if (!log.sameBookmark) problems.push(`1.5 ${name}: bookmark identity changed`);
+  if (JSON.stringify(log.recovered) !== JSON.stringify(fixture.lines)) problems.push(`1.5 ${name}: round-trip lines ${JSON.stringify(log.recovered)}`);
+  if (name.startsWith("shared") && !log.error) {
+    const persisted = join(OUT, `new-${name}-reopened.docx`);
+    run(`builder.OpenFile(${JSON.stringify(output)});
+${bundle}
+var doc = Api.GetDocument(), result = {};
+try {
+  var table = doc.GetAllTables()[0];
+  table.GetRow(1).GetCell(0).GetContent().GetElement(0).GetRange().Select();
+  var u = LinguExx.untypesetJob(LinguExx.readExampleTable());
+  result.refusal = u.refusal;
+  if (u.back) result.lines = u.back.lines.map(function (runs) { return runs.map(function (r) {return r.text;}).join(""); });
+} catch (e) { result.error = String(e); }
+var p = Api.CreateParagraph(); p.AddText("LXREOPEN" + JSON.stringify(result)); doc.AddElement(0, p);
+builder.SaveFile("docx", ${JSON.stringify(persisted)});
+builder.CloseFile();`, `new-${name}-reopen`);
+    const firstReopened = findAll(parse(unzip(persisted, "word/document.xml")), "w:p")[0];
+    const result = JSON.parse(findAll(firstReopened, "w:t").map(textOf).join("").replace(/^LXREOPEN/, ""));
+    if (result.error || result.refusal || JSON.stringify(result.lines) !== JSON.stringify(fixture.lines)) {
+      problems.push(`1.5 ${name}: reopen ${JSON.stringify(result)}`);
+    }
+    const reversed = join(OUT, `new-${name}-reversed.tex`);
+    execFileSync("python3", ["-m", "linguexx2odt.reverse", output, "-o", reversed, "-q"],
+      {cwd: ROOT, env: {...process.env, PYTHONPATH: join(ROOT, "src")}, stdio: ["ignore", "ignore", "pipe"]});
+    const tex = readFileSync(reversed, "utf8");
+    const expectedTier = fixture.lines.find(line => line.startsWith(sharedCommand));
+    if (!tex.includes(expectedTier)) problems.push(`1.5 ${name}: reverse conversion changed shared slots`);
+  }
+  console.log(`--- 1.5 ${name}: ${log.lines?.length} lines, number ${log.after}`);
+}
+
+// Coordinates from the editor's own narrow-page PDF, rather than table widths alone.
+const bbox = join(OUT, "shared-authored-narrow.xml");
+execFileSync("pdftotext", ["-bbox", join(OUT, "shared-authored-narrow.pdf"), bbox]);
+const pdf = parse(readFileSync(bbox, "utf8"));
+const words = findAll(pdf, "word");
+const starts = Object.fromEntries(words.map(word => [textOf(word), Number(word.attrs.xMin)]));
+for (const aligned of [["Beta", "FIRST", "ONE"], ["Longer", "SECOND", "TWO"], ["Delta", "THIRD", "THREE"]]) {
+  const xs = aligned.map(word => starts[word]);
+  if (xs.some(x => !Number.isFinite(x)) || Math.max(...xs) - Math.min(...xs) > 2) {
+    problems.push(`shared PDF: slot alignment ${aligned}: ${xs}`);
+  }
+}
+const annotations = words.filter(w => ["ANNA", "ANNB"].includes(textOf(w))).map(w => Number(w.attrs.xMin));
+if (!annotations.length || Math.max(...annotations) - Math.min(...annotations) > 2) problems.push("shared PDF: annotation positions differ");
+if (![starts["Translation."], starts["a."]].every(Number.isFinite) || Math.abs(starts["Translation."] - starts["a."]) > 2) problems.push("shared PDF: translation indent differs from marker");
+if (!Number.isFinite(starts["*Cappa"]) || starts["*Cappa"] >= starts["Delta"]) problems.push("shared PDF: judgment does not hang to the left");
+const pageWidth = Number(findAll(pdf, "page")[0].attrs.width);
+for (const word of words.filter(w => /^(Alpha|Beta|Longer|Delta|FIRST|SECOND|THIRD|ONE|TWO|THREE|ANNA|ANNB)$/.test(textOf(w)))) {
+  if (Number(word.attrs.xMax) > pageWidth || Number(word.attrs.xMin) < 0) problems.push(`shared PDF: overflow ${textOf(word)}`);
+}
+
 
 if (problems.length) {
   console.log(problems.slice(0, 40).map((p) => `    FAIL: ${p}`).join("\n"));

@@ -69,6 +69,9 @@ export function leadColumns(rows) {
         judgment = true;
         lead = i + 1;
         break;
+      } else if (row[i].style === NAMES.VARIANT_PARA) {
+        lead = i;
+        break;
       } else if (row[i].style === NAMES.TRANS_PARA && lead < 0) {
         lead = i;
       }
@@ -89,13 +92,73 @@ function rowText(row, lead, brace) {
   const cells = row.slice(lead).filter((c) => c.style !== NAMES.ANNOT_PARA);
   const out = [];
   for (const c of cells) {
-    let text = trimTagged(c.text);
+    let text = trimTagged(c.morpheme ? c.text.replace(/\t/g, "") : c.text);
     const plain = strip(text);
     if (!plain) continue;
     if (brace && cells.length > 1 && plain.includes(" ")) text = `{${text}}`;
     out.push(text);
   }
   return out.join(" ");
+}
+
+/** Shared rows remain explicit, for hosts that enable shared authoring.
+ * Preserve gaps and formats,
+ * and join each continuation band onto the same variants and gloss tiers. */
+function readCommon(rows, lead, judgment) {
+  const variants = new Map();
+  const glosses = [];
+  const head = [], translations = [];
+  let band = [], firstMarker = "";
+  const textOf = (c) => trimTagged(c.morpheme ? c.text.replace(/\t/g, "") : c.text);
+  const wordsOf = (row) => row.slice(lead).filter((c) => c.style !== NAMES.ANNOT_PARA);
+  function flush() {
+    let count = 0;
+    for (const row of band) wordsOf(row).forEach((c, i) => {
+      if (strip(c.text).trim()) count = Math.max(count, i + 1);
+    });
+    let tier = 0;
+    for (const row of band) {
+      const cells = wordsOf(row);
+      const words = Array.from({length: count}, (_, i) => {
+        const text = cells[i] ? textOf(cells[i]) : "";
+        return !strip(text) ? "{}" : /\s/.test(strip(text)) ? `{${text}}` : text;
+      });
+      if (has(row, NAMES.VARIANT_PARA)) {
+        const marker = strip(row[1].text).trim();
+        if (!variants.has(marker)) variants.set(marker, {
+          prefix: marker + " " + (judgment ? strip(row[lead - 1].text).trim() : ""),
+          words: [], annot: row.find((c) => c.style === NAMES.ANNOT_PARA)?.text || "",
+        });
+        variants.get(marker).words.push(...words);
+      } else {
+        glosses[tier] ||= [];
+        glosses[tier++].push(...words);
+      }
+    }
+    band = [];
+  }
+  for (const row of rows) {
+    if (has(row, NAMES.VARIANT_PARA)) {
+      const marker = strip(row[1].text).trim();
+      if (marker === firstMarker && band.length) flush();
+      if (!firstMarker) firstMarker = marker;
+      band.push(row);
+    } else if (has(row, NAMES.COMMON_PARA) || has(row, NAMES.COMMON_BAND_PARA)) {
+      band.push(row);
+    } else if (has(row, NAMES.TRANS_PARA)) {
+      translations.push(rowText(row, 1, false));
+    } else if (row.length === 2 && !has(row, NAMES.SPACE_ABOVE) && !has(row, NAMES.SPACE_BELOW)) {
+      head.push(trimTagged(row[1].text));
+    }
+  }
+  flush();
+  if (!variants.size || !glosses.length) return {error: "That shared gloss is missing its variant or gloss rows; it was left unchanged."};
+  const lines = [...head];
+  for (const v of variants.values()) {
+    lines.push(v.prefix + v.words.join(" ") + (strip(v.annot).trim() ? `\\exannot{${trimTagged(v.annot)}}` : ""));
+  }
+  lines.push(...glosses.map((words) => "\\CommonGloss " + words.join(" ")), ...translations);
+  return {lines};
 }
 
 /**
@@ -117,6 +180,9 @@ export function readTable(rows) {
     };
   }
 
+  if (rows.some((row) => has(row, NAMES.COMMON_PARA) || has(row, NAMES.COMMON_BAND_PARA))) {
+    return readCommon(rows, lead, judgment);
+  }
   const out = [];
   let base = 0;
   let tier = 0;

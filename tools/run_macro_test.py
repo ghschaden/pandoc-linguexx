@@ -2280,6 +2280,8 @@ def check_untypeset(ctx, out: Path, profile: Path) -> int:
     bad += check_untypeset_references(ctx, out, profile)
     bad += check_untypeset_adjacent(ctx)
     bad += check_untypeset_converted(ctx, out)
+    bad += check_untypeset_linguexx15(ctx, out)
+    bad += check_shared_authoring(ctx, out)
     bad += check_untypeset_converted_charstyles(ctx, out)
     bad += check_untypeset_notes(ctx, out)
     bad += check_untypeset_annot(ctx, out)
@@ -2445,6 +2447,194 @@ def check_untypeset_converted(ctx, out: Path) -> int:
         return 1
     print("    ok — a converted document untypesets and rebuilds, bands and all")
     return 0
+
+
+def check_shared_authoring(ctx, out: Path) -> int:
+    """Fresh input, rejection atomicity, repeated cycles and persisted structures."""
+    desktop = ctx.ServiceManager.createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+    cases = [
+        ["a. Alpha {} Cappa", "b. {} {two words} Delta", r"\CommonGloss ONE TWO THREE"],
+        ["Heading", r"a. *Alpha {} Cappa\exannot{ANNA}",
+         r"b. Beta Longer Delta\exannot{ANNB}", r"\CommonGloss FIRST SECOND THIRD",
+         r"\CommonGloss ONE TWO THREE", "Unquoted translation."],
+        ["a. Alpha", "b. Beta Longer Delta", r"\CommonGloss ONE TWO THREE"],
+    ]
+    cases.append(cases[1])  # same content, forced onto a narrow page
+    invalid = [
+        [r"\CommonGloss ONE"],
+        ["a. Alpha", r"\CommonGloss"],
+        ["a. Alpha", "a. Beta", r"\CommonGloss ONE"],
+        ["a. Alpha", r"\CommonGloss ONE", "b. Beta"],
+        ["a. Alpha", "extra tier", r"\CommonGloss ONE"],
+        ["a. Alpha", r"\CommonGloss ONE", "Translation.", r"\CommonGloss TWO"],
+        ["a. Alpha", r"\CommonGloss ONE", "Translation.", "Extra translation."],
+        ["a. {Alpha", r"\CommonGloss ONE"],
+        ["a. Alpha}", r"\CommonGloss ONE"],
+    ]
+    bad = 0
+    for lines in invalid:
+        doc = make_doc(ctx, lines)
+        try:
+            before = doc.getText().getString()
+            assert run(ctx), "invalid input accepted"
+            assert doc.getText().getString() == before
+            assert doc.getTextTables().getCount() == 0
+            assert not numex_ids(doc)
+            text = doc.getText()
+            text.setString("")
+            cur = text.createTextCursor()
+            for line_index, line in enumerate(cases[0]):
+                if line_index:
+                    text.insertControlCharacter(cur, PARAGRAPH_BREAK, False)
+                text.insertString(cur, line, False)
+            select_paras(doc, 0, len(cases[0]) - 1)
+            assert not run(ctx), "valid input after failure rejected"
+        except AssertionError as exc:
+            bad += 1
+            print(f"    FAIL: shared rejection {lines}: {exc}", flush=True)
+        finally:
+            doc.dispose()
+    for index, lines in enumerate(cases):
+        doc = make_doc(ctx, lines)
+        if index == 3:
+            page = doc.getStyleFamilies().getByName("PageStyles").getByName(doc.getCurrentController().getViewCursor().PageStyleName)
+            page.Width = 11000
+            page.LeftMargin = 1000
+            page.RightMargin = 1000
+        try:
+            expected_formats = {}
+            if index == 1:
+                for word, kind in (("Alpha", "bold"), ("Longer", "italic"), ("FIRST", "smallcaps")):
+                    search = doc.createSearchDescriptor()
+                    search.SearchString = word
+                    found = doc.findFirst(search)
+                    set_format(found, kind)
+                    expected_formats[word] = char_format(found)[:3]
+            original = doc.getText().getString().strip()
+            assert not run(ctx)
+            doc.getUndoManager().undo()
+            assert doc.getTextTables().getCount() == 0
+            assert doc.getText().getString().strip() == original
+            select_paras(doc, 0, len(lines) - 1)
+            assert not run(ctx)
+            ids = numex_ids(doc)
+            if index == 3:
+                table = doc.getTextTables().getByIndex(0)
+                order = []
+                for row in range(1, table.getRows().getCount() + 1):
+                    styles = {table.getCellByName(cell).getText().createTextCursor().ParaStyleName
+                              for cell in table.getCellNames() if re.search(r"[0-9]+$", cell)[0] == str(row)}
+                    for structural in ("LxVariant", "LxCommonGloss", "LxCommonGlossBand"):
+                        if structural in styles:
+                            order.append(structural)
+                assert "LxCommonGlossBand" in order, order
+                assert len(order) % 4 == 0, order
+                for start in range(0, len(order), 4):
+                    assert order[start:start + 2] == ["LxVariant", "LxVariant"], order
+                    assert order[start + 2:start + 4] == [
+                        "LxCommonGloss" if start == 0 else "LxCommonGlossBand", "LxCommonGloss"], order
+                pdf = out / "authored-shared-narrow.pdf"
+                doc.storeToURL(pdf.as_uri(), (PropertyValue("FilterName", 0, "writer_pdf_Export", 0),))
+                positioned = words_of(pdf)
+                assert all(0 <= x <= 110 / 25.4 * 72 for _, x, _ in positioned)
+                starts = {word: x for word, x, _ in positioned}
+                for aligned in (("Beta", "FIRST", "ONE"), ("Longer", "SECOND", "TWO"),
+                                ("Delta", "THIRD", "THREE")):
+                    xs = [starts[word] for word in aligned]
+                    assert max(xs) - min(xs) < 2, (aligned, xs)
+                assert starts["*Cappa"] < starts["Delta"]
+                annotations = [x for word, x, _ in positioned if word in ("ANNA", "ANNB")]
+                assert max(annotations) - min(annotations) < 2
+                assert abs(starts["Unquoted"] - starts["a."]) < 2
+            for cycle in range(2):
+                table = doc.getTextTables().getByIndex(0)
+                vc = doc.getCurrentController().getViewCursor()
+                vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+                assert not run(ctx, "UntypesetSelectionQuiet")
+                got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in body_lines(doc) if ln.strip()]
+                if index != 2:  # shorter rows normalize to padded slots
+                    assert got == lines, (got, lines)
+                assert numex_ids(doc) == ids
+                select_paras(doc, 0, len(got) - 1)
+                assert not run(ctx)
+            for word, expected_format in expected_formats.items():
+                search = doc.createSearchDescriptor()
+                search.SearchString = word
+                actual_format = char_format(doc.findFirst(search))[:3]
+                assert actual_format == expected_format, (word, actual_format, expected_format)
+            for suffix, filter_name in (("odt", "writer8"), ("docx", "Office Open XML Text")):
+                path = out / f"authored-shared-{index}.{suffix}"
+                doc.storeToURL(path.as_uri(), (PropertyValue("FilterName", 0, filter_name, 0),))
+                reopened = desktop.loadComponentFromURL(path.as_uri(), "_blank", 0, ())
+                try:
+                    table = reopened.getTextTables().getByIndex(0)
+                    vc = reopened.getCurrentController().getViewCursor()
+                    vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+                    assert not run(ctx, "UntypesetSelectionQuiet")
+                    recovered = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in body_lines(reopened) if ln.strip()]
+                    assert recovered == got, (suffix, recovered, got)
+                finally:
+                    reopened.dispose()
+                if suffix == "docx" and index == 3:
+                    from linguexx2odt.reverse import main_docx
+                    reversed_path = out / "authored-shared-reversed.tex"
+                    assert main_docx([str(path), "-o", str(reversed_path)]) == 0
+                    source = reversed_path.read_text()
+                    assert r"\CommonGloss FIRST SECOND THIRD" in source, source
+                    assert r"*Alpha {} Cappa" in source, source
+        except AssertionError as exc:
+            bad += 1
+            print(f"    FAIL: fresh shared {index}: {exc}", flush=True)
+        finally:
+            doc.dispose()
+    if not bad:
+        print("    ok — shared authoring, invalid input, undo, repeated cycles and ODT/DOCX persistence", flush=True)
+    return bad
+
+
+def check_untypeset_linguexx15(ctx, out: Path) -> int:
+    """Read actual converter tables, including inherited ODF paragraph styles."""
+    cases = json.loads((ROOT / "tests/fixtures/linguexx15-untypeset.json").read_text())
+    desktop = ctx.ServiceManager.createInstanceWithContext("com.sun.star.frame.Desktop", ctx)
+    bad = 0
+    for name, case in cases.items():
+        tex = out / f"new-{name}.tex"
+        tex.write_text(r"\documentclass{article}\usepackage{linguexx}\begin{document}" +
+                       "\n" + case["source"] + r"\end{document}")
+        odt = tex.with_suffix(".odt")
+        subprocess.run([sys.executable, "-m", "linguexx2odt.cli", str(tex), "-o", str(odt),
+                        "--text-width", str(case.get("width", 17)), "-q"], check=True,
+                       env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+        doc = desktop.loadComponentFromURL(odt.as_uri(), "_blank", 0, ())
+        try:
+            before = numex_ids(doc)
+            table = doc.getTextTables().getByIndex(0)
+            vc = doc.getCurrentController().getViewCursor()
+            vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+            msg = run(ctx, "UntypesetSelectionQuiet")
+            got = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in body_lines(doc) if ln.strip()]
+            assert not msg, msg
+            assert got == case["lines"], (got, case["lines"])
+            assert numex_ids(doc) == before, "number identity changed"
+            assert doc.getTextTables().getCount() == 0, "table was not removed"
+            select_paras(doc, 0, len(got) - 1)
+            again = run(ctx)
+            assert not again, again
+            assert doc.getTextTables().getCount() == 1
+            if name.startswith("shared"):
+                table = doc.getTextTables().getByIndex(0)
+                vc.gotoRange(table.getCellByName("A2").getText().getStart(), False)
+                assert not run(ctx, "UntypesetSelectionQuiet")
+                recovered = [NUMBER_AT_FRONT.sub("", ln).strip() for ln in body_lines(doc) if ln.strip()]
+                assert recovered == got, (recovered, got)
+            assert numex_ids(doc) == before
+            print(f"    ok — 1.5 {name}: text and number preserved", flush=True)
+        except AssertionError as exc:
+            bad += 1
+            print(f"    FAIL: 1.5 {name}: {exc}", flush=True)
+        finally:
+            doc.dispose()
+    return bad
 
 
 def check_untypeset_notes(ctx, out: Path) -> int:
@@ -2927,6 +3117,8 @@ def check_undo(ctx) -> int:
     for what, macro, lines in (
             ("example", "GlossSelectionQuiet",
              ["Esto es un ejemplo", "this is a example", "'An example.'"]),
+            ("shared", "GlossSelectionQuiet", ["a. Alpha {} Cappa", "b. Beta Longer Delta",
+                                              r"\CommonGloss ONE TWO THREE"]),
             ("tree", "TreeSelectionQuiet", ["[DP [D the] [NP [N tree]]]"]),
             ("tree with movement", "TreeSelectionQuiet",
              ["[CP [DP,name=w what] [TP [V saw] [DP,name=t __]]]",

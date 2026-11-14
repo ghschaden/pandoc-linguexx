@@ -54,9 +54,9 @@ export function runsOf(cell, formats = []) {
  * tree item has no tiers and is planned as an unglossed one.  *head* is
  * the line before the first sub-example, parseLines's head: ir.Example.head.
  */
-export function toExample(items, index = 0, head = "") {
+export function toExample(items, index = 0, head = "", shared = null) {
   const body = (it) => {
-    const glossed = it.tiers.length > 1;
+    const glossed = Boolean(shared) || it.tiers.length > 1;
     const b = {
       judgment: it.judgment,
       text: glossed ? "" : (it.tiers[0] || []).join(" "),
@@ -75,6 +75,7 @@ export function toExample(items, index = 0, head = "") {
   }
   return {
     index, customLabel: "", body: null, head,
+    ...(shared ? {shared} : {}),
     items: items.map((it, k) => ({ level: 1, ordinal: k, marker: it.marker, body: body(it) })),
   };
 }
@@ -259,14 +260,22 @@ export function planTable(ex, layout, options = {}) {
       annotX - sum(lead) - layout.annot_sep_em * emCm(layout));
   }
 
-  // One plan per body, each measured and banded on its own words.
-  let plans = bodies.map(([, b]) => {
-    if (b.tiers.length) {
-      const w = wordWidths(b, layout, runs);
-      return [w, bands(w, available, layout, split, warn)];
-    }
-    return [[], []];
-  });
+  // Shared groups measure and pack all rows together. Ordinary bodies keep
+  // independent widths and band boundaries.
+  let plans;
+  if (ex.shared) {
+    const tiers = [...bodies.flatMap(([, body]) => body.tiers), ...ex.shared.tiers];
+    const w = wordWidths({tiers}, layout, runs);
+    plans = [[w, bands(w, available, layout, split, warn)]];
+  } else {
+    plans = bodies.map(([, b]) => {
+      if (b.tiers.length) {
+        const w = wordWidths(b, layout, runs);
+        return [w, bands(w, available, layout, split, warn)];
+      }
+      return [[], []];
+    });
+  }
   if (!plans.some(([w]) => w.length)) plans = bodies.map(() => [[available], [[0, 1]]]);
 
   const grid = new Grid(plans);

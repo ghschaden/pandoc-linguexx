@@ -209,9 +209,32 @@ New in the converter's **1.5 support**:
 `docx2linguexx` and `odt2linguexx` recover shared glosses and remove morpheme
 padding without inserting spaces into words. They recover the text and
 shared-row structure; language declarations and the morpheme-alignment
-setting are not reconstructed. Use these commands for the way back: the
-Writer macro's and editor add-ins' **Untypeset** do not support these new
-layouts. Their interactive typesetting syntax is unchanged.
+setting are not reconstructed.
+
+The Writer macro and Word/OnlyOffice add-ins also **Untypeset** these layouts:
+shared tiers come back as explicit `\CommonGloss …` lines, variant letters,
+empty `{}` columns and annotations are preserved, and continuation bands are
+joined. Morpheme-padding tabs are removed without adding spaces inside words;
+the example's number is retained. Ordinary morpheme glosses can then be
+re-typeset with word alignment. Writer, Word and OnlyOffice also author shared
+glosses: select distinct marked variants with one object line each, followed by consecutive `\CommonGloss` tiers and an optional
+final translation, then run **Typeset example**. For example:
+
+```text
+Optional heading
+a. *Alpha {} Cappa\exannot{ANNA}
+b. Beta Longer Delta\exannot{ANNB}
+\CommonGloss FIRST SECOND THIRD
+\CommonGloss ONE TWO THREE
+Translation.
+```
+
+`{two words}` is one slot; `{}` preserves a gap. Short rows are padded on the
+right. All variants and tiers wrap together into bands. A translation after
+the shared tiers need not be quoted. One shared group per selection is
+supported; RTL, morpheme alignment, language declarations and mixtures with
+ordinary groups or trees are outside this authoring syntax.
+For complete LaTeX output, use the command-line reverse converters.
 
 The Writer macro knows the construct too: it builds the same column from
 `\exannot{…}` typed in Writer, and *Untypeset* gives the wrapper back

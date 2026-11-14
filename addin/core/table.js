@@ -42,6 +42,21 @@ export function tableRows(ex, plan) {
   const fillerWidth = () => (p.filler ? widths[p.lead.length + p.columns.length] : 0);
   const cell = (widthCm, content, span = 1, style = NAMES.CELL_PARA) => ({ widthCm, span, style, content });
 
+  // A band's slots span physical grid columns; unused space is one cell.
+  const bandCells = (cells, [start, stop], style, k = 0) => {
+    const out = [];
+    let covered = 0;
+    for (let j = start; j < stop; j++) {
+      const span = p.grid.span(k, j);
+      out.push(cell(sum(p.columns.slice(covered, covered + span)),
+        j < cells.length ? text(cells[j]) : empty, span, style));
+      covered += span;
+    }
+    const remaining = p.columns.length + p.filler - covered;
+    if (remaining > 0) out.push(cell(sum(p.columns.slice(covered)) + fillerWidth(), empty, remaining, style));
+    return out;
+  };
+
   function bodyRows(marker, body, first, k) {
     const rows = [];
     let headUsed = false;
@@ -64,29 +79,13 @@ export function tableRows(ex, plan) {
     const bodySpan = (content, style = NAMES.CELL_PARA) =>
       cell(sum(p.columns) + fillerWidth(), content, ncols, style);
 
-    // One tier's cells for one band, padded to the grid by SPAN, each as
-    // wide as the grid columns it covers (emit_docx._band_cells).
-    const bandCells = (cells, [start, stop], style) => {
-      const out = [];
-      let covered = 0;
-      for (let j = start; j < stop; j++) {
-        const span = p.grid.span(k, j);
-        out.push(cell(sum(p.columns.slice(covered, covered + span)),
-          j < cells.length ? text(cells[j]) : empty, span, style));
-        covered += span;
-      }
-      const remaining = p.columns.length + p.filler - covered;
-      if (remaining > 0) out.push(cell(sum(p.columns.slice(covered)) + fillerWidth(), empty, remaining, style));
-      return out;
-    };
-
     if (body.tiers.length) {
       p.grid.bandsOf(k).forEach((band, b) => {
         body.tiers.forEach((tier, tr) => {
           // A continuation band's first row is marked: nothing else in the
           // finished table can say that a band, not a tier, begins here.
           const style = b && !tr ? NAMES.BAND_PARA : NAMES.CELL_PARA;
-          rows.push([...leadCells(!headUsed), ...bandCells(tier, band, style), ...annotCell(!headUsed)]);
+          rows.push([...leadCells(!headUsed), ...bandCells(tier, band, style, k), ...annotCell(!headUsed)]);
           headUsed = true;
         });
       });
@@ -114,9 +113,32 @@ export function tableRows(ex, plan) {
     rows.push([cell(widths[0], { kind: "number" }),
       cell(sum(widths.slice(1)), text(ex.head), widths.length - 1)]);
   }
-  p.bodies.forEach(([marker, body], k) => {
-    rows = rows.concat(bodyRows(marker, body, k === 0 && !head, k));
-  });
+  if (ex.shared) {
+    p.grid.bandsOf(0).forEach((band, b) => {
+      const leading = (marker, judgment, number) => {
+        const out = [cell(p.lead[0], number ? {kind: "number"} : empty)];
+        if (p.hasMarker) out.push(cell(p.lead[1], text(marker)));
+        if (p.hasJudgment) out.push(cell(p.lead[p.lead.length - 1], text(judgment), 1, NAMES.JUDG_PARA));
+        return out;
+      };
+      const annotation = (annot) => p.hasAnnot
+        ? [cell(widths[widths.length - 1], text(annot), 1, NAMES.ANNOT_PARA)] : [];
+      p.bodies.forEach(([marker, body], k) => {
+        rows.push([...leading(marker, body.judgment, !head && b === 0 && k === 0),
+          ...bandCells(body.tiers[0], band, NAMES.VARIANT_PARA), ...annotation(body.annot)]);
+      });
+      ex.shared.tiers.forEach((tier, t) => {
+        const style = b > 0 && t === 0 ? NAMES.COMMON_BAND_PARA : NAMES.COMMON_PARA;
+        rows.push([...leading("", "", false), ...bandCells(tier, band, style), ...annotation("")]);
+      });
+    });
+    if (ex.shared.translation) rows.push([cell(widths[0], empty),
+      cell(sum(widths.slice(1)), text(ex.shared.translation), widths.length - 1, NAMES.TRANS_PARA)]);
+  } else {
+    p.bodies.forEach(([marker, body], k) => {
+      rows = rows.concat(bodyRows(marker, body, k === 0 && !head, k));
+    });
+  }
   // Spacer rows: the space around an example is a style's height, which a
   // user can change for the whole document from one place.
   const spacer = (style) => [cell(sum(widths), empty, widths.length, style)];

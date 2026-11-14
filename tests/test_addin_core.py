@@ -209,3 +209,9 @@ def test_every_tree_fixture_has_the_macros_layout() -> None:
         f"tree fixtures without a recorded macro layout: "
         f"{sorted(cases - set(data['laid_out']))}; layouts of no fixture: "
         f"{sorted(set(data['laid_out']) - cases)}")
+
+
+def test_the_linguexx15_untypeset_fixtures_are_converter_output() -> None:
+    result = subprocess.run([sys.executable, str(ROOT / 'tools/editor_gloss_oracle.py')],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
