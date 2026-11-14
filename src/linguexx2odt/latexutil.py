@@ -283,7 +283,7 @@ def split_top(s: str, pattern: re.Pattern[str]) -> list[tuple[str, str]]:
     return out
 
 
-def split_cells(tier: str) -> tuple[str, ...]:
+def split_cells(tier: str, *, keep_braces: bool = False) -> tuple[str, ...]:
     """Split a gloss tier into columns.
 
     Whitespace separates columns at brace depth 0; a ``{braced group}``
@@ -302,7 +302,7 @@ def split_cells(tier: str) -> tuple[str, ...]:
         if not tok:
             braced_whole = False
             return
-        if braced_whole and tok.startswith("{") and tok.endswith("}"):
+        if not keep_braces and braced_whole and tok.startswith("{") and tok.endswith("}"):
             tok = tok[1:-1].strip()
         cells.append(tok)
         braced_whole = False
@@ -469,6 +469,7 @@ def scan_brackets(src: str, warn=None) -> Brackets:
     # \Exalph and \Exroman: \let to a counter command, or defined as one.
     def numbering(name: str, value: str, at: int) -> None:
         style = value.strip().lstrip("\\")
+        style = {"ExLatinAlph": "alph"}.get(style, style)
         if style not in _COUNTER_STYLES:
             if warn:
                 warn(f"\\{name} is set to {value.strip()!r}, which is not a "

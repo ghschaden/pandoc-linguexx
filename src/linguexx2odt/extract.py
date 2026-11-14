@@ -33,6 +33,7 @@ import re
 from dataclasses import dataclass, field, replace
 
 from .inline import KNOWN_COMMANDS
+from .gloss import COMMANDS as GLOSS_COMMANDS, Settings, morphemes
 from .ir import Body, Example, Item, Tier
 from .macros import Macro
 from .macros import collect as collect_macros
@@ -66,6 +67,8 @@ from .latexutil import (
 #: never faces because it reflows and an ODT table does not.  Decided
 #: 2026-09-25: not worth that, for a placement.
 _UNSUPPORTED_SETTINGS = {
+    "GlossRTL": "right-to-left gloss layout is not supported by this converter",
+    "glscript": "native-script gloss lines are not supported by this converter",
     "GlossTransSide":
         "sets the free translation in a column beside the gloss; converted "
         "as an ordinary example, with the translation below it",
@@ -177,6 +180,7 @@ AVOID = ("neither .odt nor .docx can represent it, so do not use it in a "
 RELATIVE = {
     "Next": (1, False), "pNext": (1, True),
     "NNext": (2, False), "pNNext": (2, True),
+    "TextNext": (1, False), "pTextNext": (1, True),
     "Last": (-1, False), "pLast": (-1, True),
     "LLast": (-2, False), "pLLast": (-2, True),
 }
@@ -188,13 +192,14 @@ RELATIVE = {
 #: against what pdflatex prints: "(3a--c)", but "(1--3a)" when the end is a
 #: plain ``\label``.  The brackets are literal parentheses there, not
 #: ``\ExLBr``, and the dash is an en dash (``\rangedash``).
-RANGES = {"refrange": False, "prefrange": True}
+RANGES = {"refrange": False, "prefrange": True, "Refrange": False}
 RANGE_DASH = "\u2013"
 
 #: linguexx's own commands, which a document's \newcommand cannot replace
 #: either -- \newcommand\gl stops LaTeX with "already defined" (measured).
 LINGUEXX_COMMANDS = frozenset(
-    {*EX_CMDS, "gll", "glll", "glt", "gl", "label", "sublabel", "exannot",
+    {*EX_CMDS, *GLOSS_COMMANDS, "CommonGloss", "gll", "glll", "glt", "gl", "label",
+     "sublabel", "exannot",
      "exsource", "jdg", "lpzg", *RELATIVE, *RANGES, "altn", "altg"})
 
 #: Prefix for the labels those get rewritten to.  They go through the same
@@ -210,6 +215,7 @@ class ParseResult:
     residue: str
     examples: list[Example] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    reference_report: list[str] = field(default_factory=list)
     labels: dict[str, tuple[int, str]] = field(default_factory=dict)
     """label -> (example index, sub-example marker or '')."""
     sublabels: frozenset[str] = frozenset()
@@ -377,7 +383,8 @@ def _pull_judgment(text: str, warn) -> tuple[str, str]:
     return "", text
 
 
-def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], str, str]:
+def _parse_gloss(head: str, shorthand: bool, warn, settings: Settings
+                 ) -> tuple[tuple[Tier, ...], str, str]:
     """Split the pre-``\\glt`` part into tiers.
 
     Returns ``(tiers, before, trailing)``.  ``before`` is what stood in
@@ -411,11 +418,14 @@ def _parse_gloss(head: str, shorthand: bool, warn) -> tuple[tuple[Tier, ...], st
         pieces = pieces[:limit]
         if any(p.strip() for p in extra):
             trailing = " ".join(" ".join(p.split()) for p in extra).strip()
-    tiers = tuple(Tier(cells=split_cells(p)) for p in pieces)
+    tiers = tuple(Tier(cells=split_cells(p), language=settings.languages.get(k + 1, ""),
+                       segments=tuple(morphemes(c) for c in split_cells(p, keep_braces=True))
+                       if settings.morph else ()) for k, p in enumerate(pieces))
     return tiers, before, trailing
 
 
-def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
+def _parse_body(chunk: str, shorthand: bool, warn, settings: Settings | None = None) -> Body:
+    chunk, settings = (settings or Settings()).strip(chunk)
     # Both may be there, one name each.  Only the first was pulled, and
     # the \label stayed in the text: the .docx printed "\label{cv:a}" in
     # front of the sub-example (linguexx's cleveref.tex).
@@ -433,7 +443,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
     head = parts[0][1]
     translation = " ".join(c for sep, c in parts[1:]).strip() if len(parts) > 1 else ""
 
-    tiers, leftover, trailing = _parse_gloss(head, shorthand, warn)
+    tiers, leftover, trailing = _parse_gloss(head, shorthand, warn, settings)
 
     if trailing:
         # A line past the last tier IS the free translation.  linguexx
@@ -463,6 +473,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
         # came back as two words in every judged gloss, where linguexx sets
         # one (measured).
         cells = tiers[0].cells
+        segments = tiers[0].segments
         leftover = leftover.strip()
         judgment = ""
         if leftover:
@@ -471,6 +482,10 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
         elif cells:
             judgment, first = _pull_judgment(cells[0], warn)
             if judgment:
+                if segments:
+                    raw = "".join(segments[0])
+                    _, raw = _pull_judgment(raw, warn)
+                    segments = ((morphemes(raw.strip()),) if raw.strip() else ()) + segments[1:]
                 cells = ((first.strip(),) if first.strip() else ()) + cells[1:]
         rest = tiers[1:]
         if leftover:
@@ -482,10 +497,18 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
             # which neither emitter writes when there are tiers: the run
             # said "kept" and the text was gone.
             cells = (" ".join(leftover.split()),) + cells
-            rest = tuple(Tier(cells=("",) + t.cells) for t in rest)
+            if segments:
+                segments = ((leftover,),) + segments
+            rest = tuple(replace(t, cells=("",) + t.cells,
+                                 segments=(("",),) + t.segments if t.segments else ())
+                         for t in rest)
         return Body(
             judgment=judgment,
-            tiers=(Tier(cells=cells),) + rest,
+            tiers=(replace(tiers[0], cells=cells,
+                           segments=segments),) + rest,
+            morph_align=settings.morph,
+            translation_language=settings.translation or
+                (rest[-1].language if rest else ""),
             translation=translation,
             source=source,
             annot=annot,
@@ -497,6 +520,7 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
     return Body(
         judgment=judgment,
         text=" ".join(text.split()),
+        translation_language=settings.translation,
         translation=translation,
         source=source,
         annot=annot,
@@ -505,7 +529,8 @@ def _parse_body(chunk: str, shorthand: bool, warn) -> Body:
     )
 
 
-def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[str, tuple[Item, ...]]:
+def _parse_items(body_src: str, shorthand: bool, warn, settings: Settings | None = None
+                 ) -> tuple[str, tuple[Item, ...]]:
     """Split an example body into sub-examples, honouring linguexx's
     counter semantics: ``\\a.`` opens a deeper level, any other letter is
     'next item here', ``\\z.`` pops one level.
@@ -513,6 +538,7 @@ def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[str, tuple[Item,
     Returns the text before the first sub-example as well.  It was dropped
     here, with no warning: linguexx prints it on the number's line, and the
     .odt and the .docx did not print it at all."""
+    settings = settings or Settings()
     pieces = split_top(body_src, SUB_RE)
     items: list[Item] = []
     head = ""
@@ -521,6 +547,7 @@ def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[str, tuple[Item,
     for sep, chunk in pieces:
         if not sep:
             if not items:
+                chunk, settings = settings.strip(chunk)
                 head = " ".join(chunk.split())
             continue
         m = SUB_RE.fullmatch(sep)
@@ -540,7 +567,7 @@ def _parse_items(body_src: str, shorthand: bool, warn) -> tuple[str, tuple[Item,
                 level=level,
                 ordinal=counters[level],
                 marker=_marker(level, counters[level]),
-                body=_parse_body(chunk_body, shorthand or g, warn),
+                body=_parse_body(chunk_body, shorthand or g, warn, settings),
             )
         )
         for _ in range(pops):
@@ -576,6 +603,9 @@ def parse(src: str) -> ParseResult:
     env_stack: list[str] = []
     group_stack: list[str] = []
     pending_footnote = False
+    settings = Settings()
+    setting_stack = []
+    declarations = []
 
     i = 0
     while i < n:
@@ -584,11 +614,14 @@ def parse(src: str) -> ParseResult:
             continue
         c = src[i]
         if c == "{":
+            setting_stack.append(settings.copy())
             group_stack.append("footnote" if pending_footnote else "plain")
             pending_footnote = False
             i += 1
             continue
         if c == "}":
+            if setting_stack:
+                settings = setting_stack.pop()
             if group_stack:
                 group_stack.pop()
             i += 1
@@ -603,6 +636,15 @@ def parse(src: str) -> ParseResult:
             continue
         name, end = hit
 
+        if name in GLOSS_COMMANDS:
+            stop = settings.command(src, name, end)
+            declarations.append((i, stop, ""))
+            i = stop
+            continue
+        if name in {"begingroup", "begin"}:
+            setting_stack.append(settings.copy())
+        elif name in {"endgroup", "end"} and setting_stack:
+            settings = setting_stack.pop()
         if name == "begin":
             grp = find_group(src, end)
             if grp:
@@ -619,7 +661,7 @@ def parse(src: str) -> ParseResult:
         elif name in EX_CMDS and src[end : end + 1] == ".":
             i = _handle_example(
                 src, live, i, name, end, env_stack, group_stack,
-                examples, spans, warnings,
+                examples, spans, warnings, settings,
             )
             continue
         elif name == "ex":
@@ -668,15 +710,16 @@ def parse(src: str) -> ParseResult:
         line = src.count("\n", 0, start) + 1
         rel_spans.append((start, stop, _range(
             name, first, second, labels, sublabels,
-            lambda msg, line=line: warnings.append(f"line {line}: {msg}"))))
+            lambda msg, line=line: warnings.append(f"line {line}: {msg}"), brackets)))
     examples = _references_in_examples(
-        examples, _located(spans), labels, sublabels, warnings)
+        examples, _located(spans), labels, sublabels, warnings, brackets)
 
     marks = [(m.start(), m.end(), APPENDIX_MARK)
              for m in re.finditer(r"\\appendix(?![a-zA-Z@])", src) if live[m.start()]]
     return ParseResult(
         custom_labels=custom_labels,
-        residue=_build_residue(src, sorted(spans + marks[:1]), rel_spans),
+        reference_report=_reference_report(src, live, examples, spans, labels),
+        residue=_build_residue(src, sorted(spans + marks[:1] + declarations), rel_spans),
         examples=examples,
         warnings=warnings,
         labels=labels,
@@ -697,7 +740,7 @@ def _redecorate(ex: Example, brackets: Brackets) -> Example:
 
 
 def _handle_example(src, live, start, name, end, env_stack, group_stack,
-                    examples, spans, warnings) -> int:
+                    examples, spans, warnings, settings) -> int:
     custom = ""
     after = end + 1  # past the '.'
     opt = find_optional(src, after)
@@ -737,9 +780,41 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
     head_end = first_sub.start() if first_sub else len(stripped)
     label, head = _pull_command(stripped[:head_end], "label")
     rest = head + stripped[head_end:]
-    head_text, items = (_parse_items(rest, shorthand, warn)
+    shared = None
+    common = split_top(rest, re.compile(r"\\CommonGloss(?![a-zA-Z])"))
+    if len(common) > 1:
+        if not SUB_RE.search(common[0][1]) or any(SUB_RE.search(c) for _, c in common[1:]):
+            warn("invalid \\CommonGloss: variant rows must precede shared lines; "
+                 "rendered as plain text")
+            rest = SUB_RE.sub("", rest)
+            rest = re.sub(r"\\CommonGloss(?![a-zA-Z])", "", rest).replace(r"\\", " ")
+            common = [("", rest)]
+        else:
+            # A document has no overlay sequence: keep the final slide's rows.
+            rest = "".join(c for _, c in split_top(
+                rest, re.compile(r"\\pause(?![a-zA-Z])(?:\[[^]]*\])?")))
+            common = split_top(rest, re.compile(r"\\CommonGloss(?![a-zA-Z])"))
+    if len(common) > 1:
+        rest = common[0][1]
+        shared_src = r"\gl " + " ".join(c for _, c in common[1:])
+        if r"\glt" in shared_src:
+            shared_src = shared_src.replace(r"\glt", r"\endgl \glt", 1)
+        else:
+            shared_src += r"\endgl"
+        local_settings = settings.strip(split_top(rest, SUB_RE)[0][1])[1]
+        shared = _parse_body(shared_src, False, warn, local_settings)
+    head_text, items = (_parse_items(rest, shorthand, warn, settings)
                         if SUB_RE.search(rest) else ("", ()))
-    body = None if items else _parse_body(rest, shorthand, warn)
+    body = None if items else _parse_body(rest, shorthand, warn, settings)
+    if shared:
+        # CommonGloss makes each variant a single tier, not a two-tier gloss.
+        if not items:
+            warn("\\CommonGloss has no variant rows")
+        shared = replace(shared, morph_align=local_settings.morph,
+                         tiers=tuple(replace(t, language=local_settings.languages.get(k + 2, ""))
+                                     for k, t in enumerate(shared.tiers)),
+                         translation_language=local_settings.translation or
+                             local_settings.languages.get(len(shared.tiers) + 1, ""))
 
     for cmd, desc in DEGRADE.items():
         if cmd != "exsource" and re.search(r"\\" + cmd + r"(?![a-zA-Z])", body_src):
@@ -760,6 +835,7 @@ def _handle_example(src, live, start, name, end, env_stack, group_stack,
             body=body,
             items=items,
             head=head_text if items else "",
+            shared=shared,
             warnings=tuple(local),
             src=src[start:body_end],
             line=line,
@@ -835,13 +911,17 @@ def _sublabels(src: str, live: list[bool]) -> frozenset[str]:
 
 def _range(name: str, first: str, second: str,
            labels: dict[str, tuple[int, str]], sublabels: frozenset[str],
-           warn) -> str:
+           warn, brackets: Brackets | None = None) -> str:
     """``\\refrange{a}{b}`` as LaTeX the reference path already handles:
     two ``\\pref``, or one and b's bare sub-label (see RANGES)."""
     for label in (first, second):
         if label not in labels:
             warn(f"\\{name}{{{first}}}{{{second}}}: no example is "
                  f"labelled {label!r}")
+    if name == "Refrange":
+        br = brackets or Brackets()
+        return (f"{br.ex_l}\\pref{{{first}}}{br.ex_r}{RANGE_DASH}"
+                f"{br.ex_l}\\pref{{{second}}}{br.ex_r}")
     letter = labels.get(second, (0, ""))[1]
     end = letter if second in sublabels and letter else f"\\pref{{{second}}}"
     inner = f"\\pref{{{first}}}{RANGE_DASH}{end}"
@@ -852,10 +932,10 @@ _REL_IN_TEXT = re.compile(
     r"\\(" + "|".join(sorted(RELATIVE, key=len, reverse=True)) + r")"
     r"(?![a-zA-Z])(?:[ \t]*\{\})?")
 _RANGE_IN_TEXT = re.compile(
-    r"\\(p?refrange)\s*\{([^}]*)\}\s*\{([^}]*)\}")
+    r"\\(p?refrange|Refrange)\s*\{([^}]*)\}\s*\{([^}]*)\}")
 
 
-def _references_in_examples(examples, located, labels, sublabels, warnings):
+def _references_in_examples(examples, located, labels, sublabels, warnings, brackets):
     r"""Relative references and ranges inside an example's own text.
 
     The prose gets these through the residue; an example's text never goes
@@ -890,7 +970,7 @@ def _references_in_examples(examples, located, labels, sublabels, warnings):
 
         def rng(m: re.Match) -> str:
             return _range(m.group(1), m.group(2).strip(), m.group(3).strip(),
-                          labels, sublabels, warn)
+                          labels, sublabels, warn, brackets)
 
         def fix(latex: str) -> str:
             if "\\" not in latex:
@@ -901,17 +981,72 @@ def _references_in_examples(examples, located, labels, sublabels, warnings):
     return out
 
 
+def _reference_report(src, live, examples, spans, labels) -> list[str]:
+    r"""The converter's exrefcheck: source locations in place of PDF pages.
+
+    Reports the source's references (including those inside examples), not
+    generated ref labels, and prints nothing into the document.
+    """
+    requests = [m for m in re.finditer(r"\\exrefcheck(?![a-zA-Z])", src)
+                if live[m.start()]]
+    if not requests:
+        return []
+    count = 6
+    opt = find_optional(src, requests[-1].end())
+    if opt:
+        m = re.search(r"words\s*=\s*(\d+)", opt[0])
+        if m:
+            count = max(1, int(m.group(1)))
+    located = _located(spans)
+    from .inline import InlineRenderer
+    renderer = InlineRenderer()
+    report = []
+
+    def record(pos, command, target):
+        line = src.count("\n", 0, pos) + 1
+        if target is None or not 0 <= target[0] < len(examples):
+            report.append(f"line {line}: {command} -> unresolved")
+            return
+        index, letter = target
+        ex = examples[index]
+        bodies = [it.body for it in ex.items if it.marker.rstrip(".") == letter]
+        body = bodies[0] if bodies else ex.bodies[0] if ex.bodies else Body()
+        text = " ".join(body.tiers[0].cells) if body.tiers else body.text
+        opening = " ".join(renderer.plain(text).split()[:count])
+        number = ex.custom_label or str(1 + sum(not e.custom_label for e in examples[:index]))
+        report.append(f"line {line}: {command} -> {number}{letter}; "
+                      f"example source line {ex.line}: {opening}")
+
+    refs = sorted([(m.start(), m, False) for m in _REL_IN_TEXT.finditer(src)] +
+                  [(m.start(), m, True) for m in _RANGE_IN_TEXT.finditer(src)])
+    for pos, match, ranged in refs:
+        if not live[pos]:
+            continue
+        if ranged:
+            for label in match.group(2, 3):
+                record(pos, "\\" + match.group(1) + "{" + label + "}",
+                       labels.get(label.strip()))
+        else:
+            nxt = sum(start < pos for start, _ in located)
+            index = _relative_target(nxt, RELATIVE[match.group(1)][0])
+            record(pos, "\\" + match.group(1), (index, ""))
+    return report or ["no relative references or ranges to report"]
+
+
 def _map_text(ex: Example, fix) -> Example:
     """The example with *fix* applied to every field that is set as text."""
     def body(b: Body) -> Body:
         return replace(
             b, text=fix(b.text), translation=fix(b.translation),
             source=fix(b.source), annot=fix(b.annot),
-            tiers=tuple(Tier(cells=tuple(fix(c) for c in t.cells))
+            tiers=tuple(replace(t, cells=tuple(fix(c) for c in t.cells),
+                                segments=tuple(tuple(fix(c) for c in seg)
+                                               for seg in t.segments))
                         for t in b.tiers))
     return replace(
         ex,
         body=body(ex.body) if ex.body is not None else None,
+        shared=body(ex.shared) if ex.shared is not None else None,
         items=tuple(replace(it, body=body(it.body)) for it in ex.items))
 
 

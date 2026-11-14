@@ -271,6 +271,29 @@ class BaseEmitter:
     def _word_widths(self, bodies, words: int) -> list[float]:
         lay = self.layout
         widest = [0.0] * words
+        morphs = getattr(self, "_morphs", {})
+        self._morphs = morphs
+        for j in range(words):
+            if any(any("\\" + name in tier.cells[j] for name in
+                       ("altg", "mvto", "mvfrom", "lxMoveTo", "lxMoveFrom"))
+                   for _, body in bodies for tier in body.tiers if j < len(tier.cells)):
+                continue
+            segmented = [(body, tier.segments[j]) for _, body in bodies
+                         for tier in body.tiers if body.morph_align
+                         and j < len(tier.segments) and len(tier.segments[j]) > 1]
+            counts = {len(parts) for _, parts in segmented}
+            if len(counts) > 1:
+                self._warn(f"morpheme count mismatch in column {j + 1}; aligned by word")
+                continue
+            if len(segmented) < 2:
+                continue
+            sizes = [max(runs_width_cm(self.inline.runs(parts[k]), lay.em_cm,
+                                       lay.sc_ratio, lay.advances)
+                         for _, parts in segmented) * lay.width_safety
+                     for k in range(len(segmented[0][1]))]
+            widest[j] = sum(sizes) / lay.width_safety
+            for _, body in bodies:
+                morphs[id(body), j] = sizes
         for _, body in bodies:
             for tier in body.tiers:
                 for i, cell in enumerate(tier.cells):
@@ -279,15 +302,35 @@ class BaseEmitter:
                         runs_width_cm(self.inline.runs(cell), lay.em_cm,
                                       lay.sc_ratio, lay.advances),
                     )
-        return [
+        widths = [
             min(lay.max_col_cm, max(lay.min_col_cm, w * lay.width_safety + lay.pad_cm))
             for w in widest
         ]
+        # The normal per-word cap may wrap a long word, but a segmented
+        # cell needs room for its tab stops. Let banding handle that width.
+        for j in range(words):
+            keys = [(id(body), j) for _, body in bodies if (id(body), j) in morphs]
+            if keys:
+                widths[j] = max(widths[j], sum(morphs[keys[0]]) + lay.pad_cm)
+        return widths
+
+    def morph_parts(self, body, tier, column):
+        sizes = self._morphs.get((id(body), column))
+        if sizes and column < len(tier.segments) and len(tier.segments[column]) > 1:
+            positions, total = [], 0.0
+            for size in sizes[:-1]:
+                total += size
+                positions.append(total)
+            return tier.segments[column], positions
+        return (), []
 
     def plan_table(self, ex: Example) -> TablePlan:
+        self._morphs = {}
         bodies: list[tuple[str, Body]] = (
             [("", ex.body)] if ex.body is not None else [(i.marker, i.body) for i in ex.items]
         )
+        if ex.shared:
+            bodies.append(("", ex.shared))
         has_marker = ex.body is None
         has_judgment = self.any_judgment
 
@@ -316,9 +359,12 @@ class BaseEmitter:
         # paradigm's items no longer pull on one another's columns; Grid
         # unions what they produce, exactly as it already did for bands.
         plans: list[Plan] = []
+        common_widths = (self._word_widths(bodies, max(b.width for _, b in bodies))
+                         if ex.shared else None)
         for _, body in bodies:
             if body.tiers:
-                word_w = self._word_widths([("", body)], body.width)
+                word_w = (common_widths if common_widths is not None else
+                          self._word_widths([("", body)], body.width))
                 plans.append((word_w, self._bands(word_w, available, ex)))
             else:  # unglossed: running text in one merged cell
                 plans.append(([], []))
@@ -329,6 +375,10 @@ class BaseEmitter:
         self.last_grid = grid                 # what tests measure the layout from
         columns, total = grid.columns, grid.total
         if total > available:
+            if self._morphs:
+                self._warn("morpheme alignment disabled in the squeezed table; "
+                           "aligned by word so tab stops cannot overflow the cells")
+                self._morphs.clear()
             # only reachable with --no-split, or when a single word is wider
             # than the whole text block: keep the declared width inside the
             # text block and let the cells wrap internally (spike S3)

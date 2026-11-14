@@ -50,6 +50,7 @@ from dataclasses import dataclass, field
 from .inline import WRAPPERS
 from .ir import Body, Example, Item, Tier
 from .latexutil import Brackets, count_as
+from .styles import COMMON_BAND_PARA, COMMON_PARA, VARIANT_PARA
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA, SPACE_ABOVE_PARA,
     SPACE_BELOW_PARA, TRANSLATION_PARA,
@@ -163,6 +164,21 @@ class Styles:
                     out.commands[sid] = frozenset({cmd})
                 else:
                     out.commands[sid] = _direct(st.find(w("rPr")))
+        structural = {CELL_PARA, BAND_PARA, COMMON_PARA, COMMON_BAND_PARA,
+                      VARIANT_PARA, TRANSLATION_PARA, ANNOT_PARA, JUDGMENT_PARA}
+        parents = {st.get(w("styleId")): st.find(w("basedOn")).get(w("val"))
+                   for st in root.iter(w("style")) if st.find(w("basedOn")) is not None}
+        for sid in parents:
+            if out.names.get(sid, sid) in structural | {SPACE_ABOVE_PARA, SPACE_BELOW_PARA}:
+                continue
+            parent, seen = sid, set()
+            while parent in parents and parent not in seen:
+                seen.add(parent)
+                parent = parents[parent]
+                name = out.names.get(parent, parent)
+                if name in structural:
+                    out.names[sid] = name
+                    break
         return out
 
     def name(self, sid: str) -> str:
@@ -280,6 +296,13 @@ def read_para(p: ET.Element, styles: Styles) -> Para:
     themselves.  Any other field is its cached result, as a reader that
     does not recalculate shows it."""
     events: list = []
+    if p.find(f"{w('pPr')}/{w('tabs')}") is not None and para_style(p, styles) in {
+            CELL_PARA, BAND_PARA, COMMON_PARA, COMMON_BAND_PARA, VARIANT_PARA}:
+        from copy import deepcopy
+        p = deepcopy(p)
+        for run in p.iter(w("r")):
+            for tab in list(run.findall(w("tab"))):
+                run.remove(tab)
     _events(p, styles, events)
     segments: list[Segment] = []
     bookmarks: list[str] = []
@@ -509,6 +532,10 @@ def _lead(rows: list[list[Cell]]) -> tuple[int, int | None]:
                 return i + 1, i
     for row in rows:
         for i, c in enumerate(row):
+            if c.style == VARIANT_PARA:
+                return i, None
+    for row in rows:
+        for i, c in enumerate(row):
             if c.style == TRANSLATION_PARA:
                 return i, None
     body = [r for r in rows if r and not is_spacer(r)]
@@ -588,6 +615,8 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
         return segments_latex(c.segments, ctx, example_bookmarks)
 
     bodies: list[_Building] = []
+    shared = _Building(marker="")
+    is_common = any(c.style == COMMON_PARA for row in rows for c in row)
     number_cell: Cell | None = None
     head = head_row(rows)
     for row in rows:
@@ -599,11 +628,24 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
             number_cell = row[0]
         rest = [c for c in row[lead:] if c.style != ANNOT_PARA]
         if any(c.style == TRANSLATION_PARA for c in row):
+            if is_common:
+                rest = row[1:]
             text = " ".join(t for t in (latex(c) for c in rest) if t)
-            if bodies and text:
+            if is_common and text:
+                shared.translation.append(text)
+            elif bodies and text:
                 bodies[-1].translation.append(text)
             continue
+        if any(c.style in {COMMON_PARA, COMMON_BAND_PARA} for c in rest):
+            if not shared.bands or any(c.style == COMMON_BAND_PARA for c in rest):
+                shared.bands.append([])
+            shared.bands[-1].append(rest)
+            continue
         marker = row[1].plain.strip() if has_marker and len(row) > 1 else ""
+        previous = next((b for b in bodies if b.marker == marker), None) if is_common else None
+        if previous is not None:
+            previous.bands.append([rest])
+            continue
         if not bodies or marker:
             b = _Building(marker=marker)
             if jcol is not None and len(row) > jcol:
@@ -622,7 +664,7 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
             b.bands.append([])
         b.bands[-1].append(rest)
 
-    built = [_body(b, latex, ctx, index) for b in bodies]
+    built = [_body(b, latex, ctx, index, force_tiers=is_common) for b in bodies]
     custom, brackets, marks = "", None, []
     if number_cell is not None:
         marks = number_cell.bookmarks
@@ -636,6 +678,8 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
                       for b, body, (lv, o) in zip(bodies, built, levels))
         ex = Example(index=index, placeholder="", custom_label=custom,
                      items=items,
+                     shared=_body(shared, latex, ctx, index, force_tiers=True)
+                     if is_common else None,
                      head=latex(head[1]) if head is not None else "")
     else:
         ex = Example(index=index, placeholder="", custom_label=custom,
@@ -643,7 +687,7 @@ def read_example(rows: list[list[Cell]], index: int, ctx: Context,
     return ex, brackets, marks
 
 
-def _body(b: _Building, latex, ctx: Context, index: int) -> Body:
+def _body(b: _Building, latex, ctx: Context, index: int, force_tiers=False) -> Body:
     translation = " ".join(b.translation)
     if b.tree is not None:
         lines = [ln.strip() for ln in b.tree.splitlines() if ln.strip()]
@@ -679,7 +723,7 @@ def _body(b: _Building, latex, ctx: Context, index: int) -> Body:
                 tiers[t] += cells
             else:
                 tiers.append(list(cells))
-    if len(tiers) <= 1:
+    if len(tiers) <= 1 and not force_tiers:
         text = " ".join(c for c in (tiers[0] if tiers else []) if c)
         return Body(judgment=b.judgment, text=text, translation=translation,
                     annot=b.annot)

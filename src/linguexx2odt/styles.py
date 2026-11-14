@@ -58,6 +58,9 @@ EQUATION_PARA = "LxEquation"
 #: an example with its bands as extra gloss tiers.  Structure, not a copy
 #: of anything: nothing here can drift out of step with the text.
 BAND_PARA = "LxExampleBand"
+COMMON_PARA = "LxCommonGloss"
+COMMON_BAND_PARA = "LxCommonGlossBand"
+VARIANT_PARA = "LxVariant"
 
 #: The space around an example.  SPACE_PARA carries the height and the two
 #: others inherit it unchanged, so editing the parent in the sidebar moves
@@ -145,6 +148,10 @@ MACRO_NOT_SHARED: dict[str, str] = {
 #: gave an eight-column grid where linguexx's is seven.  The macro now
 #: knows the style, so the entry is gone rather than explained away.
 MACRO_STYLES_NOT_SHARED: dict[str, str] = {
+    "COMMON_PARA": ("shared glosses use the CLI reverse converter; "
+                    "Writer Untypeset cannot read them"),
+    "COMMON_BAND_PARA": "shared-gloss continuation bands are read by the CLI reverse converter",
+    "VARIANT_PARA": "single-tier variant rows are read by the CLI reverse converter",
     "EQUATION_PARA": (
         "nothing: the macro reads examples, which are tables, and an "
         "equation is a paragraph of the prose it never looks at"),
@@ -311,6 +318,12 @@ def named_styles(layout: Layout) -> str:
             f'<style:paragraph-properties fo:text-align="start"/>'
             f"</style:style>",
             # Declares nothing: it is a mark, not a look.  See BAND_PARA.
+            f'<style:style style:name="{COMMON_BAND_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}"/>'
+            f'<style:style style:name="{COMMON_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}"/>'
+            f'<style:style style:name="{VARIANT_PARA}" style:family="paragraph"'
+            f' style:parent-style-name="{CELL_PARA}"/>'
             f'<style:style style:name="{BAND_PARA}" style:family="paragraph"'
             f' style:parent-style-name="{CELL_PARA}"/>',
             # The judgment mark hangs at the right edge of its column, so it

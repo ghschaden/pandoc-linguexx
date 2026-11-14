@@ -112,6 +112,7 @@ def view(source: str) -> list[dict]:
     r.labels, r.brackets, r.macros = res.labels, res.brackets, res.macros
     return [{"custom": _runs(r, e.custom_label), "head": _runs(r, e.head),
              "body": _body(r, e.body) if e.body is not None else None,
+             "shared": _body(r, e.shared) if e.shared is not None else None,
              "items": [(i.level, i.ordinal, i.marker, _body(r, i.body))
                        for i in e.items]}
             for e in res.examples]

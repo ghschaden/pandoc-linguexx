@@ -35,11 +35,17 @@ class Tier:
     """One line of a gloss (object language, gloss, further tiers)."""
 
     cells: tuple[str, ...] = ()
+    language: str = ""
+    segments: tuple[tuple[str, ...], ...] = ()
+    """Morphemes before brace removal; populated only under GlossMorphAlign."""
 
 
 @dataclass(frozen=True)
 class Body:
     """The content of an example or of one sub-example."""
+
+    morph_align: bool = False
+    translation_language: str = ""
 
     judgment: str = ""
     """LaTeX source of the judgment mark ('*', '??', '\\jdg{\\dag}'), or ''."""
@@ -103,6 +109,9 @@ class Example:
     items: tuple[Item, ...] = ()
     """Set when it does."""
 
+    shared: Body | None = None
+    """CommonGloss tiers, following the variant rows in items."""
+
     head: str = ""
     """With sub-examples: the text between ``\\ex.`` and the first ``\\a.``,
     LaTeX source.  linguexx sets it on the number's line, from where the
@@ -114,7 +123,8 @@ class Example:
 
     @property
     def bodies(self) -> tuple[Body, ...]:
-        return (self.body,) if self.body is not None else tuple(i.body for i in self.items)
+        return ((self.body,) if self.body is not None else
+                tuple(i.body for i in self.items) + ((self.shared,) if self.shared else ()))
 
     @property
     def glossed(self) -> bool:
@@ -124,4 +134,12 @@ class Example:
 
 
 def to_json(examples: list[Example]) -> str:
-    return json.dumps([asdict(e) for e in examples], indent=2, ensure_ascii=False)
+    def compact(value):
+        if isinstance(value, dict):
+            return {k: compact(v) for k, v in value.items()
+                    if k not in {"language", "segments", "morph_align",
+                                 "translation_language", "shared"} or v}
+        if isinstance(value, (list, tuple)):
+            return [compact(v) for v in value]
+        return value
+    return json.dumps(compact([asdict(e) for e in examples]), indent=2, ensure_ascii=False)

@@ -41,6 +41,7 @@ from .sections import CAPTION_NAMES
 from .inline import esc
 from .latexutil import Brackets
 from .ir import Body, Example
+from .styles import COMMON_BAND_PARA, COMMON_PARA, VARIANT_PARA
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL, CELL_PARA, JUDGMENT_PARA, SEQ_NAME,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA, cell_style,
@@ -239,10 +240,13 @@ class Emitter(BaseEmitter):
                 "<table:table-row>" + self._cell(self._number_text(ex))
                 + self._cell(self.inline.render(ex.head), span=len(widths) - 1)
                 + "</table:table-row>")
-        for k, (marker, body) in enumerate(bodies):
-            rows += self._body_rows(ex, marker, body, k == 0 and not head,
-                                    grid, k, filler,
-                                    has_marker, has_judgment, has_annot)
+        bands = range(len(grid.bands_of(0))) if ex.shared else [None]
+        for band in bands:
+            for k, (marker, body) in enumerate(bodies):
+                rows += self._body_rows(ex, marker, body,
+                                        k == 0 and not head and not band,
+                                        grid, k, filler, has_marker, has_judgment,
+                                        has_annot, band_number=band)
 
         span = len(widths)
         rows = (
@@ -271,7 +275,7 @@ class Emitter(BaseEmitter):
 
     # -- rows --------------------------------------------------------------
     def _body_rows(self, ex, marker, body, first, grid, body_index, filler,
-                   has_marker, has_judgment, has_annot=False) -> list[str]:
+                   has_marker, has_judgment, has_annot=False, band_number=None) -> list[str]:
         rows: list[str] = []
         head_used = False
 
@@ -305,16 +309,20 @@ class Emitter(BaseEmitter):
 
         if body.tiers:
             for b, band in enumerate(grid.bands_of(body_index)):
+                if band_number is not None and b != band_number:
+                    continue
                 for t, tier in enumerate(body.tiers):
                     # The first row of a continuation band says so, because
                     # nothing else in the finished table can: a band's rows
                     # are built exactly like a tier's and start in the same
                     # column.  The macro's Untypeset reads this to tell one
                     # from the other.  See styles.BAND_PARA.
-                    style = BAND_PARA if b and not t else CELL_PARA
+                    style = (COMMON_BAND_PARA if body is ex.shared and b and not t
+                             else COMMON_PARA if body is ex.shared else VARIANT_PARA
+                             if ex.shared else BAND_PARA if b and not t else CELL_PARA)
                     rows.append(
                         "<table:table-row>" + lead_cells(not head_used)
-                        + self._band_cells(tier.cells, band, grid, body_index,
+                        + self._band_cells(body, tier, band, grid, body_index,
                                            filler, style)
                         + annot_cell(not head_used)
                         + "</table:table-row>"
@@ -330,17 +338,28 @@ class Emitter(BaseEmitter):
             head_used = True
 
         trailer = self._trailer(body)
-        if trailer:
-            rows.append(
-                "<table:table-row>" + lead_cells(False)
-                + self._cell(trailer, span=len(grid.columns) + filler,
-                             style=TRANSLATION_PARA)
-                + annot_cell(False)
-                + "</table:table-row>"
-            )
+        if trailer and (band_number is None or
+                        band_number == len(grid.bands_of(body_index)) - 1):
+            if body is ex.shared:
+                # CommonGloss's translation follows the table at the example
+                # indent, under the row letters rather than the first word.
+                span = (len(grid.columns) + filler + int(has_marker)
+                        + int(has_judgment) + int(has_annot))
+                rows.append("<table:table-row>" + self._cell("")
+                            + self._cell(trailer, span=span, style=TRANSLATION_PARA,
+                                         language=body.translation_language)
+                            + "</table:table-row>")
+            else:
+                rows.append(
+                    "<table:table-row>" + lead_cells(False)
+                    + self._cell(trailer, span=len(grid.columns) + filler,
+                                 style=TRANSLATION_PARA, language=body.translation_language)
+                    + annot_cell(False)
+                    + "</table:table-row>"
+                )
         return rows
 
-    def _band_cells(self, cells, band, grid, body_index: int, filler: int,
+    def _band_cells(self, body, tier, band, grid, body_index: int, filler: int,
                     style: str = CELL_PARA) -> str:
         """One tier's cells for one band, each spanning the grid columns it
         covers, then empty cells padding the row to the full grid width.
@@ -348,12 +367,17 @@ class Emitter(BaseEmitter):
         *style* marks the whole row, padding included, so a reader can find
         the mark on any cell of it rather than having to know which cells a
         short tier left empty."""
+        cells = tier.cells
         start, stop = band
         out, covered = [], 0
         for j in range(start, stop):
             span = grid.span(body_index, j)
             content = self.inline.render(cells[j]) if j < len(cells) else ""
-            out.append(self._cell(content, span=span, style=style))
+            parts, tabs = self.morph_parts(body, tier, j)
+            if parts:
+                content = "<text:tab/>".join(self.inline.render(part) for part in parts)
+            out.append(self._cell(content, span=span, style=style,
+                                  tabs=tabs, language=tier.language))
             covered += span
         out += [self._cell("", style=style)] * (
             len(grid.columns) + filler - covered)
@@ -375,7 +399,20 @@ class Emitter(BaseEmitter):
             parts.append(self.inline.render(body.source))
         return " ".join(parts)
 
-    def _cell(self, content: str, span: int = 1, style: str = CELL_PARA) -> str:
+    def _cell(self, content: str, span: int = 1, style: str = CELL_PARA,
+              tabs=(), language: str = "") -> str:
+        if tabs or language:
+            name = f"LxGlossFormat{len(self.auto_styles)}"
+            stops = "".join(f'<style:tab-stop style:position="{x:.4f}cm"/>' for x in tabs)
+            lang = esc(language).replace('"', '&quot;')
+            props = (f'<style:text-properties fo:language="{lang.split("-")[0]}"'
+                     f' style:rfc-language-tag="{lang}"/>' if language else "")
+            self.auto_styles.append(
+                f'<style:style style:name="{name}" style:family="paragraph"'
+                f' style:parent-style-name="{style}">'
+                f'<style:paragraph-properties><style:tab-stops>{stops}</style:tab-stops>'
+                f'</style:paragraph-properties>{props}</style:style>')
+            style = name
         sp = f' table:number-columns-spanned="{span}"' if span > 1 else ""
         covered = "<table:covered-table-cell/>" * (span - 1)
         return (

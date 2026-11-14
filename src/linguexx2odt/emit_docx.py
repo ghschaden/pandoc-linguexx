@@ -52,6 +52,7 @@ from typing import ClassVar
 from .emit_base import BaseEmitter, register
 from .sections import CAPTION_NAMES
 from .inline import esc, note_name
+from .styles import COMMON_BAND_PARA, COMMON_PARA, VARIANT_PARA
 from .styles import (
     ANNOT_PARA, BAND_PARA, CELL_PARA, JUDGMENT_PARA,
     SPACE_ABOVE_PARA, SPACE_BELOW_PARA, TRANSLATION_PARA,
@@ -148,7 +149,7 @@ def run(text: str, small_caps: bool = False) -> str:
 
 
 def cell(width_cm: float, content: str, span: int = 1,
-         style: str = CELL_PARA) -> str:
+         style: str = CELL_PARA, tabs=(), language: str = "") -> str:
     """One table cell, its paragraph carrying a named style.
 
     The style is what a Word user edits from the Styles pane, and it is
@@ -158,10 +159,17 @@ def cell(width_cm: float, content: str, span: int = 1,
     default -- so a missing injection looks like nothing rather than like
     a failure.  See styles_docx.
     """
+    stops = ("<w:tabs>" + "".join(f'<w:tab w:val="left" w:pos="{dxa(x)}"/>'
+                                for x in tabs) + "</w:tabs>" if tabs else "")
+    if language:
+        lang = esc(language).replace('"', '&quot;')
+        prop = f'<w:lang w:val="{lang}"/>'
+        content = content.replace("<w:rPr>", "<w:rPr>" + prop)
+        content = content.replace("<w:r><w:t", "<w:r><w:rPr>" + prop + "</w:rPr><w:t")
     grid = f'<w:gridSpan w:val="{span}"/>' if span > 1 else ""
     return (
         f'<w:tc><w:tcPr><w:tcW w:w="{dxa(width_cm)}" w:type="dxa"/>{grid}</w:tcPr>'
-        f'<w:p><w:pPr><w:pStyle w:val="{style}"/></w:pPr>{content}</w:p></w:tc>'
+        f'<w:p><w:pPr><w:pStyle w:val="{style}"/>{stops}</w:pPr>{content}</w:p></w:tc>'
     )
 
 
@@ -315,9 +323,12 @@ class DocxEmitter(BaseEmitter):
                 + cell(sum(widths[1:]), self._runs(ex.head),
                        span=len(widths) - 1)
                 + "</w:tr>")
-        for k, (marker, body) in enumerate(p.bodies):
-            rows += self._body_rows(ex, marker, body, k == 0 and not head,
-                                    p, k)
+        bands = range(len(p.grid.bands_of(0))) if ex.shared else [None]
+        for band in bands:
+            for k, (marker, body) in enumerate(p.bodies):
+                rows += self._body_rows(ex, marker, body,
+                                        k == 0 and not head and not band,
+                                        p, k, band_number=band)
 
         # Spacer rows rather than w:spacing on the first and last
         # paragraphs, which the plan asked to weigh.  Both make the gap a
@@ -340,7 +351,7 @@ class DocxEmitter(BaseEmitter):
                 + "</w:tr>")
 
     # -- rows --------------------------------------------------------------
-    def _body_rows(self, ex, marker, body, first, p, body_index) -> list[str]:
+    def _body_rows(self, ex, marker, body, first, p, body_index, band_number=None) -> list[str]:
         """The same row structure as the ODT target, in OOXML's idiom.
 
         Which is not the same idiom.  ODF spans a cell and then emits a
@@ -373,22 +384,26 @@ class DocxEmitter(BaseEmitter):
             content = self._runs(body.annot) if (active and body.annot) else ""
             return cell(p.widths[-1], content, style=ANNOT_PARA)
 
-        def body_span(content: str, style: str = CELL_PARA) -> str:
+        def body_span(content: str, style: str = CELL_PARA, language: str = "") -> str:
             """One cell across every body column, spans included."""
             return cell(sum(p.columns) + (p.widths[len(p.lead) + len(p.columns)]
                                           if p.filler else 0.0),
-                        content, span=ncols, style=style)
+                        content, span=ncols, style=style, language=language)
 
         if body.tiers:
             for b, band in enumerate(p.grid.bands_of(body_index)):
+                if band_number is not None and b != band_number:
+                    continue
                 for tr, tier in enumerate(body.tiers):
                     # The first row of a continuation band is marked,
                     # because nothing else in the finished table can say
                     # so: a band's rows are built exactly like a tier's.
-                    style = BAND_PARA if b and not tr else CELL_PARA
+                    style = (COMMON_BAND_PARA if body is ex.shared and b and not tr
+                             else COMMON_PARA if body is ex.shared else VARIANT_PARA
+                             if ex.shared else BAND_PARA if b and not tr else CELL_PARA)
                     rows.append(
                         "<w:tr>" + lead_cells(not head_used)
-                        + self._band_cells(tier.cells, band, p, body_index,
+                        + self._band_cells(body, tier, band, p, body_index,
                                            style)
                         + annot_cell(not head_used) + "</w:tr>"
                     )
@@ -402,15 +417,23 @@ class DocxEmitter(BaseEmitter):
             head_used = True
 
         trailer = self._trailer(body)
-        if trailer:
-            rows.append(
-                "<w:tr>" + lead_cells(False)
-                + body_span(self._runs(trailer), style=TRANSLATION_PARA)
-                + annot_cell(False) + "</w:tr>"
-            )
+        if trailer and (band_number is None or
+                        band_number == len(p.grid.bands_of(body_index)) - 1):
+            if body is ex.shared:
+                rows.append("<w:tr>" + cell(p.widths[0], "")
+                            + cell(sum(p.widths[1:]), self._runs(trailer),
+                                   span=len(p.widths) - 1, style=TRANSLATION_PARA,
+                                   language=body.translation_language) + "</w:tr>")
+            else:
+                rows.append(
+                    "<w:tr>" + lead_cells(False)
+                    + body_span(self._runs(trailer), style=TRANSLATION_PARA,
+                                language=body.translation_language)
+                    + annot_cell(False) + "</w:tr>"
+                )
         return rows
 
-    def _band_cells(self, cells, band, p, body_index: int,
+    def _band_cells(self, body, tier, band, p, body_index: int,
                     style: str = CELL_PARA) -> str:
         """One tier's cells for one band, padded to the grid by SPAN.
 
@@ -418,6 +441,7 @@ class DocxEmitter(BaseEmitter):
         _body_rows: a `w:gridSpan` of 3 is one cell that occupies three
         columns, and the row is complete when the spans total the grid.
         """
+        cells = tier.cells
         start, stop = band
         out, covered = [], 0
         for j in range(start, stop):
@@ -430,7 +454,11 @@ class DocxEmitter(BaseEmitter):
             # the difference; OnlyOffice lays out from w:tcW and drew banded
             # examples as letters in slivers.
             width = sum(p.columns[covered:covered + span])
-            out.append(cell(width, content, span=span, style=style))
+            parts, tabs = self.morph_parts(body, tier, j)
+            if parts:
+                content = "<w:r><w:tab/></w:r>".join(self._runs(part) for part in parts)
+            out.append(cell(width, content, span=span, style=style,
+                            tabs=tabs, language=tier.language))
             covered += span
         remaining = len(p.columns) + p.filler - covered
         if remaining > 0:

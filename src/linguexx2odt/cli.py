@@ -225,7 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="pandoc reference.odt supplying the base styles")
     p.add_argument("--keep-intermediates", type=Path, metavar="DIR",
                    help="write residue.tex, ast.json and the unpatched odt here")
-    p.add_argument("-q", "--quiet", action="store_true", help="suppress warnings")
+    p.add_argument("-q", "--quiet", action="store_true",
+                   help="suppress warnings and reference reports")
     p.add_argument("-v", "--verbose", action="store_true", help="report what was converted")
     return p
 
@@ -401,6 +402,10 @@ def main(argv: list[str] | None = None) -> int:
             keep.mkdir(parents=True, exist_ok=True)
             for f in (residue, ast_path, raw_odt):
                 shutil.copy2(f, keep / f.name)
+
+    if parsed.reference_report and not args.quiet:
+        for entry in parsed.reference_report:
+            print(f"linguexx2odt: exrefcheck: {entry}", file=sys.stderr)
 
     if warnings and not args.quiet:
         for w in warnings:

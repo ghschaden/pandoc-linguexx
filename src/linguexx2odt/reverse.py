@@ -308,7 +308,19 @@ def example_source(ex: Example, label: str, sublabels: dict[int, str]) -> str:
         cmd = _item_command(it.ordinal)
         if k in sublabels:
             cmd += f"\\label{{{sublabels[k]}}}"
-        lines.append(f"{cmd} {body_source(it.body)}")
+        if ex.shared:
+            words = " ".join(_word(c) for c in it.body.tiers[0].cells)
+            annot = f"\\exannot{{{it.body.annot}}}" if it.body.annot else ""
+            # Each variant is one line, using the glossed sub-example spelling.
+            cmd = cmd.replace(".", "g.", 1)
+            lines.append(f"{cmd} {it.body.judgment}{words}{annot}" + r"\\")
+        else:
+            lines.append(f"{cmd} {body_source(it.body)}")
+    if ex.shared:
+        for tier in ex.shared.tiers:
+            lines.append(r"\CommonGloss " + " ".join(_word(c) for c in tier.cells) + r"\\")
+        if ex.shared.translation:
+            lines.append(r"\glt " + ex.shared.translation)
     return "\n".join(lines)
 
 

@@ -46,6 +46,9 @@ import re
 from .styles import (
     ANNOT_PARA,
     BAND_PARA,
+    COMMON_PARA,
+    COMMON_BAND_PARA,
+    VARIANT_PARA,
     CELL_PARA,
     EQUATION_PARA,
     JUDGMENT_PARA,
@@ -135,6 +138,9 @@ def styles_fragment(layout: Layout) -> str:
         # starts a continuation band", which a finished table cannot
         # otherwise tell anyone.  Same role as in the ODT target.
         _para(BAND_PARA, CELL_PARA),
+        _para(COMMON_PARA, CELL_PARA),
+        _para(COMMON_BAND_PARA, CELL_PARA),
+        _para(VARIANT_PARA, CELL_PARA),
         _para(ANNOT_PARA, CELL_PARA, '<w:jc w:val="start"/>'),
         # The space around an example: an exact line height on an empty
         # spacer row, so that a user can change the gap for the whole

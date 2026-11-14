@@ -52,7 +52,7 @@
 \title{\textbf{pandoc-linguexx}\\[4pt]
   \large Converting linguexx documents to LibreOffice Writer and Word}
 \author{Gerhard Schaden}
-\date{Version 0.1.0 \quad\textbullet\quad targets linguexx~1.4\\ October 2026}
+\date{Version 0.1.0 \quad\textbullet\quad targets linguexx~1.5\\ November 2026}
 
 \begin{document}
 \maketitle
@@ -304,6 +304,46 @@ The converter reads \pkg{linguexx}'s \emph{lazy} syntax, which is
 
 An example ends where \pkg{linguexx} ends it: at a blank line, at \cs{z.},
 at an environment boundary or at a closing brace.
+
+\subsection{Additions for linguexx 1.5}
+
+\cs{CommonGloss} puts shared gloss lines below one-line variant rows
+written with \cs{ag.}, \cs{bg.}, and their siblings. Empty \texttt{\{\}}
+cells, judgments, annotations and references are kept. All rows use the
+same column widths. A wide table splits into bands, each with its variant
+rows followed by the shared lines; letters and annotations repeat and the
+translation appears once. Beamer pauses are flattened to the final slide.
+The \texttt{exe}/\texttt{xlist} spelling remains outside the converter's
+supported syntax.
+
+\cs{GlossMorphAlign} aligns morphemes at hyphens and equals signs using
+measured tab stops inside each word cell. Braces protect a unit, a leading
+hyphen is not a boundary, and a TeX dash is not split. A column with
+conflicting morpheme counts warns and stays aligned by word; so does one
+containing alternatives or movement markers. Unsegmented tiers stay whole.
+\cs{GlossMorphAlignOff} switches this off. Declarations in enclosing groups
+and environments are scoped; a declaration inside an example or sub-example
+stays local to it.
+
+\cs{GlossTierLang}\texttt{\{n\}\{tag\}} and
+\cs{GlossTransLang}\texttt{\{tag\}} set language metadata in both formats.
+An empty tag clears the declaration. Without an explicit translation
+language, a translation inherits the last gloss tier's declared language,
+never the object tier's. Right-to-left gloss layout is excluded from this
+update; \cs{GlossRTL} and \cs{glscript} warn rather than promise that layout.
+\cs{let}\cs{Exalph}\cs{ExLatinAlph} selects Latin sub-example letters.
+
+\cs{exrefcheck}\texttt{[words=n]} prints a reference report to stderr:
+relative references and both range ends, their target number, source line,
+and opening words (six by default). Source locations replace PDF page
+numbers. Nothing is added to the document; \texttt{--quiet} suppresses the
+report. \cs{TextNext}, \cs{pTextNext} and \cs{Refrange} are recognized too.
+
+The command-line reverse converters recover shared gloss structure and join
+morphemes without adding spaces. They do not reconstruct language declarations
+or the morpheme-alignment switch. The Writer macro and editor add-ins retain
+their existing input syntax; their \emph{Untypeset} does not read these new
+layouts. Use \texttt{docx2linguexx} or \texttt{odt2linguexx} for the way back.
 
 \subsection{How an example is laid out}
 

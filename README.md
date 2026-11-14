@@ -179,6 +179,40 @@ judgments · `\label` / `\sublabel` / `\ref` / `\pref` · `\lpzg{…}` ·
 sub-examples counted i., ii. are counted i., ii. · `\exannot{…}` structural labels, in a column at
 `.75` of the text block — where `\ExAnnotColumn` puts them.
 
+New in the converter's **1.5 support**:
+
+- `\CommonGloss`: `\ag.` / `\bg.` variant rows share one or more gloss
+  lines. Empty `{}` cells, judgments, annotations and references are kept.
+  Columns are measured across every variant and shared tier. Wide examples
+  split into bands containing all variant rows followed by their shared
+  glosses; letters and annotations repeat, the translation appears once.
+  Beamer pauses are flattened to the final slide's rows.
+- `\GlossMorphAlign` / `\GlossMorphAlignOff`: align morphemes at `-` and
+  `=` using measured tab stops inside the word cells. Braces protect a unit;
+  leading hyphens and TeX dashes are not boundaries. Conflicting segment
+  counts warn and use word alignment. A column containing alternatives or
+  movement markers also stays aligned by word. Ordinary unsegmented tiers
+  remain whole. A squeezed table falls back to word alignment with a warning
+  so morpheme tab stops cannot overflow. Settings follow enclosing groups and environments and stay
+  local when placed inside an example or sub-example.
+- `\GlossTierLang{n}{tag}` and `\GlossTransLang{tag}`: write language
+  metadata to the tier cells and translation. An empty tag clears the
+  declaration. Without an explicit translation language, only the last gloss
+  tier's declared language is inherited; the object tier is never borrowed.
+- `\exrefcheck[words=n]`: print a report of relative references and both
+  ends of ranges to stderr, with their target number, source line and first
+  words (six by default). This uses source locations rather than PDF page
+  numbers. `--quiet` suppresses it; nothing is added to the document.
+  `\TextNext`, `\pTextNext` and `\Refrange` are also recognized.
+- `\let\Exalph\ExLatinAlph`: use Latin sub-example letters explicitly.
+
+`docx2linguexx` and `odt2linguexx` recover shared glosses and remove morpheme
+padding without inserting spaces into words. They recover the text and
+shared-row structure; language declarations and the morpheme-alignment
+setting are not reconstructed. Use these commands for the way back: the
+Writer macro's and editor add-ins' **Untypeset** do not support these new
+layouts. Their interactive typesetting syntax is unchanged.
+
 The Writer macro knows the construct too: it builds the same column from
 `\exannot{…}` typed in Writer, and *Untypeset* gives the wrapper back
 rather than leaving the label as a stray word — so a converted example
@@ -225,10 +259,9 @@ OnlyOffice. They agree now, and a test holds them to it.
 The `.odt` target remains the reference one: it is what the Writer macro,
 the reference document and the French manual are about.
 
-**Targets linguexx 1.4.** Worth stating, because the gap is otherwise
-invisible: this converter was written against 1.2 and silently kept
-emitting 1.2's output for a month after 1.3 changed it. If you are on a
-newer linguexx, check this table before trusting the result.
+**Targets linguexx 1.5.** Right-to-left glosses are excluded.
+See [the 1.5 compatibility review](plan-linguexx-1.5.md) for changes and validation.
+The limitations below apply to both output formats unless stated otherwise.
 
 Example bodies end where linguexx ends them: at a blank line, at `\z.`,
 at an environment boundary, or at a closing brace.
@@ -249,7 +282,7 @@ Unless a row says otherwise, this is true of both targets.
 | `\verb`, `\Verb`, `\lstinline` inside an example | printed as linguexx prints them, a starred one's spaces as visible spaces (␣). Their options (`\Verb*[formatcom=…]`, `\lstinline[basicstyle=…]`) are dropped. The `.odt` sets them in the code face, the `.docx` as ordinary text |
 | `\exsource{…}` | rendered inline at the end, not flush right |
 | `forest` / `\Tree` trees | kept as bracket notation, ready for the Writer macro or the Word and OnlyOffice add-ins to draw |
-| `\refrange`, `\prefrange` | resolved as linguexx prints them, in prose and inside examples, with live references: "(3a–c)" when the range ends on a `\sublabel`, "(1–3a)" when it ends on a `\label`. A redefined `\rangedash` warns; the dash is an en dash |
+| `\refrange`, `\prefrange`, `\Refrange` | resolved as linguexx prints them, in prose and inside examples, with live references: "(3a–c)" when the range ends on a `\sublabel`, "(1–3a)" when it ends on a `\label`; `\Refrange` prints both full references, "(1)–(3a)". A redefined `\rangedash` warns; the dash is an en dash |
 | a reference to a sub-sub-example (the roman level), ranges over them included | not supported: printed without its sub-example's letter, "(1i)" where linguexx prints "(1b-i)". The run warns at each one |
 | `\Next`, `\Last`, `\NNext`, `\LLast` and their `p` forms | resolved by position and rewritten as live cross-references, in prose and inside examples -- where, as in linguexx, `\Last` is the example itself. So are `\ref` and `\pref` inside an example; a label no example carries prints as `??` and warns |
 | `\ref`, `\cref`, `\Cref`, `\autoref`, `\nameref`, `\pageref`, `\cpageref` to a section | live fields, printing what LaTeX prints: "1.1", "section 1.1", "Section 2", "subsection 1.1", the heading's title, the page. The headings are numbered for it, levels 1 to 3 as `article` numbers them, by an outline numbering that renumbers with them; a `\section*` stays unnumbered and steps nothing. This numbering replaces a `--reference-doc`'s own. A page is known only once laid out, so the file is laid out once by LibreOffice and its pages written into the fields: a reader that does not update fields (OnlyOffice) shows them; without LibreOffice they show "?", and the run says so. `\pageref` and `\cpageref` to an example work the same way. After `\appendix` the sections are lettered, "A", "A.1", in the headings and the references, `\autoref`'s "Appendix A" included |
@@ -259,6 +292,7 @@ Unless a row says otherwise, this is true of both targets.
 | `enumerate`, and the same commands to one of its items | numbered as `article` numbers it, 1. / (a) / i. / A., from its start number; pandoc numbered every level of an `.odt` "1." and lost a list's start there, and the `.docx` had "a." for "(a)". A list that names its own style keeps it. A reference is live: "3", "item 3", "Item 2b", "2(b)i", the page, and for `\nameref` the title of the section the item is in, as LaTeX prints. One difference: a reference to an item whose label has parentheses keeps them, "2(b)" where LaTeX prints "2b", "(ii)" for the enumerate package's `[(i)]` where LaTeX prints "ii" -- it is a field per level, and no field drops them. `enumitem`'s `label=` is not read: such a list is numbered as article's default |
 | a numbered display equation, and the same commands (and `\eqref`) to it | numbered as amsmath numbers it, its number flush right beside it (`LxEquation`, a centre and a right tab stop): `equation` and `multline` once, `align`, `gather`, `alignat`, `flalign`, `eqnarray` once per row without `\nonumber`/`\notag`, `\tag{x}` as "(x)", under `\numberwithin{equation}{section}` "(1.2)" and "(A.1)"; pandoc wrote no number at all. An `align` with several numbers is set a row per line, so that each number stands beside its row; its `&` alignment is lost there. A reference is **text**, printing what LaTeX prints -- "1", "(2)", "eq. (3)", "Equation (4)", "Equation 1" -- and does not follow a renumbering; `\nameref` is the live title of the section the equation is in, `\pageref` a live page |
 | `\altn`, `\altg` | not supported: neither format can represent a stack of alternatives, and the run warns not to use them in a document you mean to convert. Where they are used anyway, they are deleted with their arguments; inside an example the `.odt` deletes them and the `.docx` prints the LaTeX source |
+| `\GlossRTL`, `\glscript`, automatic RTL gloss layout | outside this update; explicit commands warn, and RTL grid layout is not reproduced |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
 | `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | warn; the reference document's styles and the literal marks are used |
