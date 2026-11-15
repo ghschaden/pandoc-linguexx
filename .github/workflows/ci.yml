@@ -150,6 +150,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+      # The PDF layout checks read word positions with pdftotext -bbox.
+      - name: Install poppler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
       - name: Cache Document Builder
         id: docbuilder
         uses: actions/cache@v5
