@@ -1,6 +1,10 @@
 # What still needs a real Word
 
-**Nothing, as of 2026-09-25.** All three tests passed in **Word 365**, on
+**Converter checks passed on 2026-09-25; newer Word add-in checks remain pending.**
+The shared-gloss authoring changes of 2026-11-14 have not been tested in
+live Word. See the release acceptance checklist at the end of this file.
+
+All three original converter tests passed in **Word 365**, on
 the converted `tests/e2e/word-sample.tex`:
 
 | test | result |
@@ -14,7 +18,9 @@ first two also lay it out with identical column offsets (`0, 23, 108, 139,
 171, 209` from the text start), the same 41pt number-to-text indent, and
 the `\exannot` column at 362 against 361.
 
-**This file is now a procedure, not a to-do.** It is kept for the next time
+**The original converter checks below are a repeatable procedure.**
+The newer add-in checklist at the end remains a release prerequisite.
+The converter procedure is kept for the next time
 the emitter changes and the questions need asking again — which they will,
 because none of this can be tested from a machine without Word. Rebuild the
 document as below and work through the three tests; none takes more than

@@ -5,7 +5,7 @@ on:
   pull_request:
 
 # Both the suite and the macro job need pandoc, and the distribution's lags
-# behind the >= 3.0 the converter's JSON AST reading needs.  One version
+# behind the >= 3.6.1 the converter's JSON AST reading needs.  One version
 # here rather than two to drift apart.
 env:
   PANDOC_VER: "3.6.1"
@@ -39,13 +39,26 @@ jobs:
           ruff check .
 
   test:
+    name: Python ${{ matrix.python }} / Pandoc ${{ matrix.pandoc }}
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.10"
+            pandoc: "3.6.1"
+          - python: "3.12"
+            pandoc: "3.6.1"
+          - python: "3.14"
+            pandoc: "3.11"
+    env:
+      PANDOC_VER: ${{ matrix.pandoc }}
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python }}
 
       # libreoffice-writer is what renders the .odt to PDF so the geometry
       # can be measured, and poppler-utils reads the words back out of it.
@@ -61,7 +74,7 @@ jobs:
 
       # Not from apt: the distribution's pandoc lags, and this converter
       # reads a pandoc JSON AST, which is a versioned interface.  The
-      # README asks for >= 3.0; taking the release keeps CI on something a
+      # README asks for >= 3.6.1; taking the release keeps CI on something a
       # reader can actually install.
       - name: Install pandoc
         run: |
@@ -69,6 +82,15 @@ jobs:
             "https://github.com/jgm/pandoc/releases/download/${PANDOC_VER}/pandoc-${PANDOC_VER}-1-amd64.deb"
           sudo dpkg -i /tmp/pandoc.deb
           pandoc --version | head -1
+
+      # Build, then install in an independent environment. -I and the smoke
+      # script's temporary working directory prevent imports from this checkout.
+      - name: Check the installed wheel
+        run: |
+          python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/wheels"
+          python -m venv "$RUNNER_TEMP/installed"
+          "$RUNNER_TEMP/installed/bin/python" -m pip install "$RUNNER_TEMP"/wheels/*.whl
+          "$RUNNER_TEMP/installed/bin/python" -I tools/check_installed.py
 
       - name: Install the package
         run: python -m pip install --quiet -e ".[dev]"

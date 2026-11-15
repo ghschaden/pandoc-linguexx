@@ -30,6 +30,22 @@ for the extension alone, with per-platform install instructions.
 
 ## Install
 
+### Requirements and installation on Windows, macOS and Linux
+
+The extension needs only LibreOffice Writer and the `.oxt` file: no Python,
+pandoc or LaTeX. It declares LibreOffice 4.1 as its minimum; the project
+records development checks with 26.2. This is not evidence that every
+intervening version has been tested.
+
+Use **Tools ▸ Extension Manager ▸ Add** to install the `.oxt` on any of
+these platforms. Restart LibreOffice, then open a Writer document and look
+for the **LinguExx** menu. To update, install the new `.oxt` and accept
+replacement; restart again. To uninstall, select LinguExx in Extension
+Manager and choose **Remove**. If the menu is absent, check that the
+extension is enabled and that all LibreOffice processes have been closed
+before restarting. The French manual also provides optional platform-specific
+`unopkg` commands; the graphical procedure is the same in both languages.
+
 ### As an extension (recommended)
 
 Download `linguexx-0.1.0.oxt` from the
@@ -69,10 +85,9 @@ example*.
 
 ## What it does
 
-- **Measures the real font.** The converter has no font metrics and
-  estimates column widths from per-character advance widths, which is off
-  by −2% to +9% in practice. Here the actual font is available, so
-  columns are exactly as wide as their contents.
+- **Measures text through Writer.** The converter estimates layout from
+  bundled or installed font metrics; the macro measures the selected text
+  in Writer, including its formatting.
 - **Reads the real page.** The available text width comes from the page
   style in front of you, not from a `--text-width` flag — so it is right
   for the document you are actually in.
@@ -487,6 +502,34 @@ be sure of.
 A tree wider than the text block is still built, with a warning saying how
 wide it came out — shorten a label or group words with `{braces}`.
 
+## Shared glosses
+
+Select distinct marked variants with one object line each, followed by
+consecutive `\CommonGloss` lines and an optional final translation. Run
+**Typeset example**:
+
+```text
+Optional heading
+a. *Alpha {} Cappa\exannot{ANNA}
+b. Beta Longer Delta\exannot{ANNB}
+\CommonGloss FIRST SECOND THIRD
+\CommonGloss ONE TWO THREE
+Translation.
+```
+
+`{two words}` occupies one slot; `{}` preserves a gap. Short rows are
+padded on the right. Variants and glosses wrap together into bands; the
+translation appears once and need not be quoted after the shared tiers.
+One shared group is supported per selection. RTL, morpheme alignment,
+language declarations and mixtures with ordinary groups or trees are
+outside this authoring syntax.
+
+**Untypeset example** restores the `\CommonGloss` lines, variant letters,
+gaps and annotations, joining continuation bands. The example retains its
+number and references. Padding tabs from the converter's morpheme alignment
+are removed without adding spaces within words; ordinary re-typesetting
+aligns words. Use the reverse converters to recover a complete LaTeX document.
+
 ## Sub-examples
 
 `a. … b. …` paradigms work, glossed or not. Select the whole thing:
@@ -631,7 +674,7 @@ anchor. See [`notes/findings.md`](../notes/findings.md), 2026-08-12.
 | | converter | macro |
 |---|---|---|
 | syntax trees | no | yes, from bracket notation, numbered or bare |
-| column widths | estimated | measured |
+| column widths | character metrics from bundled tables or font files | measured through Writer |
 | inline formatting | from the LaTeX (`\lpzg`, `\textsc`, …) | from the text you selected |
 | small caps | estimated at `sc_ratio` of the capital | measured, by rendering them |
 | text width | `--text-width` | the actual page style |
@@ -640,7 +683,7 @@ anchor. See [`notes/findings.md`](../notes/findings.md), 2026-08-12.
 | band marks | written, so the macro can read them back | written and read |
 | judgment column | reserved only if the document judges something | always reserved |
 | sub-examples | yes | yes — one marker column, as the converter has |
-| back to text | no | **LinguExx ▸ Untypeset example** |
+| back to text | `docx2linguexx` / `odt2linguexx` recover LaTeX | **LinguExx ▸ Untypeset example** |
 
 The judgment row is a deliberate simplification: the column is always
 reserved because a macro sees one selection where the converter sees the

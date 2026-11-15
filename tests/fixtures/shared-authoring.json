@@ -1,0 +1,98 @@
+{
+  "_about": "Hand-reviewed rejection cases shared by the core parser, Word, OnlyOffice and real Writer tests. errorLine is the one-based source line, including blank lines.",
+  "invalid": {
+    "tier-before-variants": {
+      "lines": [
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 1
+    },
+    "empty-tier": {
+      "lines": [
+        "a. Alpha",
+        "\\CommonGloss"
+      ],
+      "errorLine": 2
+    },
+    "duplicate-marker": {
+      "lines": [
+        "a. Alpha",
+        "a. Beta",
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 2
+    },
+    "variant-after-tier": {
+      "lines": [
+        "a. Alpha",
+        "\\CommonGloss ONE",
+        "b. Beta"
+      ],
+      "errorLine": 3
+    },
+    "extra-object-line": {
+      "lines": [
+        "a. Alpha",
+        "extra tier",
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 2
+    },
+    "tier-after-translation": {
+      "lines": [
+        "a. Alpha",
+        "\\CommonGloss ONE",
+        "Translation.",
+        "\\CommonGloss TWO"
+      ],
+      "errorLine": 4
+    },
+    "extra-translation": {
+      "lines": [
+        "a. Alpha",
+        "\\CommonGloss ONE",
+        "Translation.",
+        "Extra translation."
+      ],
+      "errorLine": 4
+    },
+    "unclosed-variant-group": {
+      "lines": [
+        "a. {Alpha",
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 1
+    },
+    "unopened-variant-group": {
+      "lines": [
+        "a. Alpha}",
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 1
+    },
+    "empty-variant": {
+      "lines": [
+        "a.",
+        "\\CommonGloss ONE"
+      ],
+      "errorLine": 1
+    },
+    "unclosed-tier-group": {
+      "lines": [
+        "a. Alpha",
+        "\\CommonGloss {ONE"
+      ],
+      "errorLine": 2
+    },
+    "blank-lines-preserve-location": {
+      "lines": [
+        "",
+        "a. Alpha",
+        "",
+        "\\CommonGloss",
+        ""
+      ],
+      "errorLine": 4
+    }
+  }
+}

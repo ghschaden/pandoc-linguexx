@@ -3,7 +3,21 @@
 Ce guide explique comment installer et utiliser les outils du projet :
 
 | outil | à quoi il sert |
+|## S'orienter et connaître l'état de validation
+
+- [Documentation anglaise](../README.md) et [manuel PDF anglais](manual/pandoc-linguexx.pdf).
+- [Extension Writer seule](manuel-extension-fr.md) : installation, utilisation et dépannage.
+- [Préparer une version](publication-fr.md) : contrôles de publication et points encore ouverts.
+
+| Composant | État et portée des vérifications |
 |---|---|
+| Convertisseur | Cible linguexx 1.5 ; tests ODT/DOCX comprenant le rendu des documents. |
+| Extension Writer | Suite distincte exécutant les commandes dans Writer ; le minimum déclaré ne signifie pas que toutes les anciennes versions sont testées. |
+| Complément OnlyOffice | Publié ; vérifications de bureau consignées avec 9.4 et suite Document Builder distincte. Les tests sans interface ne remplacent pas la validation dans l'application. |
+| Sortie du convertisseur dans Word | L'échantillon initial a passé les contrôles Word 365 le 25 septembre 2026 ; cela ne valide pas les évolutions ultérieures du complément. |
+| Complément Word | Non publié. Des vérifications antérieures ont utilisé Word sur le web. Les gloses communes ajoutées le 14 novembre 2026 n'ont **pas été testées dans Word réel**, ni sur le web ni sur le bureau. Rendu, insertion, cycles composer/décomposer et annulation sur le bureau restent à vérifier. |
+
+---|---|
 | **`linguexx2odt`** | convertit un document LaTeX contenant des exemples [linguexx](../../linguexx) en fichier LibreOffice Writer (ou Word) |
 | **`LinguExx.bas`** | macro Writer qui met en forme des exemples glosés directement dans Writer, sans passer par LaTeX |
 | **les compléments Word et OnlyOffice** | la même chose que la macro, dans Word et dans OnlyOffice (partie F) |
@@ -24,59 +38,63 @@ renvois se mettent à jour.
 
 ## A.1 Prérequis
 
-- **pandoc ≥ 3.0** (développé et testé avec la version 3.6.1)
-- **Python ≥ 3.10**, bibliothèque standard uniquement — aucune dépendance
-  à installer
-- LibreOffice n'est **pas** nécessaire pour convertir, seulement pour lire
-  le résultat
+- **Python ≥ 3.10** et **fonttools ≥ 4.0**, installé automatiquement avec le paquet.
+- **pandoc ≥ 3.6.1**, installé séparément et accessible dans le `PATH`.
+  La CI exécute la suite Python complète et vérifie une installation neuve
+  du wheel pour les couples Python/Pandoc **3.10/3.6.1**, **3.12/3.6.1** et
+  **3.14/3.11** : minimum déclaré, référence et combinaison plus récente.
+  Elle ne couvre pas tous les couples possibles ni tous les systèmes.
+- **LibreOffice** pour `odt2linguexx` et l'extension Writer. Il n'est pas
+  nécessaire à la conversion vers ODT/DOCX ni à `docx2linguexx`.
+  Avec `pdfinfo` (Poppler), il permet de précalculer les numéros de page des
+  renvois ; sinon les champs non résolus affichent `?` jusqu'à leur actualisation.
+- Pour une police autre qu'une police à métrique Times, installer cette
+  police et Fontconfig (`fc-match`). `kpsewhich`, facultatif, permet de
+  chercher les fichiers inclus dans les chemins de recherche de TeX.
 
-Vérifiez que pandoc est bien présent :
-
-```
-pandoc --version
-```
+L'extension Writer seule ne nécessite ni Python, ni pandoc, ni LaTeX.
 
 ## A.2 Installation
 
-Sur Arch, Manjaro et la plupart des distributions récentes, le Python du
-système est « géré de l'extérieur » (*externally managed*) et refuse
-`pip install`. Utilisez un environnement virtuel :
+Depuis une copie téléchargée ou clonée du dépôt, avec pipx déjà installé :
 
-```
-python -m venv .venv
-.venv/bin/pip install -e .
-```
-
-La commande est alors disponible ici :
-
-```
-.venv/bin/linguexx2odt article.tex
+```sh
+pipx install .
+linguexx2odt article.tex -o article.odt
+linguexx2odt article.tex --to docx -o article.docx
 ```
 
-Pour l'avoir sous la main sans le chemin complet, ajoutez-la au `PATH` :
+Autre possibilité : un environnement virtuel. Sous Linux ou macOS :
 
-```
-export PATH="$PWD/.venv/bin:$PATH"
-```
-
-ou faites un lien symbolique :
-
-```
-ln -s "$PWD/.venv/bin/linguexx2odt" ~/.local/bin/
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/linguexx2odt article.tex -o article.odt
 ```
 
-**Avec `pipx`** (paquet `python-pipx`), tout tient en une ligne et la
-commande est installée directement dans le `PATH` :
+Sous Windows (PowerShell) :
 
-```
-pipx install -e .
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\linguexx2odt.exe article.tex -o article.odt
 ```
 
-**Sans rien installer du tout** — il n'y a aucune dépendance externe :
+Pour développer, remplacer `pip install .` par `pip install -e .` : les
+modifications du dépôt prennent alors effet sans réinstallation. Pour
+exécuter les sources sous Linux ou macOS, avec les dépendances déjà
+installées : `PYTHONPATH=src python3 -m linguexx2odt article.tex`.
 
-```
-PYTHONPATH=src python3 -m linguexx2odt.cli article.tex
-```
+Le format dépend de `--to`, **pas du nom du fichier de sortie**. Utiliser
+`.odt` par défaut et `.docx` avec `--to docx`.
+Les trois convertisseurs refusent d'écraser leur propre fichier d'entrée,
+y compris par un lien symbolique ou physique. Le document est écrit dans
+un fichier temporaire avant de remplacer la destination : un échec
+d'écriture ne tronque pas le document existant. Une conversion réussie
+peut remplacer une sortie existante sans confirmation. Les médias extraits
+au retour et les fichiers de `--keep-intermediates` ne font pas partie de
+ce remplacement atomique. Conserver une sauvegarde des documents modifiés.
+Lire les avertissements ; `-q` les masque.
 
 ## A.3 Première conversion
 
@@ -111,7 +129,11 @@ linguexx2odt fichier.tex [-o sortie.odt]
 
 | option | effet |
 |---|---|
-| `-o`, `--output FICHIER` | nom du `.odt` produit (par défaut : le `.tex` avec l'extension changée) |
+| `-o`, `--output FICHIER` | nom du document produit (par défaut : le `.tex` avec l'extension changée) |
+| `--to odt\|docx` | format de sortie (défaut : `odt`), indépendant du nom de fichier |
+| `--bibliography BIB` | fichier `.bib` ; option répétable ; par défaut, bibliographies déclarées dans le document |
+| `--csl STYLE` | style CSL pour les citations et la bibliographie |
+| `--no-citeproc` | imprime les clés bibliographiques sans résoudre les citations |
 | `--text-width CM` | largeur du bloc de texte servant au calcul des colonnes (défaut : 17, soit A4 avec marges de 2 cm) |
 | `--font NOM` | police dans laquelle le document est composé, et pour laquelle les colonnes sont mesurées (défaut : Times New Roman) |
 | `--font-pt PT` | corps du texte supposé pour estimer la largeur des colonnes (défaut : 12) |
@@ -147,13 +169,60 @@ romains) · `\z.` · gloses `\gll` / `\glll` / `\gl … \endgl` · traductions
 `\glt` · abréviations `\exg.` / `\ag.` / `\bg.` · `{groupes entre
 accolades}` comptant pour une seule colonne · lignes de longueurs
 inégales · jugements d'acceptabilité · `\label` / `\sublabel` / `\ref` /
-`\pref` · `\lpzg{…}`.
+`\pref` · `\lpzg{…}` · délimiteurs `\ExLBr` / `\ExRBr` et leurs
+équivalents pour les sous-exemples · compteurs `\Exalph` / `\Exroman`
+redéfinis avec `\roman`, `\alph`, etc. · annotations `\exannot{…}`.
 
 Le corps d'un exemple se termine là où linguexx le termine : ligne vide,
 `\z.`, fin d'environnement, ou accolade fermante.
 
 Tout le reste du document — sections, prose, emphase, notes de bas de
 page, citations — est converti par pandoc comme d'habitude.
+
+### Ajouts pour linguexx 1.5
+
+- `\CommonGloss` : les variantes `\ag.` / `\bg.` partagent une ou plusieurs
+  lignes de glose. Cases vides `{}`, jugements, annotations et renvois sont
+  conservés. Toutes les variantes et gloses déterminent les largeurs et
+  sont découpées ensemble en bandes. Lettres et annotations se répètent,
+  traduction une seule fois ; les pauses Beamer donnent l'état final.
+- `\GlossMorphAlign` / `\GlossMorphAlignOff` : alignement des morphèmes sur
+  `-` et `=` par tabulations mesurées. Les accolades protègent une unité ;
+  tirets initiaux et tirets TeX ne sont pas des frontières. Un nombre de
+  segments incompatible ou un tableau comprimé déclenche un avertissement
+  et un alignement par mots. Une colonne avec alternatives ou marques de
+  mouvement reste alignée par mots. Les réglages suivent les groupes et
+  environnements ; dans un exemple ou sous-exemple, ils restent locaux.
+- `\GlossTierLang{n}{tag}` et `\GlossTransLang{tag}` : métadonnées de langue
+  des lignes et de la traduction. Un tag vide efface la déclaration. Sans
+  langue de traduction explicite, seule celle de la dernière ligne de glose
+  peut être héritée, jamais celle de la ligne objet.
+- `\exrefcheck[words=n]` : rapport sur stderr des renvois relatifs et des
+  deux bornes des intervalles, avec numéro, ligne source et premiers mots
+  (six par défaut). `--quiet` le masque ; le document n'est pas modifié.
+  `\TextNext`, `\pTextNext` et `\Refrange` sont aussi reconnus.
+- `\let\Exalph\ExLatinAlph` : lettres latines explicites pour les sous-exemples.
+
+Les convertisseurs inverses récupèrent les gloses communes et retirent le
+remplissage morphémique sans insérer d'espaces dans les mots. Ils ne
+reconstruisent ni les déclarations de langue ni le réglage morphémique.
+Writer, Word et OnlyOffice disposent de la syntaxe de composition décrite
+ci-dessous ; sa validation dans Word réel reste en attente.
+
+### Citations et bibliographie
+
+Les déclarations `\addbibresource` et `\bibliography` du document fournissent
+les bibliographies à citeproc. Pour les remplacer ou choisir un style :
+
+```sh
+linguexx2odt article.tex --bibliography references.bib --csl revue.csl
+```
+
+`--bibliography` est répétable. Sans bibliographie, ou avec `--no-citeproc`,
+les clés restent visibles. Une bibliographie résolue est ajoutée à la fin.
+Certaines formes (`\citeauthor`, `\citealt`, `\citeyear`) deviennent
+« Auteur (Année) » : pandoc ne conserve pas toutes les distinctions de
+natbib/biblatex, et le convertisseur le signale.
 
 ## A.5bis Le second format : `--to docx`
 
@@ -202,14 +271,13 @@ L'argument optionnel (forme orale) est abandonné.
 
 Sauf mention contraire, le tableau ci-dessous vaut pour les deux formats.
 
-**Cible linguexx 1.4.** L'écart est autrement invisible : ce convertisseur
-a été écrit pour la 1.2 et a continué pendant un mois à produire
-silencieusement la sortie de la 1.2 après que la 1.3 l'eut changée. Avec une
-version plus récente, vérifiez ce tableau avant de faire confiance au
-résultat.
+**Cible linguexx 1.5.** Les gloses de droite à gauche sont exclues.
+Avec une version plus récente de linguexx, vérifier les fonctions utilisées
+contre ce tableau avant de se fier au résultat.
 
-Le convertisseur n'échoue **jamais en silence**. Tout ce qu'il ne peut pas
-rendre fidèlement produit un avertissement nommant la construction. La
+Le convertisseur signale les limites connues et les constructions non
+converties qu’il détecte. Ces diagnostics ne remplacent pas la relecture
+du document produit. La
 plupart dégrade vers quelque chose de lisible ; le reste est supprimé, et le
 tableau dit lequel :
 
@@ -235,11 +303,11 @@ tableau dit lequel :
 | `\input`, `\include`, `\includeonly` | lus et convertis avec le document, exemples et renvois compris. Un fichier est cherché dans le répertoire du document principal, comme le fait LaTeX, puis par `kpsewhich`, donc aussi dans `TEXINPUTS` et `~/texmf`. Un fichier livré par la distribution TeX (`\input{glyphtounicode}`) est de la configuration du moteur : trouvé, et pas lu. Sans `kpsewhich`, seul le répertoire du document est parcouru, et un fichier absent y est signalé et laissé de côté. Les avertissements nomment le fichier et la ligne concernés |
 | `\altn`, `\altg` | non pris en charge : aucun des deux formats ne peut représenter une pile d'alternatives, et l'exécution avertit de ne pas les employer dans un document destiné à la conversion. S'ils le sont quand même, ils sont supprimés avec leurs arguments ; dans un exemple, le `.odt` les supprime et le `.docx` imprime la source LaTeX |
 | `\GlossTransSide` | avertit ; converti en exemple ordinaire, traduction en dessous. Choix délibéré |
-| `[phantomalign]`, `\GlossPhantomAlign` | avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |
+| `[phantomalign]`, `\GlossPhantomAlign` | volontairement non pris en charge, sans prise en charge prévue ; avertit ; les marques de jugement ont leur propre colonne au lieu d'une gouttière |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | avertissent ; les styles du document de référence et les marques littérales sont utilisés |
 | `[langsci]`, l'interface `\ea … \z` | avertit ; `\ea` et `\z` sont supprimés, et le texte de l'exemple reste en texte ordinaire non numéroté |
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignorés — ils décrivent ce qu'un lecteur d'écran dit d'un PDF, ce qui n'a pas d'équivalent ODT |
-| syntaxe gb4e `exe`/`xlist` | hors périmètre, et supprimée : l'environnement disparaît avec tout son contenu, texte de l'exemple compris |
+| syntaxe gb4e `exe`/`xlist` | volontairement hors périmètre, sans prise en charge prévue ; supprimée : l'environnement disparaît avec tout son contenu, texte de l'exemple compris |
 | mode `[legacy]` | hors périmètre |
 | mathématiques dans un exemple | confiées à pandoc ; peuvent ne pas survivre |
 | les macros propres au document dans un exemple (`\newcommand`, `\renewcommand`, `\providecommand`, `\def`, …) | développées, arguments et valeur par défaut d'un argument optionnel compris, qu'elles soient définies dans le document ou dans un fichier qu'il `\input`e. Non lus : `\NewDocumentCommand`, `\def` à paramètres délimités, et les groupes de TeX (une définition vaut pour tout le document). Un `\newcommand` sur une commande qui existe déjà est refusé, comme LaTeX le refuse, et l'exécution le signale |
@@ -312,8 +380,8 @@ La macro sert à écrire des exemples **directement dans Writer**. Elle sait
 faire deux choses que le convertisseur ne peut structurellement pas
 faire :
 
-- elle **mesure la police réelle**, au lieu d'estimer la largeur des
-  colonnes (l'estimation du convertisseur se trompe de −2 % à +9 %) ;
+- elle **mesure le texte dans Writer**, au lieu d’estimer la mise en page
+  à partir des avances de caractères ;
 - elle lit la **vraie largeur du bloc de texte** dans le style de page du
   document, au lieu de faire confiance à `--text-width`.
 
@@ -509,6 +577,37 @@ Points à connaître :
 - **Chaque item peut porter son propre jugement.**
 - Chaque item peut avoir sa propre traduction.
 
+### Gloses communes
+
+Sélectionnez des variantes distinctes, chacune avec une seule ligne objet,
+puis une ou plusieurs lignes `\CommonGloss` consécutives et, si nécessaire,
+une traduction finale. Lancez **Composer l'exemple** :
+
+```text
+Introduction facultative
+a. *Alpha {} Cappa\exannot{ANNA}
+b. Beta Longer Delta\exannot{ANNB}
+\CommonGloss PREMIER DEUXIÈME TROISIÈME
+\CommonGloss UN DEUX TROIS
+Traduction.
+```
+
+`{deux mots}` occupe une colonne ; `{}` conserve une case vide. Les lignes
+courtes sont complétées à droite. Les variantes et les gloses passent
+ensemble à la bande suivante ; la traduction n'apparaît qu'une fois et
+n'a pas besoin de guillemets après les gloses communes. Une seule série
+commune est acceptée par sélection. L'écriture de droite à gauche,
+l'alignement morphémique, les déclarations de langue et les mélanges avec
+des groupes ordinaires ou des arbres ne font pas partie de cette syntaxe.
+
+**Décomposer l'exemple** restitue les lignes `\CommonGloss`, les lettres,
+les cases vides et les annotations, en réunissant les bandes. Le numéro
+reste le même, ainsi que les renvois qui le visent. Les tabulations ajoutées
+par l'alignement morphémique du convertisseur sont retirées sans ajouter
+d'espaces dans les mots ; une recomposition ordinaire aligne les mots.
+Pour reconstruire un document LaTeX complet, utiliser les convertisseurs
+inverses.
+
 ## B.4 Modifier un exemple composé
 
 **Décomposer l'exemple** rend un exemple composé aux lignes dont il a été
@@ -640,15 +739,17 @@ la macro, qui pose le champ pour vous.
 
 ### Les colonnes sont trop larges ou trop étroites (documents convertis)
 
-Le convertisseur n'a pas accès aux métriques de la police : il estime la
-largeur des colonnes à partir de largeurs de caractères moyennes, en
-majorant légèrement. Trois solutions, de la plus simple à la meilleure :
+Le convertisseur utilise les avances de caractères fournies avec le projet
+pour les polices à métrique Times, et lit les fichiers de police pour les
+autres. Ce calcul ne reproduit pas toute la mise en page du logiciel :
+crénage, composition complexe et substitution de police peuvent intervenir.
 
-1. tirez les bords de colonne à la souris dans Writer ;
-2. reconvertissez avec `--font-pt` si votre corps de texte n'est pas 12,
-   ou avec `--font` si ce n'est pas la police par défaut : les largeurs
-   sont alors mesurées sur la police demandée elle-même ;
-3. utilisez la macro, qui mesure vraiment.
+1. Vérifiez que la police demandée est installée.
+2. Reconvertissez avec `--font` et `--font-pt` correspondant au document.
+3. Si vous utilisez `--reference-doc`, vérifiez sa police : ses styles sont
+   prioritaires, mais les largeurs restent calculées pour `--font`.
+4. Dans Writer, décomposez puis recomposez l'exemple pour le mesurer dans
+   sa mise en page actuelle, ou ajustez les colonnes manuellement.
 
 ### Un exemple déborde de la page
 
@@ -673,8 +774,8 @@ cache.
 ### La macro ne fait rien / un message apparaît
 
 Le message dit précisément ce qui manque. Les deux causes les plus
-fréquentes sont une sélection d'une seule ligne, et un paradigme de
-sous-exemples sélectionné à partir du milieu.
+fréquentes sont une sélection vide et un paradigme de sous-exemples sélectionné à partir
+du milieu. Une seule ligne est valide : elle produit un exemple non glosé.
 
 ### Les accents ou caractères spéciaux passent mal
 
@@ -750,6 +851,13 @@ boutons pendant que Word travaille.
 ## F.3 Installation
 
 Le module OnlyOffice est publié ; le complément Word ne l'est pas encore.
+
+**Validation Word en attente :** les gloses communes du 14 novembre 2026
+n'ont pas été testées dans Word réel, ni sur le web ni sur le bureau.
+Les tests automatisés utilisent une simulation de la frontière Office.js
+et des contrôles OOXML ; ils ne valident pas le rendu, l'insertion, les
+cycles composer/décomposer ni l'annulation dans Word. Voir la
+[procédure Word](../WORD-TESTS-TODO.md#word-add-in-shared-gloss-authoring-2026-11-14).
 
 **Word.** Le complément doit être servi en HTTPS ; pour l'instant, par un
 serveur sur votre propre machine :

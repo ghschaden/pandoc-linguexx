@@ -10,15 +10,17 @@ renumérotent.
 
 Ce manuel ne concerne que l'extension. Le convertisseur LaTeX →
 LibreOffice (`linguexx2odt`) est documenté séparément dans
-[`guide-fr.md`](guide-fr.md).
+[`guide-fr.md`](guide-fr.md). Le [manuel anglais](macro.md) couvre
+les mêmes opérations de composition et de modification.
 
 ---
 
 ## 1. Prérequis
 
 - **LibreOffice 4.1 ou plus récent** — c'est le minimum que déclare
-  l'extension. Développée et vérifiée sous LibreOffice 26.2 ; toute
-  version moderne convient. Fonctionne sous Windows, macOS et Linux.
+  l'extension. Les vérifications de développement consignées utilisent LibreOffice 26.2 ;
+  toutes les versions intermédiaires n’ont pas été testées. Installation possible sous
+  Windows, macOS et Linux.
 - Le fichier de l'extension : **`linguexx-0.1.0.oxt`**, à télécharger sur
   la [dernière version publiée](https://github.com/ghschaden/pandoc-linguexx/releases/latest)
   (ou à fabriquer soi-même, § 11).
@@ -442,6 +444,37 @@ l'arbre plutôt qu'après, et la macro vous le signale.
 (avec une barre oblique inverse), les étiquettes d'arête, les flèches
 au-dessus de l'arbre, et les options de nœud autres que `roof` et `name=`.
 Elles sont refusées par leur nom plutôt qu'ignorées en silence.
+
+### Gloses communes
+
+Sélectionnez des variantes distinctes, chacune avec une seule ligne objet,
+puis une ou plusieurs lignes `\CommonGloss` consécutives et, si nécessaire,
+une traduction finale. Lancez **Composer l'exemple** :
+
+```text
+Introduction facultative
+a. *Alpha {} Cappa\exannot{ANNA}
+b. Beta Longer Delta\exannot{ANNB}
+\CommonGloss PREMIER DEUXIÈME TROISIÈME
+\CommonGloss UN DEUX TROIS
+Traduction.
+```
+
+`{deux mots}` occupe une colonne ; `{}` conserve une case vide. Les lignes
+courtes sont complétées à droite. Les variantes et les gloses passent
+ensemble à la bande suivante ; la traduction n'apparaît qu'une fois et
+n'a pas besoin de guillemets après les gloses communes. Une seule série
+commune est acceptée par sélection. L'écriture de droite à gauche,
+l'alignement morphémique, les déclarations de langue et les mélanges avec
+des groupes ordinaires ou des arbres ne font pas partie de cette syntaxe.
+
+**Décomposer l'exemple** restitue les lignes `\CommonGloss`, les lettres,
+les cases vides et les annotations, en réunissant les bandes. Le numéro
+reste le même, ainsi que les renvois qui le visent. Les tabulations ajoutées
+par l'alignement morphémique du convertisseur sont retirées sans ajouter
+d'espaces dans les mots ; une recomposition ordinaire aligne les mots.
+Pour reconstruire un document LaTeX complet, utiliser les convertisseurs
+inverses.
 
 ### 4.10 Annuler
 

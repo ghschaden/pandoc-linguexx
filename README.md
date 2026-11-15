@@ -21,60 +21,86 @@ couvre les deux outils ; [`docs/manuel-extension-fr.md`](docs/manuel-extension-f
 est un manuel autonome pour la seule extension LibreOffice, avec les
 instructions d'installation sous Windows, macOS et Linux.
 
+## Start here
+
+| Task | English | Français |
+|---|---|---|
+| Install and use the converters | This guide; [PDF manual](docs/manual/pandoc-linguexx.pdf) | [Guide d'utilisation](docs/guide-fr.md) |
+| Write examples directly in Writer | [Writer manual](docs/macro.md) | [Manuel de l'extension](docs/manuel-extension-fr.md) |
+| Use Word or OnlyOffice | [Add-ins](#writing-examples-in-word-and-onlyoffice) | [Compléments](docs/guide-fr.md#partie-f--les-compléments-word-et-onlyoffice) |
+| Prepare a release | [Release checklist](docs/releasing.md) | [Préparer une version](docs/publication-fr.md) |
+
 ## Requirements
 
-- **pandoc ≥ 3.0** (developed and tested against 3.6.1)
-- **Python ≥ 3.10** and `fonttools` (the only dependency; `pip` brings it)
-- LibreOffice is *not* needed to convert, only to read the result (and to
-  run the rendering half of the test suite)
+- **Python ≥ 3.10** and **fonttools ≥ 4.0**; installing the package installs fonttools.
+- **pandoc ≥ 3.6.1**, installed separately and available on `PATH`.
+  CI runs the full Python suite and a clean-wheel installation check for
+  Python/Pandoc pairs **3.10/3.6.1**, **3.12/3.6.1** and **3.14/3.11**.
+  This covers the declared minimum, the baseline and a newer combination;
+  it does not cover every possible pairing or operating system.
+- **LibreOffice** is needed for `odt2linguexx` and the Writer extension.
+  Forward conversion and `docx2linguexx` do not require it. LibreOffice
+  together with Poppler's `pdfinfo` can prefill page-reference numbers;
+  without them unresolved page fields remain `?` until updated in an editor.
+- For a non-Times font, install the requested font and Fontconfig (`fc-match`).
+  Optional `kpsewhich` enables TeX's search paths for included files.
 
-## Install
+The Writer extension alone needs neither Python, pandoc nor LaTeX.
 
-No install is needed to run it. From a checkout:
+## Install and first conversion
 
-```
-PYTHONPATH=src python3 -m linguexx2odt paper.tex -o paper.odt
-```
+Run these commands from a downloaded or cloned copy of this repository.
+With pipx already installed:
 
-The `PYTHONPATH` is not optional — this is a src-layout project, so a bare
-`python3 -m linguexx2odt` from the repository root does not find the
-package. What it buys is needing no virtualenv, which is the quickest way
-past a `.venv` that has gone stale — or, if this checkout is synced by a
-service that does not preserve the executable bit, past a
-`.venv/bin/linguexx2odt` that exists and will not run.
-
-(The test suite needs no `PYTHONPATH`: `pyproject.toml` sets it for pytest.
-The two are different, and conflating them cost an afternoon.)
-
-For the `linguexx2odt` command itself: Arch/Manjaro (and most current
-distros) mark the system Python as externally managed, so `pip install -e .`
-into it is refused. Use a virtual environment:
-
-```
-python -m venv .venv
-.venv/bin/pip install -e .
-.venv/bin/linguexx2odt paper.tex
+```sh
+pipx install .
+linguexx2odt paper.tex -o paper.odt
+linguexx2odt paper.tex --to docx -o paper.docx
 ```
 
-Put it on `PATH` if you want the bare command:
+Alternatively, use a virtual environment. On Linux or macOS:
 
-```
-export PATH="$PWD/.venv/bin:$PATH"     # or: ln -s "$PWD/.venv/bin/linguexx2odt" ~/.local/bin/
-```
-
-With `pipx` (`pacman -S python-pipx`) the whole thing is one line, and
-the command lands on `PATH` for you:
-
-```
-pipx install -e .
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/linguexx2odt paper.tex -o paper.odt
 ```
 
-Or skip installing altogether — there are no dependencies beyond the
-standard library:
+On Windows (PowerShell):
 
+```powershell
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\linguexx2odt.exe paper.tex -o paper.odt
 ```
-PYTHONPATH=src python3 -m linguexx2odt.cli paper.tex
-```
+
+Use `pip install -e .` instead when developing: changes in the checkout
+then take effect without reinstalling. If running from source on Linux or
+macOS, with dependencies already installed, use
+`PYTHONPATH=src python3 -m linguexx2odt paper.tex`.
+
+The output format is selected by `--to`, **not by the output filename**.
+Use `.odt` with the default target and `.docx` with `--to docx`.
+All three converters reject an output that is the input itself, including
+symlinks and hard links. They stage document output before replacing an
+existing destination, so a failed write does not truncate that document.
+Successful conversion can replace an existing output without prompting.
+Reverse conversion's extracted media and `--keep-intermediates` files are
+separate from this atomic document replacement. Keep backups of edited work.
+Read warnings before using the result; `-q` hides them.
+
+## Support and validation status
+
+| Component | Status and limits of the evidence |
+|---|---|
+| Converter | Targets linguexx 1.5; ODT and DOCX regression tests include rendered output. See the feature and limitation tables below. |
+| Writer extension | Uses real Writer operations in its separate macro suite; the declared minimum version is not a promise that every historical version is tested. |
+| OnlyOffice add-in | Published; repository records desktop checks with 9.4 and a separate Document Builder suite. Headless checks do not replace desktop acceptance tests. |
+| Word converter output | The original sample passed Word 365 checks on 2026-09-25; that result does not validate subsequent add-in changes. |
+| Word add-in | Unreleased. Earlier checks used Word on the web. Shared-gloss authoring added on 2026-11-14 has **not been tested in live Word**, web or desktop; rendering, insertion, repeated Typeset/Untypeset and desktop Undo remain pending. |
+
+Release checks and their outstanding items are recorded in
+[the release checklist](docs/releasing.md) and [the Word procedure](WORD-TESTS-TODO.md).
 
 ## What the output looks like
 
@@ -139,7 +165,9 @@ be per-table direct formatting. See `notes/findings.md`.
 ## Options
 
 ```
-linguexx2odt input.tex [-o out.odt]
+linguexx2odt input.tex [-o out.odt] [--to odt|docx]
+             [--font NAME]        font used for the document and measurement
+                                   (default Times New Roman)
              [--text-width CM]     column widths are computed for this
                                    text block (default 17, = A4/2cm margins)
              [--font-pt PT]        body font size assumed when estimating
@@ -162,6 +190,7 @@ linguexx2odt input.tex [-o out.odt]
              [--no-citeproc]       do not resolve citations; print the keys
              [--reference-doc REF.odt]   base styles for pandoc
              [--keep-intermediates DIR]  residue.tex, ast.json, unpatched odt
+             [--print-macro]       print the Writer macro and exit
              [-q] [-v]
 ```
 
@@ -291,9 +320,10 @@ at an environment boundary, or at a closing brace.
 
 ### What it does not, and says so
 
-The converter never fails silently. Anything it cannot render faithfully
-produces a warning naming the construct. Most of it degrades to readable
-output; some of it is deleted, and the rows below say which:
+The converter warns about known limitations and detected unconverted
+constructs. These diagnostics do not replace reviewing the output. Most
+unsupported constructs degrade to readable output; some are deleted, as
+described below:
 
 Unless a row says otherwise, this is true of both targets.
 
@@ -317,11 +347,11 @@ Unless a row says otherwise, this is true of both targets.
 | `\altn`, `\altg` | not supported: neither format can represent a stack of alternatives, and the run warns not to use them in a document you mean to convert. Where they are used anyway, they are deleted with their arguments; inside an example the `.odt` deletes them and the `.docx` prints the LaTeX source |
 | `\GlossRTL`, `\glscript`, automatic RTL gloss layout | outside this update; explicit commands warn, and RTL grid layout is not reproduced |
 | `\GlossTransSide` | warns; converted as an ordinary example, with the translation below. Deliberate — see below |
-| `[phantomalign]`, `\GlossPhantomAlign` | warns; judgment marks get their own column instead of a gutter |
+| `[phantomalign]`, `\GlossPhantomAlign` | intentionally unsupported, with no support planned; warns; judgment marks get their own column instead of a gutter |
 | `\GlossTierFont`, `\SetLeipzig`, `\DeclareJudgment` | warn; the reference document's styles and the literal marks are used |
 | `[langsci]`, the `\ea … \z` front-end | warns; `\ea` and `\z` are deleted, and the example's text stays as ordinary unnumbered text |
 | `\SetAltSpoken`, `\SetAnnotSpoken`, `\SetJudgmentSpoken` | ignored — they describe what a PDF screen reader says, which has no ODT counterpart |
-| gb4e `exe`/`xlist` syntax | out of scope, and deleted: the environment goes with everything in it, the example's text included |
+| gb4e `exe`/`xlist` syntax | intentionally out of scope, with no support planned; deleted: the environment goes with everything in it, the example's text included |
 | `[legacy]` mode | out of scope |
 | `\citet`, `\citep`, `\citealt`, `\citeauthor` | resolved with citeproc against the document's `.bib`, with a reference list; the keys are printed if no `.bib` is found |
 | `\citeauthor`, `\citealt`, `\citeyear` | resolved, but printed as `Author (Year)` — pandoc has one author-in-text mode, so the parentheses and the year come back; the run says how many |
@@ -392,22 +422,19 @@ returns *something*, and measuring its guess would size the columns for a
 font nobody chose.
 
 `--reference-doc` wins over `--font`. Supplying a reference document is
-choosing a typeface, and overriding it to keep the columns exact would be
-answering a question you already answered — the columns may then drift a
-little, which is the honest price.
+choosing its styles. Column widths are still calculated for `--font`,
+so match that option to the reference document’s font to avoid drift.
 
 ## Things you will want to fix by hand
 
 Two of these are inherent to the table method, not defects:
 
-1. **Column widths are estimated.** Real font metrics are not available
-   at conversion time, so widths come from a table of per-character
-   advances measured from Liberation Serif — metric-compatible with Times
-   New Roman — and err slightly wide: −2% to +9% of the rendered width
-   before `width_safety`. Drag the column edges in Writer if a column
-   looks wrong, or set `--font-pt` if your body text is not 12 pt. The
-   Writer macro below does not have this limitation — it measures.
-   `python3 tools/measure_advances.py` checks the table against the font.
+1. **Font metrics are not full text layout.** Times-compatible fonts use
+   bundled character advances; other fonts use their installed font files.
+   These measurements do not reproduce every editor's shaping, kerning or
+   font substitution. Match `--font` and `--font-pt` to the document, and
+   reconvert after changing either. The Writer macro measures text through
+   Writer itself. `python3 tools/measure_advances.py` checks the bundled table.
 
    Text is estimated as it is *drawn*, not as it is spelled: `\lpzg{…}`
    and `\textsc{…}` set small capitals, which are the capitals at 80% of
@@ -439,8 +466,7 @@ press your shortcut, and get the same object this converter emits — same
 named styles, same `NumEx` field, same hanging judgment marks.
 
 It exists because a macro can do two things the converter cannot: it
-**measures the real font** instead of estimating column widths (the
-estimate is off by −2% to +9%), and it reads the **actual page style**
+**measures text through Writer** instead of estimating layout from character metrics, and it reads the **actual page style**
 instead of taking `--text-width` on trust. Since it shares the style
 names, it also works as a post-processor on converted documents.
 
@@ -568,6 +594,14 @@ Word works.
 ### Installing them
 
 The OnlyOffice plugin is released; the Word add-in is not yet.
+
+**Word release validation is pending:** the shared-gloss authoring changes
+added on 2026-11-14 have **not been tested in live Word**, on the web or
+desktop. Rendering, insertion, repeated Typeset/Untypeset and desktop Undo
+remain unverified in Word. Automated tests use an Office.js mock and
+OOXML checks; they do not establish live Word compatibility. See the
+[Word acceptance checklist](WORD-TESTS-TODO.md#word-add-in-shared-gloss-authoring-2026-11-14).
+
 **Word:** the add-in has to be served over HTTPS, and for now that is a
 server on your own machine:
 
@@ -668,8 +702,10 @@ LINGUEXX_UPDATE_GOLDEN=1 pytest tests/test_extract.py   # re-snapshot
 python3 spikes/s1_passthrough.py   # re-run if the pandoc version changes
 ```
 
-Plain `pytest` is enough — `pyproject.toml` sets `pythonpath = ["src"]`, so
-no `PYTHONPATH` and no activated virtualenv are required. A regenerated
+With the development dependencies installed, `python -m pytest` is enough — `pyproject.toml` sets `pythonpath = ["src"]`, so
+no `PYTHONPATH` is required. Use the Python environment where you installed
+`.[dev]`; install Ruff separately for linting. The corpus tests also require
+a sibling `../linguexx` checkout at the target version (1.5). A regenerated
 golden is **read before it is committed**; regenerating without reading
 records whatever the code now does, bug included.
 
@@ -680,9 +716,8 @@ glosses sit above their words, that judgment marks do not shift the text,
 and that nothing overflows the margin.
 
 They need `pandoc`, `soffice` and `pdftotext`, and their absence is a
-**failure, not a skip**: without them 28 of the tests — every end-to-end
-one — step aside and the run still exits 0, which is how a contributor
-without LibreOffice sees green and ships. `tests/test_tooling.py` names
+**failure, not a skip** in a complete run. This prevents missing tools
+from silently removing rendering coverage. `tests/test_tooling.py` names
 what is missing, and checks that CI still installs it. To run a partial
 suite deliberately:
 

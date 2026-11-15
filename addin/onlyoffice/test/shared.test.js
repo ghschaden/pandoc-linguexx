@@ -12,6 +12,7 @@ import {tableRows} from '../../core/table.js';
 import {dxa} from '../../word/ooxml.js';
 import {parse, child, findAll, textOf} from '../../word/xml.js';
 
+const authoring = JSON.parse(readFileSync(new URL('../../../tests/fixtures/shared-authoring.json', import.meta.url)));
 const command = String.fromCharCode(92) + 'CommonGloss';
 const annotate = (text) => String.fromCharCode(92) + 'exannot{' + text + '}';
 const read = (lines, width = 9638) => ({paragraphs: lines.map(text => ({inTable: false,
@@ -91,12 +92,10 @@ test('shared rich text and annotated variants retain bold, italic and small caps
 
 test('invalid shared groups are refused; a following valid operation succeeds', () => {
   const tier = command + ' ONE TWO';
-  for (const lines of [[tier], ['a. A', command], ['a. A', 'a. B', tier],
-    ['a. A', tier, 'b. B'], ['a. A', 'extra tier', tier], ['a. A', tier, 'T', tier],
-    ['a. A', tier, 'T', 'extra translation'], ['a. {A', tier], ['a. A}', tier]]) {
+  for (const [name, {lines, errorLine}] of Object.entries(authoring.invalid)) {
     const input = read(lines), before = structuredClone(input);
     const result = prepareJob(input);
-    assert.match(result.refusal, /Line/);
+    assert.match(result.refusal, new RegExp(`Line ${errorLine}:`), name);
     assert.equal(result.job, undefined);
     assert.deepEqual(input, before);
     assert.ok(prepareJob(read(['a. A', tier])).job);

@@ -48,6 +48,7 @@ from pathlib import Path
 
 from . import untypeset as U
 from .ir import Body, Example
+from .output import atomic_output, same_file
 from .latexutil import Brackets
 from .styles_docx import GAP_PARA
 
@@ -469,7 +470,8 @@ def convert(docx: Path, out: Path, warn) -> int:
         warn("a placeholder is left in the output, where pandoc moved it "
              "away from a paragraph of its own; search the .tex for LXEXAMPLE "
              "or LXREF")
-    out.write_text(latex, encoding="utf-8")
+    with atomic_output(out) as staged:
+        staged.write_text(latex, encoding="utf-8")
     return len(placed)
 
 
@@ -532,7 +534,7 @@ def run(argv: list[str] | None, kind: str) -> int:
                  + ("; use odt2linguexx" if src.suffix.lower() == ".odt" else
                     "; use docx2linguexx" if src.suffix.lower() == ".docx" else ""))
     out: Path = (args.output or src.with_suffix(".tex")).resolve()
-    if out.resolve() == src.resolve():
+    if same_file(src, out):
         sys.exit(f"{prog}: the output would overwrite the input")
     src = src.resolve()
     warnings: list[str] = []

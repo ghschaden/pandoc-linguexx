@@ -112,9 +112,9 @@ Four principles run through all of it:
 \item \textbf{\LaTeX{} is the reference.} What a reference, a caption or a
   number prints is not reasoned out: it was measured from what \LaTeX{}
   prints for the same source, and the test suite holds the converter to it.
-\item \textbf{It never fails silently.} Anything it cannot render
-  faithfully is named in a warning. Some constructs degrade, a few are
-  deleted; section~\ref{sec:limits} lists them.
+\item \textbf{Known limitations produce diagnostics.} Warnings identify
+  detected unsupported constructs; they do not replace reviewing the output.
+  Some constructs degrade, a few are deleted; section~\ref{sec:limits} lists them.
 \end{enumerate}
 
 \begin{note}
@@ -133,9 +133,9 @@ styles, and reads correctly in Word~365, LibreOffice and OnlyOffice.
 \toprule
 \textbf{Program} & \textbf{Version} & \textbf{Needed for}\\
 \midrule
-pandoc & 3.0 or later & every conversion; tested with 3.6.1 and 3.10.2\\
+pandoc & 3.6.1 or later & every conversion; tested with 3.6.1 and 3.10.2\\
 Python & 3.10 or later & the converter itself\\
-\texttt{fonttools} & any & measuring a face other than Times (installed with the package)\\
+\texttt{fonttools} & 4.0 or later & measuring a face other than Times (installed with the package)\\
 \midrule
 LibreOffice & optional & the page numbers of \cs{pageref} (section~\ref{sec:pages}),
   \prog{odt2linguexx}, the test suite\\
@@ -148,6 +148,12 @@ LibreOffice & optional & the page numbers of \cs{pageref} (section~\ref{sec:page
 LibreOffice is \emph{not} needed to convert. It is only needed to read the
 result, to fill in page numbers ahead of time, and to run the half of the test
 suite that renders documents.
+
+CI runs the full Python suite and a clean-wheel check for Python/pandoc
+pairs 3.10/3.6.1, 3.12/3.6.1 and 3.14/3.11: the declared minimum, baseline
+and a newer combination. This is not an exhaustive platform or version matrix. For a
+non-Times font, install the font and Fontconfig (\prog{fc-match}). The
+Writer extension alone needs neither Python, pandoc nor \LaTeX{}.
 
 \subsection{Installing}
 
@@ -164,13 +170,21 @@ python -m venv .venv
 .venv/bin/pip install -e .
 .venv/bin/linguexx2odt paper.tex
 \end{code}
-Or install nothing, and run it from a checkout:
+With dependencies already installed, run from a checkout:
 \begin{code}
 PYTHONPATH=src python3 -m linguexx2odt paper.tex
 \end{code}
 The \texttt{PYTHONPATH} is not optional there: the project uses a \texttt{src}
 layout, so a bare \texttt{python3 -m linguexx2odt} in the repository's root
 does not find the package.
+
+The output format is selected by \opt{--to}, not the filename. All three
+converters reject output paths that identify the input itself, including
+symbolic and hard links. Document output is staged before replacing an
+existing destination; a failed write does not truncate the old document.
+Successful conversion can replace an existing output without prompting.
+Extracted media and intermediate files are separate from this atomic
+replacement. Keep backups and read conversion warnings.
 
 % ============================================================================
 \section{Quick start}\label{sec:quick}
@@ -458,12 +472,14 @@ converter. Any other face is measured from its font file with
 \texttt{fonttools}, in milliseconds. A name that no installed font answers
 to is an error, not a silent substitution.
 
-The estimate errs slightly wide, by $-2$\,\% to $+9$\,\% of the rendered width.
+Character advances do not reproduce every editor’s shaping, kerning or
+font substitution; review the rendered result.
 Text is measured as it is \emph{drawn}: a gloss label in \cs{lpzg} is set in
 small capitals, which are wider than the lowercase they replace, and is
 measured as such. Set \opt{--font-pt} if the body text is not 12\,pt.
 Supplying a \opt{--reference-doc} is choosing a face. In that case
-\opt{--font} is ignored and the columns may be a little off.
+the reference styles take precedence, but widths are still calculated for
+\opt{--font}; match the two to avoid misalignment.
 
 \subsection{The \file{.docx} target}
 
@@ -777,9 +793,9 @@ Esto es un ejemplo glosado
 this is a example glossed
 'This is a glossed example.'
 \end{code}
-The result is a numbered, aligned example. The macro does two things the
-converter cannot: it \emph{measures} the real font instead of estimating, and
-it reads the actual page instead of trusting \opt{--text-width}.
+The result is a numbered, aligned example. The macro measures text through Writer rather than estimating layout from
+character metrics, and reads the actual page instead of relying on
+\opt{--text-width}.
 \begin{itemize}[nosep]
 \item Sub-examples typed \texttt{a.}, \texttt{b.}; a leading \texttt{*} or
   \texttt{?} for a judgment; \texttt{\{braces\}} for one column;
@@ -816,6 +832,14 @@ document's examples and inserts a live reference, ``(3)'' or the bare
   \texttt{Ctrl+A}, \texttt{F9}. Word on the web never renumbers fields;
   the pane says which numbers are stale.
 \end{itemize}
+
+\textbf{Word validation remains pending.} The original converter sample
+passed Word 365 checks on 2026-09-25. Shared-gloss authoring added on
+2026-11-14 has not been tested in live Word, web or desktop. Rendering,
+insertion, repeated Typeset/Untypeset and desktop Undo remain unverified.
+Mocked Office.js and OOXML tests do not establish live Word compatibility.
+See \file{WORD-TESTS-TODO.md} and the English/French release checklists,
+\file{docs/releasing.md} and \file{docs/publication-fr.md}.
 
 % ============================================================================
 \section{Back to \LaTeX}\label{sec:back}

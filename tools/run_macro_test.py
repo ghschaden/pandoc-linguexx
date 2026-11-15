@@ -2460,19 +2460,10 @@ def check_shared_authoring(ctx, out: Path) -> int:
         ["a. Alpha", "b. Beta Longer Delta", r"\CommonGloss ONE TWO THREE"],
     ]
     cases.append(cases[1])  # same content, forced onto a narrow page
-    invalid = [
-        [r"\CommonGloss ONE"],
-        ["a. Alpha", r"\CommonGloss"],
-        ["a. Alpha", "a. Beta", r"\CommonGloss ONE"],
-        ["a. Alpha", r"\CommonGloss ONE", "b. Beta"],
-        ["a. Alpha", "extra tier", r"\CommonGloss ONE"],
-        ["a. Alpha", r"\CommonGloss ONE", "Translation.", r"\CommonGloss TWO"],
-        ["a. Alpha", r"\CommonGloss ONE", "Translation.", "Extra translation."],
-        ["a. {Alpha", r"\CommonGloss ONE"],
-        ["a. Alpha}", r"\CommonGloss ONE"],
-    ]
+    fixtures = json.loads((ROOT / "tests/fixtures/shared-authoring.json").read_text(encoding="utf-8"))
     bad = 0
-    for lines in invalid:
+    for name, case in fixtures["invalid"].items():
+        lines = case["lines"]
         doc = make_doc(ctx, lines)
         try:
             before = doc.getText().getString()
@@ -2491,7 +2482,7 @@ def check_shared_authoring(ctx, out: Path) -> int:
             assert not run(ctx), "valid input after failure rejected"
         except AssertionError as exc:
             bad += 1
-            print(f"    FAIL: shared rejection {lines}: {exc}", flush=True)
+            print(f"    FAIL: shared rejection {name} {lines}: {exc}", flush=True)
         finally:
             doc.dispose()
     for index, lines in enumerate(cases):

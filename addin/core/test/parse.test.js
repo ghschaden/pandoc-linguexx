@@ -92,3 +92,20 @@ test("\\exannot comes off the object line, in any case, with its [spoken] form",
   assert.deepEqual(pullAnnot("x \\EXANNOT{[TP]}"), ["x ", "[TP]"]);
   assert.deepEqual(pullAnnot("x \\exannot{unclosed"), ["x \\exannot{unclosed", ""]);
 });
+
+// Rejections are a cross-host contract: invalid selections must not be replaced.
+const sharedAuthoring = JSON.parse(readFileSync(
+  new URL("../../../tests/fixtures/shared-authoring.json", import.meta.url), "utf-8"));
+for (const [name, {lines, errorLine}] of Object.entries(sharedAuthoring.invalid)) {
+  test(`shared authoring rejects ${name} at its source line`, () => {
+    const before = structuredClone(lines);
+    const result = parseLines(lines, undefined, {shared: true});
+    assert.match(result.error, new RegExp(`Line ${errorLine}:`));
+    assert.equal(result.items, undefined);
+    assert.deepEqual(lines, before);
+    const valid = parseLines(["a. Alpha", "b. Beta", "\\CommonGloss ONE"], undefined, {shared: true});
+    assert.equal(valid.error, undefined);
+    assert.equal(valid.items.length, 2);
+    assert.deepEqual(valid.shared.tiers.map(tier => tier.map(strip)), [["ONE"]]);
+  });
+}

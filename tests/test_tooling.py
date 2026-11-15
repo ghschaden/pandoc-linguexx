@@ -243,3 +243,38 @@ def test_ci_checks_the_corpus_out_at_the_targeted_version() -> None:
                      re.sub(r"\\\n\s*", " ", job), re.M), (
         "the test job does not clone linguexx at $LINGUEXX_VER into "
         "../linguexx, where the corpus test looks")
+
+
+def test_ci_covers_declared_minimum_versions_and_installed_wheel() -> None:
+    """Support declarations must have an executable CI gate, not just prose."""
+    from linguexx2odt.cli import MIN_PANDOC
+
+    metadata = (REPO / "pyproject.toml").read_text(encoding="utf-8")
+    minimum = re.search(r'requires-python = ">=([\d.]+)"', metadata).group(1)
+    job = _job(WORKFLOW.read_text(encoding="utf-8"), "test")
+    pairs = re.findall(r'- python: "([\d.]+)"\s+pandoc: "([\d.]+)"', job)
+    pandoc = ".".join(map(str, MIN_PANDOC))
+    assert (minimum, pandoc) in pairs, "declared minimum versions are absent from CI"
+    assert len(set(pairs)) >= 3, "keep minimum, baseline and newer compatibility cases"
+    assert "python-version: ${{ matrix.python }}" in job
+    assert "PANDOC_VER: ${{ matrix.pandoc }}" in job
+    assert "python -m pip wheel . --no-deps" in job
+    assert 'python -m venv "$RUNNER_TEMP/installed"' in job
+    assert '"$RUNNER_TEMP/installed/bin/python" -I tools/check_installed.py' in job
+    assert "--system-site-packages" not in job
+
+
+@pytest.mark.parametrize("version,accepted", [
+    ("3.0", False), ("3.6", False), ("3.6.0", False),
+    ("3.6.1", True), ("3.6.1.1", True), ("3.7", True), ("3.11", True),
+])
+def test_pandoc_minimum_includes_the_patch_version(monkeypatch, version, accepted):
+    from types import SimpleNamespace
+    from linguexx2odt import cli
+
+    monkeypatch.setattr(cli, "_pandoc", lambda args: SimpleNamespace(stdout=f"pandoc {version}\n"))
+    if accepted:
+        assert cli._check_pandoc_version() == f"pandoc {version}"
+    else:
+        with pytest.raises(SystemExit, match=r"needs pandoc >= 3\.6\.1"):
+            cli._check_pandoc_version()

@@ -23,7 +23,7 @@ classifiers = [
 dependencies = ["fonttools>=4.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "lxml>=4.9"]
 
 [project.scripts]
 linguexx2odt = "linguexx2odt.cli:main"

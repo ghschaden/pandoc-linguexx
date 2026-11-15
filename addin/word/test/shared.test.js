@@ -12,6 +12,7 @@ import {readSelection, readExampleTable} from '../selection.js';
 import {untypesetPackage} from '../untypeset.js';
 
 const fixtures = JSON.parse(readFileSync(new URL('../../../tests/fixtures/linguexx15-untypeset.json', import.meta.url)));
+const authoring = JSON.parse(readFileSync(new URL('../../../tests/fixtures/shared-authoring.json', import.meta.url)));
 const command = String.fromCharCode(92) + 'CommonGloss';
 function selected(lines, formats = []) {
   return flatPackage(lines.map(line => `<w:p>${runs(line, formats)}</w:p>`).join(''), {withStyles: true});
@@ -98,13 +99,12 @@ function wordContext(pkg, insertions) {
 test('Word Typeset enables shared groups and refuses invalid selections before insertion', async () => {
   const {context, status} = await pane();
   const insertions = [];
-  for (const lines of [[command + ' ONE'], ['a. A', 'a. B', command + ' ONE'],
-    ['a. {A', command + ' ONE'], ['a. A', command + ' ONE', 'T', 'extra translation']]) {
+  for (const [name, {lines, errorLine}] of Object.entries(authoring.invalid)) {
     const ctx = wordContext(selected(lines), insertions);
     context.Word = {run: work => work(ctx)};
     await context.testTypeset();
     assert.equal(insertions.length, 0);
-    assert.match(status.textContent, /Line/);
+    assert.match(status.textContent, new RegExp(`Line ${errorLine}:`), name);
   }
   const ctx = wordContext(selected(fixtures.shared.lines), insertions);
   context.Word = {run: work => work(ctx)};

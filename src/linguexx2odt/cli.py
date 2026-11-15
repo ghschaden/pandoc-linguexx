@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 from . import headings, pages, postprocess, postprocess_docx, styles_docx
@@ -39,8 +40,9 @@ from .equations import display_math
 from .equations import within as equations_within
 from .names import detect as detect_names
 from .styles import Layout, named_styles
+from .output import atomic_output, same_file
 
-MIN_PANDOC = (3, 0)
+MIN_PANDOC = (3, 6, 1)
 
 
 def _pandoc(args: list[str], **kw) -> subprocess.CompletedProcess:
@@ -61,7 +63,7 @@ def _pandoc(args: list[str], **kw) -> subprocess.CompletedProcess:
 def _check_pandoc_version() -> str:
     line = _pandoc(["--version"]).stdout.splitlines()[0]
     try:
-        version = tuple(int(p) for p in line.split()[1].split(".")[:2])
+        version = tuple(int(p) for p in line.split()[1].split("."))
     except (IndexError, ValueError):
         return line
     if version < MIN_PANDOC:
@@ -251,6 +253,9 @@ def main(argv: list[str] | None = None) -> int:
 
     src_path = src_path.resolve()
     out_path = out_path.resolve()
+    if same_file(src_path, out_path):
+        sys.exit("linguexx2odt: the output would overwrite the input")
+    destination = out_path
     workdir = src_path.parent
 
     for name in ("example_spacing", "space_above", "space_below"):
@@ -286,7 +291,8 @@ def main(argv: list[str] | None = None) -> int:
 
     warnings = source_warnings + list(parsed.warnings) + list(emitter.warnings)
 
-    with tempfile.TemporaryDirectory(prefix="linguexx2odt-") as tmpdir:
+    with atomic_output(destination) as out_path, \
+            tempfile.TemporaryDirectory(prefix="linguexx2odt-") as tmpdir:
         tmp = Path(tmpdir)
         residue = tmp / "residue.tex"
         residue.write_text(parsed.residue, encoding="utf-8")
@@ -397,11 +403,17 @@ def main(argv: list[str] | None = None) -> int:
         # A page is known only once the file is laid out (pages.py).
         pages.fill(out_path, warnings.append)
 
+        with zipfile.ZipFile(out_path) as archive:
+            if archive.testzip() is not None:
+                raise ValueError("converted document has a corrupt archive member")
+
         if args.keep_intermediates:
             keep = args.keep_intermediates
             keep.mkdir(parents=True, exist_ok=True)
             for f in (residue, ast_path, raw_odt):
                 shutil.copy2(f, keep / f.name)
+
+    out_path = destination
 
     if parsed.reference_report and not args.quiet:
         for entry in parsed.reference_report:

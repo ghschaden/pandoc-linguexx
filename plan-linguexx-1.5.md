@@ -24,6 +24,10 @@ interface is outside supported syntax. Invalid shared-gloss input with no
 variant rows, or a variant after shared lines, warns and becomes plain text
 rather than losing the words or producing a broken table.
 
+Phantom alignment and the `exe`/`xlist` interface are intentionally excluded
+from the project scope, with no support planned. They are not outstanding
+1.5 compatibility work.
+
 ## Reverse conversion and editor tools
 
 `docx2linguexx` and `odt2linguexx` recognize variant/shared-row styles, recover
